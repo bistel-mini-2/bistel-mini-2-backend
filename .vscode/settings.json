@@ -1,0 +1,31 @@
+{
+  // Python 언어 서버로 Pylance를 사용하도록 설정
+  "python.languageServer": "Pylance",
+
+  // Python 언어 서버가 자동으로 import 가능한 모듈과 패키지를 코드 완성 제안에 포함하도록 설정
+  "python.analysis.autoImportCompletions": true,
+
+  // Python 언어 서버가 자동으로 타입 정보를 추론하여 코드 완성 제안에 포함하도록 설정
+  "python.analysis.autoSearchPaths": true,
+
+  // Pylance 타입 체킹 수준 설정 (off, basic, standard, strict)
+  "python.analysis.typeCheckingMode": "standard",
+
+  // 프로젝트 내 venv 폴더를 기본 Python 환경으로 설정
+  // macOS/Linux: venv/bin/python
+  // Windows: venv/Scripts/python.exe
+  "python.defaultInterpreterPath": "${workspaceFolder}/venv",
+
+  // Python 바이트코드와 관련 디렉토리와 파일을 VSCode 탐색기에서 숨김 처리
+  // __pycache__: Python이 컴파일된 바이트코드 파일을 저장하는 디렉토리
+  // .pyc: Python이 컴파일된 바이트코드 파일
+  "files.exclude": {
+    "**/__pycache__": true,
+    "**/*.pyc": true
+  },
+
+  // VSCode 터미널을 열 때 .env 파일을 읽어 환경 변수를 주입
+  // Python 런타임과 무관하며 OS 수준의 환경 변수로 세팅됨
+  // 프로젝트 루트에 위치한 .env 파일을 참조
+  "python.terminal.useEnvFile": true
+}

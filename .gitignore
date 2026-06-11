@@ -1,0 +1,92 @@
+# =========================
+# Python
+# =========================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+*$py.class
+
+# =========================
+# Virtual Environment
+# =========================
+venv/
+.venv/
+env/
+ENV/
+
+# =========================
+# Environment Variables
+# =========================
+.env
+.env.*
+!.env.example
+
+# =========================
+# VS Code
+# =========================
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/launch.json
+
+# =========================
+# OS Files - macOS
+# =========================
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# =========================
+# OS Files - Windows
+# =========================
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# =========================
+# Logs
+# =========================
+*.log
+logs/
+
+# =========================
+# Test / Type Check / Cache
+# =========================
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# =========================
+# FastAPI / Local Runtime
+# =========================
+*.pid
+*.sock
+
+# =========================
+# Database / Local Files
+# =========================
+*.sqlite
+*.sqlite3
+*.db
+
+# =========================
+# RAG / Data Files
+# =========================
+data/raw/*
+data/processed/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+
+# =========================
+# Build / Distribution
+# =========================
+build/
+dist/
+*.egg-info/

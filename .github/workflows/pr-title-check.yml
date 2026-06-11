@@ -1,0 +1,26 @@
+name: PR Title Check
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+jobs:
+  pr-title-check:
+    name: Check PR title
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Validate PR title
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          if [[ ! "$PR_TITLE" =~ ^(feat|fix|docs|style|refactor|test|chore):\ .+ ]]; then
+            echo "PR 제목이 컨벤션에 맞지 않습니다."
+            echo "형식: type: 작업 내용"
+            echo "허용 type: feat, fix, docs, style, refactor, test, chore"
+            echo "예시: feat: 정책 목록 조회 API 추가"
+            echo "현재 제목: $PR_TITLE"
+            exit 1
+          fi
+
+          echo "PR 제목 컨벤션을 통과했습니다."
