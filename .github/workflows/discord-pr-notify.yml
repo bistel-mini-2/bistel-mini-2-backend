@@ -1,4 +1,4 @@
-# 알림 전용 workflow입니다. GitHub Ruleset의 required check로 설정하지 않습니다.
+# Discord 알림까지 정상 동작해야 PR 자동화가 통과합니다.
 name: Discord PR Notify
 
 on:
@@ -12,17 +12,18 @@ jobs:
 
     steps:
       - name: Send notification
+        if: github.event.action == 'opened' || github.event.pull_request.merged == true
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: |
+          if [ -z "$DISCORD_WEBHOOK_URL" ]; then
+            echo "::error::DISCORD_WEBHOOK_URL Secret이 등록되지 않아 Discord 알림을 보낼 수 없습니다."
+            exit 1
+          fi
+
           python3 - <<'PY'
           import json
           import os
-          import sys
-          import urllib.error
-          import urllib.request
-
-          webhook_url = os.environ.get("DISCORD_WEBHOOK_URL", "").strip()
 
           with open(os.environ["GITHUB_EVENT_PATH"], "r", encoding="utf-8") as event_file:
               event = json.load(event_file)
@@ -30,56 +31,80 @@ jobs:
           action = event.get("action")
           pr = event.get("pull_request", {})
 
-          if action == "closed" and not pr.get("merged"):
-              print("PR이 merge 없이 closed 되어 Discord 알림을 보내지 않습니다.")
-              sys.exit(0)
-
-          if action not in {"opened", "closed"}:
-              print(f"알림 대상 이벤트가 아닙니다: {action}")
-              sys.exit(0)
-
-          if not webhook_url:
-              print("DISCORD_WEBHOOK_URL Secret이 등록되지 않아 Discord 알림을 건너뜁니다.")
-              sys.exit(0)
-
           repository = event.get("repository", {}).get("full_name", "unknown")
           pr_title = pr.get("title", "")
           pr_url = pr.get("html_url", "")
           head_branch = pr.get("head", {}).get("ref", "")
           base_branch = pr.get("base", {}).get("ref", "")
+          updated_at = pr.get("updated_at", "")
 
           if action == "opened":
               notification_title = "PR 생성"
               actor_label = "작성자"
               actor = pr.get("user", {}).get("login", "unknown")
+              color = 3066993
           else:
               notification_title = "PR merge 완료"
               actor_label = "merge한 사람"
               actor = (pr.get("merged_by") or pr.get("user") or {}).get("login", "unknown")
+              color = 3447003
 
-          content = "\n".join(
+          description = "\n".join(
               [
-                  f"**{notification_title}**",
-                  f"Repository: {repository}",
-                  f"PR 제목: {pr_title}",
-                  f"{actor_label}: {actor}",
-                  f"브랜치 방향: {head_branch} -> {base_branch}",
-                  f"PR URL: {pr_url}",
+                  f"**Repository**: {repository}",
+                  f"**PR 제목**: {pr_title}",
+                  f"**{actor_label}**: {actor}",
+                  f"**브랜치 방향**: {head_branch} -> {base_branch}",
+                  f"**Event Time**: {updated_at}",
+                  f"**PR URL**: {pr_url}",
               ]
           )
 
-          payload = json.dumps({"content": content}).encode("utf-8")
-          request = urllib.request.Request(
-              webhook_url,
-              data=payload,
-              headers={"Content-Type": "application/json"},
-              method="POST",
-          )
+          payload = {
+              "embeds": [
+                  {
+                      "title": f"::::: {notification_title} :::::",
+                      "description": description,
+                      "color": color,
+                      "url": pr_url,
+                      "footer": {
+                          "text": "Click the link above to view the PR details."
+                      },
+                  }
+              ]
+          }
 
-          try:
-              with urllib.request.urlopen(request, timeout=10) as response:
-                  print(f"Discord 알림을 보냈습니다. status={response.status}")
-          except urllib.error.URLError as error:
-              print(f"Discord 알림 전송에 실패했습니다: {error}")
-              sys.exit(1)
+          with open("discord-payload.json", "w", encoding="utf-8") as payload_file:
+              json.dump(payload, payload_file, ensure_ascii=False)
           PY
+
+          set +e
+          http_status=$(curl -sS \
+            -o discord-response.txt \
+            -w "%{http_code}" \
+            -H "Content-Type: application/json" \
+            -H "Accept: application/json" \
+            -H "User-Agent: bistel-mini-2-backend-github-actions/1.0" \
+            -X POST \
+            --data @discord-payload.json \
+            "$DISCORD_WEBHOOK_URL")
+          curl_exit=$?
+          set -e
+
+          if [ "$curl_exit" -ne 0 ]; then
+            echo "::error::Discord 알림 요청 중 네트워크 오류가 발생했습니다. curl_exit=$curl_exit"
+            exit 1
+          fi
+
+          if [ "$http_status" -ge 200 ] && [ "$http_status" -lt 300 ]; then
+            echo "Discord 알림을 보냈습니다. status=$http_status"
+            exit 0
+          fi
+
+          echo "::error::Discord 알림 전송에 실패했습니다. status=$http_status"
+          cat discord-response.txt
+          exit 1
+
+      - name: Skip notification for closed PR
+        if: github.event.action == 'closed' && github.event.pull_request.merged == false
+        run: echo "PR이 merge 없이 closed 되어 Discord 알림을 보내지 않습니다."
