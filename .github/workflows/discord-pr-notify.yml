@@ -12,15 +12,9 @@ jobs:
 
     steps:
       - name: Send Discord Notification
-        if: github.event.action == 'opened' || github.event.pull_request.merged == true
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: |
-          if [ -z "$DISCORD_WEBHOOK_URL" ]; then
-            echo "::error::DISCORD_WEBHOOK_URL Secret이 등록되지 않아 Discord 알림을 보낼 수 없습니다."
-            exit 1
-          fi
-
           python3 - <<'PY'
           import json
           import os
@@ -30,6 +24,20 @@ jobs:
 
           action = event.get("action")
           pr = event.get("pull_request", {})
+
+          if action == "closed" and not pr.get("merged"):
+              with open("discord-notify.env", "w", encoding="utf-8") as env_file:
+                  env_file.write("SHOULD_SEND=false\n")
+              with open("discord-skip-reason.txt", "w", encoding="utf-8") as reason_file:
+                  reason_file.write("PR이 merge 없이 closed 되어 Discord 알림을 보내지 않습니다.\n")
+              raise SystemExit(0)
+
+          if action != "opened" and not pr.get("merged"):
+              with open("discord-notify.env", "w", encoding="utf-8") as env_file:
+                  env_file.write("SHOULD_SEND=false\n")
+              with open("discord-skip-reason.txt", "w", encoding="utf-8") as reason_file:
+                  reason_file.write(f"알림 대상 이벤트가 아닙니다: {action}\n")
+              raise SystemExit(0)
 
           repository = event.get("repository", {}).get("full_name", "unknown")
           pr_title = pr.get("title", "")
@@ -76,7 +84,22 @@ jobs:
 
           with open("discord-payload.json", "w", encoding="utf-8") as payload_file:
               json.dump(payload, payload_file, ensure_ascii=False)
+
+          with open("discord-notify.env", "w", encoding="utf-8") as env_file:
+              env_file.write("SHOULD_SEND=true\n")
           PY
+
+          source discord-notify.env
+
+          if [ "$SHOULD_SEND" != "true" ]; then
+            cat discord-skip-reason.txt
+            exit 0
+          fi
+
+          if [ -z "$DISCORD_WEBHOOK_URL" ]; then
+            echo "::error::DISCORD_WEBHOOK_URL Secret이 등록되지 않아 Discord 알림을 보낼 수 없습니다."
+            exit 1
+          fi
 
           set +e
           http_status=$(curl -sS \
@@ -104,7 +127,3 @@ jobs:
           echo "::error::Discord 알림 전송에 실패했습니다. status=$http_status"
           cat discord-response.txt
           exit 1
-
-      - name: Skip Discord notification for closed PR
-        if: github.event.action == 'closed' && github.event.pull_request.merged == false
-        run: echo "PR이 merge 없이 closed 되어 Discord 알림을 보내지 않습니다."
