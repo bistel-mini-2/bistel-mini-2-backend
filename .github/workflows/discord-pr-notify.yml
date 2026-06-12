@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Send notification
+      - name: Send Discord Notification
         if: github.event.action == 'opened' || github.event.pull_request.merged == true
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
@@ -105,6 +105,6 @@ jobs:
           cat discord-response.txt
           exit 1
 
-      - name: Skip notification for closed PR
+      - name: Skip Discord notification for closed PR
         if: github.event.action == 'closed' && github.event.pull_request.merged == false
         run: echo "PR이 merge 없이 closed 되어 Discord 알림을 보내지 않습니다."
