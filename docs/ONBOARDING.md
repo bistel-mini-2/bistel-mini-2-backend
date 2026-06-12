@@ -155,6 +155,16 @@ PR 본문의 관련 이슈 항목에는 아래처럼 작성합니다.
 Closes #6
 ```
 
+이 PR이 merge되면 연결된 이슈 `#6`이 자동으로 닫힙니다.
+
+여러 이슈를 함께 닫아야 할 때는 PR 본문에 여러 줄로 작성합니다.
+
+```text
+Closes #6
+Fixes #7
+Resolves #8
+```
+
 ## 자주 쓰는 Git 명령어
 
 ```bash
@@ -195,6 +205,7 @@ git pull origin develop
 - `__pycache__/`나 `*.pyc` 파일을 커밋합니다.
 - 이슈 번호 없이 브랜치를 만듭니다.
 - PR 본문에 `Closes #이슈번호`를 빼먹습니다.
+- PR merge 후 닫혀야 할 이슈 번호를 PR 본문에 작성하지 않습니다.
 - PR 제목에서 `type: 작업 내용` 형식을 지키지 않습니다.
 - 브랜치명에서 숫자 이슈 번호를 빼먹습니다.
 
@@ -208,5 +219,6 @@ PR을 만들면 GitHub Actions가 자동으로 검사합니다.
 - Branch Name Check: 브랜치명이 `type/issue-number-description` 형식인지 확인합니다.
 - PR Linked Issue Check: PR 본문에 `Closes #이슈번호` 같은 이슈 연결 문구가 있는지 확인합니다.
 - Discord PR Notify: PR 생성과 PR merge 완료를 Discord로 알립니다.
+- Close Linked Issue: PR이 merge되면 PR 본문의 이슈 번호를 찾아 연결된 이슈를 닫습니다.
 
 자동화가 실패하면 Actions 로그를 열어 어떤 규칙을 어겼는지 확인하고 수정합니다.
