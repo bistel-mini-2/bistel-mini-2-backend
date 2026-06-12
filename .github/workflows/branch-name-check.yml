@@ -1,0 +1,28 @@
+name: Branch Name Check
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+jobs:
+  branch-name-check:
+    name: Check branch name
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Validate PR head branch name
+        env:
+          BRANCH_NAME: ${{ github.head_ref }}
+        run: |
+          REGEX='^(feature|fix|docs|chore|refactor|test)/[0-9]+-[a-z0-9-]+$'
+
+          if [[ ! "$BRANCH_NAME" =~ $REGEX ]]; then
+            echo "브랜치명이 컨벤션에 맞지 않습니다."
+            echo "형식: type/issue-number-description"
+            echo "허용 type: feature, fix, docs, chore, refactor, test"
+            echo "예시: feature/2-policy-list"
+            echo "현재 브랜치: $BRANCH_NAME"
+            exit 1
+          fi
+
+          echo "브랜치명 컨벤션을 통과했습니다."

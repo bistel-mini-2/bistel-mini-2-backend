@@ -1,0 +1,30 @@
+name: PR Linked Issue Check
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+jobs:
+  pr-linked-issue-check:
+    name: Check linked issue
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Validate linked issue keyword
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          if [[ -z "${PR_BODY//[[:space:]]/}" ]]; then
+            echo "PR 본문이 비어 있습니다."
+            echo "PR 본문에 Closes #이슈번호 형식으로 관련 이슈를 작성해 주세요."
+            exit 1
+          fi
+
+          if ! printf '%s' "$PR_BODY" | grep -Eiq '(Closes|Fixes|Resolves)[[:space:]]+#[0-9]+'; then
+            echo "PR 본문에 연결된 이슈 번호가 없습니다."
+            echo "허용 형식: Closes #숫자, Fixes #숫자, Resolves #숫자"
+            echo "예시: Closes #2"
+            exit 1
+          fi
+
+          echo "PR 이슈 연결 규칙을 통과했습니다."

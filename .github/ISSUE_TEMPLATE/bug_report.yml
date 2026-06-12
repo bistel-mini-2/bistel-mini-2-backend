@@ -1,0 +1,92 @@
+name: 버그 제보
+description: 발견한 버그를 제보합니다.
+title: "fix: "
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        버그가 발생한 상황과 재현 방법을 최대한 구체적으로 작성해 주세요.
+
+  - type: textarea
+    id: work
+    attributes:
+      label: 작업 내용
+      description: 어떤 버그를 수정해야 하나요?
+      placeholder: 예) CORS 설정 오류 수정
+    validations:
+      required: true
+
+  - type: textarea
+    id: reason
+    attributes:
+      label: 필요 이유
+      description: 왜 이 수정이 필요한가요?
+      placeholder: 예) 프론트엔드에서 API 요청이 차단됩니다.
+    validations:
+      required: true
+
+  - type: textarea
+    id: situation
+    attributes:
+      label: 발생 상황
+      description: 언제, 어떤 환경에서 문제가 발생했나요?
+      placeholder: 예) 로컬 서버 실행 후 브라우저에서 API 요청 시 발생
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 재현 방법
+      description: 버그를 재현하는 순서를 작성해 주세요.
+      placeholder: |
+        1. 서버 실행
+        2. `/docs` 접속
+        3. 특정 API 호출
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 기대 결과
+      description: 원래 어떤 결과가 나와야 하나요?
+      placeholder: 예) API 응답이 정상 반환됩니다.
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: 실제 결과
+      description: 실제로 어떤 결과가 나왔나요?
+      placeholder: 예) CORS 오류가 발생합니다.
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 오류 로그
+      description: 터미널, 브라우저 콘솔, 서버 로그를 붙여 주세요.
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: done
+    attributes:
+      label: 완료 조건
+      description: 어떤 상태가 되면 완료로 볼 수 있나요?
+      placeholder: 예) 동일한 절차에서 오류 없이 API 응답이 반환됩니다.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reference
+    attributes:
+      label: 참고 사항
+      description: 참고할 화면, 문서, 링크, 제약사항이 있다면 작성해 주세요.
+    validations:
+      required: false

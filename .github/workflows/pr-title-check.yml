@@ -14,7 +14,9 @@ jobs:
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
-          if [[ ! "$PR_TITLE" =~ ^(feat|fix|docs|style|refactor|test|chore):\ .+ ]]; then
+          REGEX='^(feat|fix|docs|style|refactor|test|chore): .+'
+
+          if [[ ! "$PR_TITLE" =~ $REGEX ]]; then
             echo "PR 제목이 컨벤션에 맞지 않습니다."
             echo "형식: type: 작업 내용"
             echo "허용 type: feat, fix, docs, style, refactor, test, chore"
