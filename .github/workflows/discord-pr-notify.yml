@@ -3,7 +3,8 @@ name: Discord PR Notify
 
 on:
   pull_request:
-    types: [opened, closed]
+    types: [opened, edited, synchronize, reopened, closed]
+  workflow_dispatch:
 
 jobs:
   discord-pr-notify:
@@ -22,8 +23,40 @@ jobs:
           with open(os.environ["GITHUB_EVENT_PATH"], "r", encoding="utf-8") as event_file:
               event = json.load(event_file)
 
+          event_name = os.environ.get("GITHUB_EVENT_NAME", "")
           action = event.get("action")
           pr = event.get("pull_request", {})
+
+          if event_name == "workflow_dispatch":
+              repository = os.environ.get("GITHUB_REPOSITORY", "unknown")
+              actor = os.environ.get("GITHUB_ACTOR", "unknown")
+              run_id = os.environ.get("GITHUB_RUN_ID", "")
+              run_url = f"https://github.com/{repository}/actions/runs/{run_id}"
+              payload = {
+                  "embeds": [
+                      {
+                          "title": "::::: Discord 알림 테스트 :::::",
+                          "description": "\n".join(
+                              [
+                                  f"**Repository**: {repository}",
+                                  f"**실행자**: {actor}",
+                                  f"**Event Type**: {event_name}",
+                                  f"**Actions URL**: {run_url}",
+                              ]
+                          ),
+                          "color": 15844367,
+                          "url": run_url,
+                          "footer": {
+                              "text": "Discord webhook test from GitHub Actions."
+                          },
+                      }
+                  ]
+              }
+              with open("discord-payload.json", "w", encoding="utf-8") as payload_file:
+                  json.dump(payload, payload_file, ensure_ascii=False)
+              with open("discord-notify.env", "w", encoding="utf-8") as env_file:
+                  env_file.write("SHOULD_SEND=true\n")
+              raise SystemExit(0)
 
           if action == "closed" and not pr.get("merged"):
               with open("discord-notify.env", "w", encoding="utf-8") as env_file:
@@ -36,7 +69,7 @@ jobs:
               with open("discord-notify.env", "w", encoding="utf-8") as env_file:
                   env_file.write("SHOULD_SEND=false\n")
               with open("discord-skip-reason.txt", "w", encoding="utf-8") as reason_file:
-                  reason_file.write(f"알림 대상 이벤트가 아닙니다: {action}\n")
+                  reason_file.write(f"Discord 알림 대상 PR 이벤트가 아닙니다: {action}\n")
               raise SystemExit(0)
 
           repository = event.get("repository", {}).get("full_name", "unknown")
