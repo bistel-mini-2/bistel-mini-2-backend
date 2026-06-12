@@ -125,6 +125,7 @@ DATABASE_URL=your_database_url
 4. 브랜치를 push하고 Pull Request를 생성합니다.
 5. PR 본문에 `Closes #이슈번호`를 작성합니다.
 6. 리뷰와 자동화 검사를 통과한 뒤 merge합니다.
+7. PR이 merge되면 연결된 이슈가 자동으로 닫힙니다.
 
 브랜치명 형식:
 
@@ -159,12 +160,13 @@ fix: CORS 설정 오류 수정
 - `main`과 `develop`에는 직접 push하지 않습니다.
 - 작업은 이슈 기반 브랜치에서 진행합니다.
 - PR 본문에는 `Closes #이슈번호`를 작성합니다.
+- 여러 이슈를 닫아야 하면 `Closes #6`, `Fixes #7`처럼 여러 줄로 작성합니다.
 
 ## 문서 링크
 
-- [프로젝트 참여 및 실행 가이드](docs/ONBOARDING.md)
-- [GitHub 협업 규칙](docs/CONVENTION.md)
-- [백엔드 코드 작성 규칙](docs/CODE_CONVENTION.md)
+- 프로젝트 참여 및 실행 가이드
+- GitHub 협업 규칙
+- 백엔드 코드 작성 규칙
 
 ## 주의사항
 

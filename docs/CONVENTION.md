@@ -1,6 +1,6 @@
 # GitHub Collaboration Convention
 
-이 문서는 `bistel-mini-2-backend` 프로젝트의 GitHub 협업 규칙입니다. GitHub README나 Notion 협업 가이드에 그대로 복사해서 사용할 수 있도록 작성했습니다.
+이 문서는 `bistel-mini-2-backend` 프로젝트의 GitHub 협업 규칙입니다.
 
 ## 브랜치 전략
 
@@ -94,7 +94,33 @@ Closes #이슈번호
 Closes #6
 ```
 
-`Closes`, `Fixes`, `Resolves` 키워드를 사용할 수 있습니다. PR이 merge되면 연결된 이슈를 닫는 자동화가 실행됩니다.
+`Closes`, `Fixes`, `Resolves` 키워드를 사용할 수 있습니다.
+
+## 이슈 자동 종료 규칙
+
+PR이 merge되면 `Close Linked Issue` 자동화가 PR 본문에서 이슈 번호를 찾아 연결된 이슈를 닫습니다.
+
+```text
+Closes #6
+```
+
+위처럼 작성한 PR이 merge되면 이슈 `#6`이 자동으로 닫힙니다.
+
+한 PR에서 여러 이슈를 닫아야 할 때는 이슈 번호를 여러 줄로 작성합니다.
+
+```text
+Closes #6
+Fixes #7
+Resolves #8
+```
+
+위처럼 작성한 PR이 merge되면 이슈 `#6`, `#7`, `#8`이 모두 닫힙니다.
+
+주의사항:
+
+- PR이 merge되지 않고 단순히 closed 된 경우에는 이슈를 닫지 않습니다.
+- PR 본문에 이슈 번호가 없으면 이슈를 닫을 수 없습니다.
+- 이슈 번호는 PR 템플릿의 `관련 이슈` 항목에 작성합니다.
 
 ## 이슈 작성 기준
 
@@ -102,7 +128,7 @@ Closes #6
 
 - 기능 추가: 새로운 API, 기능, 화면 연동이 필요한 경우
 - 버그 수정: 실행 오류, API 오류, 잘못된 동작을 고치는 경우
-- 문서 작업: README, Notion, 컨벤션 문서를 수정하는 경우
+- 문서 작업: README, 컨벤션 문서, 온보딩 문서를 수정하는 경우
 - 일반 작업: 설정, 자동화, 정리 작업을 하는 경우
 
 이슈에는 작업 내용, 필요 이유, 완료 조건, 참고 사항을 작성합니다.
@@ -128,7 +154,7 @@ PR에는 다음 자동화가 적용됩니다.
 - Branch Name Check: 브랜치명 형식을 검사합니다.
 - PR Linked Issue Check: PR 본문에 이슈 연결 문구가 있는지 검사합니다.
 - Discord PR Notify: PR 생성과 PR merge 완료를 Discord로 알립니다.
-- Close Linked Issue: PR merge 후 본문의 이슈 번호를 찾아 이슈를 닫습니다.
+- Close Linked Issue: PR merge 후 본문의 이슈 번호를 찾아 연결된 이슈를 닫습니다.
 
 검사에 실패하면 Actions 로그를 확인하고 규칙에 맞게 수정합니다.
 
@@ -153,13 +179,3 @@ Discord 알림은 GitHub Actions에서 처리합니다.
 - PR merge 시 알림을 보냅니다.
 - Discord 알림을 사용하려면 Repository Secret에 `DISCORD_WEBHOOK_URL`을 등록해야 합니다.
 - Secret이 없거나 Webhook URL이 잘못되면 Discord 알림 workflow가 실패합니다.
-
-## Notion 정리 기준
-
-이 문서는 Notion 협업 가이드 페이지에 복사해서 사용할 수 있습니다.
-
-Notion에는 아래 문서를 함께 정리하면 좋습니다.
-
-- `docs/ONBOARDING.md`
-- `docs/CONVENTION.md`
-- `docs/CODE_CONVENTION.md`
