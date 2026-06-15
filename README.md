@@ -164,9 +164,9 @@ fix: CORS 설정 오류 수정
 
 ## 문서 링크
 
-- 프로젝트 참여 및 실행 가이드
-- GitHub 협업 규칙
-- 백엔드 코드 작성 규칙
+- [프로젝트 참여 및 실행 가이드](docs/ONBOARDING.md)
+- [GitHub 협업 규칙](docs/CONVENTION.md)
+- [백엔드 코드 작성 규칙](docs/CODE_CONVENTION.md)
 
 ## 주의사항
 
