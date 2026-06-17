@@ -90,3 +90,5 @@ data/processed/*
 build/
 dist/
 *.egg-info/
+
+.claude
