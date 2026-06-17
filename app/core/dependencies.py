@@ -1,6 +1,43 @@
+from typing import Annotated
+
+from fastapi import Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer
+
+from app.core.security import decode_access_token
+from app.db.models.user import User
 from app.db.session import DbSessionDep
+from app.services.auth_service import AuthService
 
 
-# Future authentication dependencies, such as current-user resolution, can live here.
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
-__all__ = ["DbSessionDep"]
+
+async def get_current_user(
+    db: DbSessionDep,
+    token: Annotated[str, Depends(oauth2_scheme)],
+) -> User:
+    payload = decode_access_token(token)
+    subject = payload.get("sub")
+
+    if subject is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    try:
+        user_id = int(subject)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from exc
+
+    return await AuthService.get_current_user_by_id(db, user_id)
+
+
+CurrentUserDep = Annotated[User, Depends(get_current_user)]
+
+__all__ = ["DbSessionDep", "CurrentUserDep", "get_current_user"]

@@ -8,6 +8,9 @@ class Settings(BaseSettings):
     app_env: str
     database_url: str
     psycopg_database_url: str
+    jwt_secret_key: str
+    jwt_algorithm: str
+    access_token_expire_minutes: int
 
     model_config = SettingsConfigDict(
         env_file=(".env.example", ".env"),

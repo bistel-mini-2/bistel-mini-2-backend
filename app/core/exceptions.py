@@ -15,6 +15,7 @@ async def http_exception_handler(
             "message": exc.detail,
             "details": None,
         },
+        headers=exc.headers,
     )
 
 
