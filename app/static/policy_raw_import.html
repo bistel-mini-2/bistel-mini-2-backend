@@ -1,0 +1,559 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>정책 공공데이터 수집</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: #f5f7fb;
+      color: #1f2937;
+      font-family: Arial, "Noto Sans KR", sans-serif;
+      letter-spacing: 0;
+    }
+
+    header {
+      background: #ffffff;
+      border-bottom: 1px solid #d8dee9;
+    }
+
+    .wrap {
+      width: min(1280px, calc(100% - 32px));
+      margin: 0 auto;
+    }
+
+    header .wrap {
+      padding: 18px 0;
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: center;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 22px;
+      line-height: 1.25;
+    }
+
+    .status {
+      color: #667085;
+      font-size: 13px;
+      white-space: nowrap;
+    }
+
+    main {
+      padding: 18px 0 36px;
+    }
+
+    form,
+    .panel {
+      background: #ffffff;
+      border: 1px solid #d8dee9;
+      border-radius: 8px;
+    }
+
+    form {
+      padding: 16px;
+      display: grid;
+      grid-template-columns: repeat(6, minmax(120px, 1fr));
+      gap: 12px;
+      align-items: end;
+    }
+
+    label {
+      display: grid;
+      gap: 6px;
+      color: #667085;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    input,
+    select {
+      width: 100%;
+      height: 38px;
+      border: 1px solid #d8dee9;
+      border-radius: 6px;
+      padding: 0 10px;
+      background: #ffffff;
+      color: #1f2937;
+      font-size: 14px;
+    }
+
+    button {
+      height: 38px;
+      border: 1px solid #1d66d1;
+      border-radius: 6px;
+      background: #1d66d1;
+      color: #ffffff;
+      font-weight: 700;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    button.secondary {
+      background: #ffffff;
+      color: #1d66d1;
+    }
+
+    button.danger {
+      border-color: #a54718;
+      background: #a54718;
+    }
+
+    .message {
+      margin: 12px 0;
+      min-height: 22px;
+      color: #667085;
+      font-size: 14px;
+    }
+
+    .error {
+      color: #b42318;
+    }
+
+    .ok {
+      color: #067647;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: minmax(420px, 0.95fr) minmax(420px, 1.05fr);
+      gap: 16px;
+      align-items: start;
+    }
+
+    .panel-title {
+      padding: 12px 14px;
+      border-bottom: 1px solid #d8dee9;
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .panel-title h2 {
+      margin: 0;
+      font-size: 16px;
+    }
+
+    .panel-actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .panel-actions button {
+      height: 32px;
+      padding: 0 10px;
+      font-size: 12px;
+    }
+
+    .table-wrap {
+      max-height: 480px;
+      overflow: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+      font-size: 13px;
+    }
+
+    th,
+    td {
+      border-bottom: 1px solid #d8dee9;
+      padding: 10px;
+      text-align: left;
+      vertical-align: top;
+      overflow-wrap: anywhere;
+    }
+
+    th {
+      position: sticky;
+      top: 0;
+      background: #eef2f7;
+      z-index: 1;
+    }
+
+    td button {
+      width: 100%;
+      margin-bottom: 6px;
+    }
+
+    pre {
+      margin: 0;
+      min-height: 480px;
+      max-height: 620px;
+      overflow: auto;
+      padding: 14px;
+      background: #111827;
+      color: #e5e7eb;
+      font-size: 13px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    @media (max-width: 980px) {
+      header .wrap {
+        display: block;
+      }
+
+      .status {
+        display: block;
+        margin-top: 8px;
+      }
+
+      form,
+      .grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <h1>정책 공공데이터 수집</h1>
+      <span class="status">/admin/policies/raw</span>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <form id="listForm">
+      <label>
+        callTp
+        <input id="callTp" type="text" value="L">
+      </label>
+      <label>
+        pageNo
+        <input id="pageNo" type="number" min="1" value="1">
+      </label>
+      <label>
+        numOfRows
+        <input id="numOfRows" type="number" min="1" max="500" value="10">
+      </label>
+      <label>
+        srchKeyCode
+        <input id="srchKeyCode" type="text" value="001">
+      </label>
+      <label>
+        searchWrd
+        <input id="searchWrd" type="text">
+      </label>
+      <label>
+        lifeArray
+        <select id="lifeArray">
+          <option value="">전체</option>
+          <option value="000">000 구분없음</option>
+          <option value="001">001 영유아</option>
+          <option value="002">002 아동</option>
+          <option value="003">003 청소년</option>
+          <option value="004">004 청년</option>
+          <option value="005">005 중장년</option>
+          <option value="006">006 노년</option>
+          <option value="007">007 임신·출산</option>
+        </select>
+      </label>
+      <label>
+        trgterIndvdlArray
+        <select id="trgterIndvdlArray">
+          <option value="">전체</option>
+          <option value="010">010 다문화·탈북민</option>
+          <option value="020">020 다자녀</option>
+          <option value="030">030 보훈대상자</option>
+          <option value="040">040 장애인</option>
+          <option value="050">050 저소득</option>
+          <option value="060">060 한부모·조손</option>
+        </select>
+      </label>
+      <label>
+        intrsThemaArray
+        <select id="intrsThemaArray">
+          <option value="">전체</option>
+          <option value="010">010 신체건강</option>
+          <option value="020">020 정신건강</option>
+          <option value="030">030 생활지원</option>
+          <option value="040">040 주거</option>
+          <option value="050">050 일자리</option>
+          <option value="060">060 문화·여가</option>
+          <option value="070">070 안전·위기</option>
+          <option value="080">080 임신·출산</option>
+          <option value="090">090 보육</option>
+          <option value="100">100 교육</option>
+          <option value="110">110 입양·위탁</option>
+          <option value="120">120 보호·돌봄</option>
+          <option value="130">130 서민금융</option>
+          <option value="140">140 법률</option>
+          <option value="150">150 관계개선</option>
+          <option value="160">160 에너지</option>
+        </select>
+      </label>
+      <label>
+        age
+        <input id="age" type="text">
+      </label>
+      <label>
+        onapPsbltYn
+        <input id="onapPsbltYn" type="text" placeholder="Y / N">
+      </label>
+      <label>
+        orderBy
+        <input id="orderBy" type="text" placeholder="date / popular">
+      </label>
+      <label>
+        detail callTp
+        <input id="detailCallTp" type="text" value="D">
+      </label>
+      <button type="submit">목록조회</button>
+      <button id="saveListBtn" class="secondary" type="button">목록 저장</button>
+      <button id="initDbBtn" class="secondary" type="button">테이블 생성</button>
+      <label>
+        pending limit
+        <input id="pendingLimit" type="number" min="1" max="100" value="10">
+      </label>
+      <button id="savePendingBtn" class="danger" type="button">PENDING 상세 저장</button>
+    </form>
+
+    <div id="message" class="message"></div>
+
+    <section class="grid">
+      <div class="panel">
+        <div class="panel-title">
+          <h2>servId 목록</h2>
+          <span id="count">0건</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 120px;">servId</th>
+                <th style="width: 180px;">servNm</th>
+                <th>servDgst</th>
+                <th style="width: 96px;">동작</th>
+              </tr>
+            </thead>
+            <tbody id="listBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">
+          <h2>응답 결과</h2>
+          <div class="panel-actions">
+            <button id="showListXml" class="secondary" type="button">목록 XML</button>
+            <button id="clearOutput" class="secondary" type="button">지우기</button>
+          </div>
+        </div>
+        <pre id="outputView"></pre>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const apiBase = "/admin/policies/raw";
+    const listForm = document.querySelector("#listForm");
+    const listBody = document.querySelector("#listBody");
+    const outputView = document.querySelector("#outputView");
+    const message = document.querySelector("#message");
+    const count = document.querySelector("#count");
+    let lastListXml = "";
+
+    function setMessage(text, className = "") {
+      message.textContent = text;
+      message.className = `message ${className}`;
+    }
+
+    function addParam(params, name, value) {
+      if (value !== null && value !== undefined && value !== "") {
+        params.append(name, value);
+      }
+    }
+
+    function buildListQuery() {
+      const required = ["callTp", "pageNo", "numOfRows", "srchKeyCode"];
+      for (const id of required) {
+        if (!document.querySelector(`#${id}`).value.trim()) {
+          throw new Error(`${id} 값을 입력하세요.`);
+        }
+      }
+
+      const params = new URLSearchParams();
+      addParam(params, "callTp", document.querySelector("#callTp").value.trim());
+      addParam(params, "pageNo", document.querySelector("#pageNo").value.trim());
+      addParam(params, "numOfRows", document.querySelector("#numOfRows").value.trim());
+      addParam(params, "srchKeyCode", document.querySelector("#srchKeyCode").value.trim());
+      addParam(params, "searchWrd", document.querySelector("#searchWrd").value.trim());
+      addParam(params, "lifeArray", document.querySelector("#lifeArray").value);
+      addParam(params, "trgterIndvdlArray", document.querySelector("#trgterIndvdlArray").value);
+      addParam(params, "intrsThemaArray", document.querySelector("#intrsThemaArray").value);
+      addParam(params, "age", document.querySelector("#age").value.trim());
+      addParam(params, "onapPsbltYn", document.querySelector("#onapPsbltYn").value.trim());
+      addParam(params, "orderBy", document.querySelector("#orderBy").value.trim());
+      return params.toString();
+    }
+
+    async function getText(url) {
+      const response = await fetch(url);
+      const text = await response.text();
+      if (!response.ok) {
+        throw new Error(text);
+      }
+      return text;
+    }
+
+    function showText(text) {
+      outputView.textContent = text;
+    }
+
+    function showJsonText(text) {
+      try {
+        outputView.textContent = JSON.stringify(JSON.parse(text), null, 2);
+      } catch {
+        outputView.textContent = text;
+      }
+    }
+
+    function parseListXml(xmlText) {
+      const doc = new DOMParser().parseFromString(xmlText, "application/xml");
+      return Array.from(doc.querySelectorAll("servList")).map((node) => ({
+        servId: node.querySelector("servId")?.textContent || "",
+        servNm: node.querySelector("servNm")?.textContent || "",
+        servDgst: node.querySelector("servDgst")?.textContent || "",
+      }));
+    }
+
+    function renderRows(items) {
+      listBody.innerHTML = "";
+      count.textContent = `${items.length}건`;
+      for (const item of items) {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${escapeHtml(item.servId)}</td>
+          <td>${escapeHtml(item.servNm)}</td>
+          <td>${escapeHtml(item.servDgst)}</td>
+          <td>
+            <button class="secondary detail-btn" type="button">상세</button>
+            <button class="secondary save-btn" type="button">저장</button>
+          </td>
+        `;
+        tr.querySelector(".detail-btn").addEventListener("click", () => loadDetail(item.servId));
+        tr.querySelector(".save-btn").addEventListener("click", async () => {
+          try {
+            const result = await saveDetail(item.servId);
+            outputView.textContent = JSON.stringify(result, null, 2);
+            setMessage(`${item.servId} 상세 저장 완료`, "ok");
+          } catch (error) {
+            setMessage(error.message, "error");
+          }
+        });
+        listBody.appendChild(tr);
+      }
+    }
+
+    async function loadDetail(servId) {
+      try {
+        const callTp = document.querySelector("#detailCallTp").value.trim();
+        if (!callTp) {
+          throw new Error("상세조회 callTp 값을 입력하세요.");
+        }
+        const params = new URLSearchParams({ callTp, servId });
+        const xml = await getText(`${apiBase}/detail?${params.toString()}`);
+        showText(xml);
+        setMessage(`${servId} 상세조회 완료`, "ok");
+      } catch (error) {
+        setMessage(error.message, "error");
+      }
+    }
+
+    async function saveDetail(servId) {
+      const callTp = document.querySelector("#detailCallTp").value.trim();
+      if (!callTp) {
+        throw new Error("상세조회 callTp 값을 입력하세요.");
+      }
+      const params = new URLSearchParams({ callTp, servId });
+      const text = await getText(`${apiBase}/detail/save?${params.toString()}`);
+      return JSON.parse(text);
+    }
+
+    listForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      try {
+        setMessage("목록조회 중...");
+        const xml = await getText(`${apiBase}/list?${buildListQuery()}`);
+        lastListXml = xml;
+        showText(xml);
+        renderRows(parseListXml(xml));
+        setMessage("목록조회 완료", "ok");
+      } catch (error) {
+        setMessage(error.message, "error");
+      }
+    });
+
+    document.querySelector("#initDbBtn").addEventListener("click", async () => {
+      try {
+        const text = await getText(`${apiBase}/init-db`);
+        showJsonText(text);
+        setMessage("테이블 생성 완료", "ok");
+      } catch (error) {
+        setMessage(error.message, "error");
+      }
+    });
+
+    document.querySelector("#saveListBtn").addEventListener("click", async () => {
+      try {
+        setMessage("목록 저장 중...");
+        const text = await getText(`${apiBase}/list/save?${buildListQuery()}`);
+        showJsonText(text);
+        setMessage("목록 저장 완료", "ok");
+      } catch (error) {
+        setMessage(error.message, "error");
+      }
+    });
+
+    document.querySelector("#savePendingBtn").addEventListener("click", async () => {
+      try {
+        const callTp = document.querySelector("#detailCallTp").value.trim();
+        if (!callTp) {
+          throw new Error("상세조회 callTp 값을 입력하세요.");
+        }
+        const limit = document.querySelector("#pendingLimit").value.trim() || "10";
+        const params = new URLSearchParams({ callTp, limit });
+        setMessage("PENDING 상세 저장 중...");
+        const text = await getText(`${apiBase}/detail/save-pending?${params.toString()}`);
+        showJsonText(text);
+        setMessage("PENDING 상세 저장 완료", "ok");
+      } catch (error) {
+        setMessage(error.message, "error");
+      }
+    });
+
+    document.querySelector("#showListXml").addEventListener("click", () => {
+      showText(lastListXml);
+    });
+
+    document.querySelector("#clearOutput").addEventListener("click", () => {
+      showText("");
+      setMessage("");
+    });
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+  </script>
+</body>
+</html>

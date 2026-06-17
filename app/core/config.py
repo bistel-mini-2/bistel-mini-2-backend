@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     app_env: str
     database_url: str
     psycopg_database_url: str
+    data_go_kr_service_key: str | None = None
     jwt_secret_key: str
     jwt_algorithm: str
     access_token_expire_minutes: int
