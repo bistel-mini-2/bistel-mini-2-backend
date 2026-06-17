@@ -10,8 +10,8 @@ from fastapi.middleware.cors import CORSMiddleware
 load_dotenv()
 
 from app.api.auth_controller import router as auth_router
+from app.common.exceptions import register_exception_handlers
 from app.core.config import settings
-from app.core.exceptions import register_exception_handler
 from app.db.session import engine, psycopg_pool
 from app.utils.logger import setup_logging
 
@@ -43,7 +43,7 @@ app.add_middleware(
 )
 
 app.include_router(auth_router)
-register_exception_handler(app)
+register_exception_handlers(app)
 
 
 if __name__ == "__main__":

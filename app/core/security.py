@@ -1,10 +1,11 @@
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from fastapi import HTTPException, status
+from fastapi import status
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 
+from app.common.exceptions import AppException, ErrorCode
 from app.core.config import settings
 
 
@@ -40,12 +41,6 @@ def create_access_token(
 
 
 def decode_access_token(token: str) -> dict[str, Any]:
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Invalid authentication credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-
     try:
         return jwt.decode(
             token,
@@ -53,4 +48,8 @@ def decode_access_token(token: str) -> dict[str, Any]:
             algorithms=[settings.jwt_algorithm],
         )
     except JWTError as exc:
-        raise credentials_exception from exc
+        raise AppException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            code=ErrorCode.UNAUTHORIZED,
+            message="Invalid authentication credentials",
+        ) from exc

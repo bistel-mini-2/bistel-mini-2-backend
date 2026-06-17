@@ -41,8 +41,3 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str
     user: UserResponse
-
-
-class SignUpResponse(BaseModel):
-    user: UserResponse
-    message: str
