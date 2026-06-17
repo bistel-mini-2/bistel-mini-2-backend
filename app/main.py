@@ -2,18 +2,20 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 import uvicorn
+from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from dotenv import load_dotenv
 
-from app.api.health_controller import router as health_router
+
+load_dotenv()
+
+from app.api.auth_controller import router as auth_router
 from app.core.config import settings
 from app.core.exceptions import register_exception_handler
 from app.db.session import engine, psycopg_pool
 from app.utils.logger import setup_logging
 
 
-load_dotenv()
 setup_logging()
 
 
@@ -40,7 +42,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(health_router)
+app.include_router(auth_router)
 register_exception_handler(app)
 
 
