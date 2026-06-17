@@ -1,0 +1,54 @@
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
+
+import uvicorn
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
+
+from app.api.health_controller import router as health_router
+from app.core.config import settings
+from app.core.exceptions import register_exception_handler
+from app.db.session import engine, psycopg_pool
+from app.utils.logger import setup_logging
+
+
+load_dotenv()
+setup_logging()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    await psycopg_pool.open()
+    try:
+        yield
+    finally:
+        await psycopg_pool.close()
+        await engine.dispose()
+
+
+app = FastAPI(
+    title=settings.app_name,
+    lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(health_router)
+register_exception_handler(app)
+
+
+if __name__ == "__main__":
+    uvicorn.run(
+        "app.main:app",
+        host="localhost",
+        port=8000,
+        reload=True,
+        access_log=True,
+    )
