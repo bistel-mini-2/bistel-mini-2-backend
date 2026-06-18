@@ -1,4 +1,7 @@
 class PolicyImportRepository:
+    # ============================================================
+    # 공통 실행 메소드
+    # ============================================================
     @staticmethod
     async def _fetch_count(conn, query: str) -> int:
         async with conn.cursor() as cur:
@@ -11,6 +14,9 @@ class PolicyImportRepository:
         async with conn.cursor() as cur:
             await cur.execute(query)
 
+    # ============================================================
+    # 1. policy / policy_detail 저장
+    # ============================================================
     @classmethod
     async def upsert_policies(cls, conn) -> int:
         return await cls._fetch_count(
@@ -211,6 +217,9 @@ class PolicyImportRepository:
             """,
         )
 
+    # ============================================================
+    # 2. required_document / policy_document 저장
+    # ============================================================
     @classmethod
     async def replace_required_documents(cls, conn) -> int:
         await cls._execute(
@@ -369,6 +378,9 @@ class PolicyImportRepository:
             """,
         )
 
+    # ============================================================
+    # 3. tag / checklist 저장
+    # ============================================================
     @classmethod
     async def replace_policy_tags(cls, conn) -> int:
         await cls._execute(
@@ -536,6 +548,9 @@ class PolicyImportRepository:
             """,
         )
 
+    # ============================================================
+    # 4. import 대상 조회
+    # ============================================================
     @classmethod
     async def count_importable_raw_rows(cls, conn) -> int:
         return await cls._fetch_count(
