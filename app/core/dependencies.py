@@ -1,8 +1,9 @@
 from typing import Annotated
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, status
 from fastapi.security import OAuth2PasswordBearer
 
+from app.common.exceptions import AppException, ErrorCode
 from app.core.security import decode_access_token
 from app.db.models.user import User
 from app.db.session import DbSessionDep
@@ -20,19 +21,19 @@ async def get_current_user(
     subject = payload.get("sub")
 
     if subject is None:
-        raise HTTPException(
+        raise AppException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authentication credentials",
-            headers={"WWW-Authenticate": "Bearer"},
+            code=ErrorCode.UNAUTHORIZED,
+            message="Invalid authentication credentials",
         )
 
     try:
         user_id = int(subject)
     except ValueError as exc:
-        raise HTTPException(
+        raise AppException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authentication credentials",
-            headers={"WWW-Authenticate": "Bearer"},
+            code=ErrorCode.UNAUTHORIZED,
+            message="Invalid authentication credentials",
         ) from exc
 
     return await AuthService.get_current_user_by_id(db, user_id)

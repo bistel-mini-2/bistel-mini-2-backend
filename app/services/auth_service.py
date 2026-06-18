@@ -1,6 +1,7 @@
-from fastapi import HTTPException, status
+from fastapi import status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.common.exceptions import AppException, ErrorCode
 from app.core.security import create_access_token, get_password_hash, verify_password
 from app.db.models.user import User
 from app.repositories.user_repository import UserRepository
@@ -14,21 +15,18 @@ class AuthService:
         password: str,
         nickname: str,
     ) -> User:
-        existing_email_user = await UserRepository.find_by_email(db, email)
-        if existing_email_user is not None:
-            raise HTTPException(
+        if await UserRepository.find_by_email(db, email) is not None:
+            raise AppException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Email already registered",
+                code=ErrorCode.DUPLICATE_EMAIL,
+                message="Email already registered",
             )
 
-        existing_nickname_user = await UserRepository.find_by_nickname(
-            db,
-            nickname,
-        )
-        if existing_nickname_user is not None:
-            raise HTTPException(
+        if await UserRepository.find_by_nickname(db, nickname) is not None:
+            raise AppException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Nickname already registered",
+                code=ErrorCode.DUPLICATE_NICKNAME,
+                message="Nickname already registered",
             )
 
         user = User(
@@ -43,10 +41,10 @@ class AuthService:
     async def login(db: AsyncSession, email: str, password: str) -> tuple[str, User]:
         user = await UserRepository.find_by_email(db, email)
         if user is None or not verify_password(password, user.password_hash):
-            raise HTTPException(
+            raise AppException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid email or password",
-                headers={"WWW-Authenticate": "Bearer"},
+                code=ErrorCode.INVALID_CREDENTIALS,
+                message="Invalid email or password",
             )
 
         access_token = create_access_token(subject=user.user_id)
@@ -56,10 +54,10 @@ class AuthService:
     async def get_current_user_by_id(db: AsyncSession, user_id: int) -> User:
         user = await UserRepository.find_by_id(db, user_id)
         if user is None:
-            raise HTTPException(
+            raise AppException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid authentication credentials",
-                headers={"WWW-Authenticate": "Bearer"},
+                code=ErrorCode.UNAUTHORIZED,
+                message="Invalid authentication credentials",
             )
 
         return user
