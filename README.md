@@ -108,8 +108,14 @@ Copy-Item .env.example .env
 `.env`에는 로컬 실행에 필요한 값을 작성합니다.
 
 ```env
-OPENAI_API_KEY=your_openai_api_key
-DATABASE_URL=your_database_url
+APP_ENV=local
+APP_NAME=policy-rag-backend
+DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/postgres
+PSYCOPG_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/postgres
+DATA_GO_KR_SERVICE_KEY=your_data_go_kr_service_key
+JWT_SECRET_KEY=replace-with-a-long-random-secret
+JWT_ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=20160
 ```
 
 주의:

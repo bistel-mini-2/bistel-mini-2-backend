@@ -1,7 +1,7 @@
 from typing import Annotated
 
 from fastapi import Depends, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.common.exceptions import AppException, ErrorCode
 from app.core.security import decode_access_token
@@ -10,14 +10,28 @@ from app.db.session import DbSessionDep
 from app.services.auth_service import AuthService
 
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+bearer_scheme = HTTPBearer(
+    scheme_name="BearerAuth",
+    description="JWT access token issued by /api/v1/auth/login",
+    auto_error=False,
+)
 
 
 async def get_current_user(
     db: DbSessionDep,
-    token: Annotated[str, Depends(oauth2_scheme)],
+    credentials: Annotated[
+        HTTPAuthorizationCredentials | None,
+        Depends(bearer_scheme),
+    ],
 ) -> User:
-    payload = decode_access_token(token)
+    if credentials is None:
+        raise AppException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            code=ErrorCode.UNAUTHORIZED,
+            message="Invalid authentication credentials",
+        )
+
+    payload = decode_access_token(credentials.credentials)
     subject = payload.get("sub")
 
     if subject is None:
