@@ -38,9 +38,59 @@
 | `region` | `region_code` | `RegionCode` | `user_profile.region_code` / `policy.region_code` |
 | `special[]` | `special_conditions` | `SpecialCondition[]` | `policy_rule` (rule_type 매칭) |
 
+`special[]`은 문서에서 배열임을 나타내는 표기이며, 실제 JSON 키는 `special`이다.
+
 ---
 
-## 3. LifeStage 허용 값
+## 3. 가족 프로필 저장 API
+
+가족 상황은 계정 요약 API(`GET /api/v1/users/me`)에 섞지 않고 별도 도메인 API로 저장한다.
+회원가입 온보딩에서 가족 상황을 입력한 경우에도 회원가입 payload에 포함하지 않고, 가입 성공 응답의 access token으로 인증한 뒤 아래 API로 저장한다.
+
+```text
+GET /api/v1/family-profiles/me
+PUT /api/v1/family-profiles/me
+```
+
+`PUT /api/v1/family-profiles/me` 요청은 프론트 가족 상황 모델과 같은 필드를 사용한다.
+백엔드는 이 값을 내부 저장 모델(`region_code`, `income_bracket`, `family_members` 등)로 변환한다.
+
+```json
+{
+  "stage": "newborn",
+  "childAge": "0",
+  "income": "mid1",
+  "region": "seoul",
+  "special": ["many"]
+}
+```
+
+응답은 공통 `ApiResponse` 래퍼의 `data.family_profile`에 저장된 가족 프로필을 반환한다.
+저장된 가족 프로필이 없으면 `data.family_profile`은 `null`이다.
+
+```json
+{
+  "success": true,
+  "data": {
+    "family_profile": {
+      "stage": "newborn",
+      "childAge": "0",
+      "income": "mid1",
+      "region": "seoul",
+      "special": ["many"],
+      "updated_at": "2026-06-18T00:00:00Z"
+    }
+  },
+  "error": null,
+  "meta": {}
+}
+```
+
+`users/me`는 `user_id`, `email`, `nickname`, `role` 같은 계정 요약만 반환하고 가족 상황을 포함하지 않는다.
+
+---
+
+## 4. LifeStage 허용 값
 
 | 값 | 의미 | 정부 API 코드 |
 |----|------|--------------|
@@ -52,7 +102,7 @@
 
 ---
 
-## 4. ChildAge 허용 값
+## 5. ChildAge 허용 값
 
 | 값 | 의미 |
 |----|------|
@@ -65,7 +115,7 @@
 
 ---
 
-## 5. IncomeLevel 허용 값
+## 6. IncomeLevel 허용 값
 
 | 값 | 의미 | DB income_bracket |
 |----|------|-------------------|
@@ -77,7 +127,7 @@
 
 ---
 
-## 6. SpecialCondition 허용 값
+## 7. SpecialCondition 허용 값
 
 | 값 | 의미 | 정부 API 코드 |
 |----|------|--------------|
@@ -90,7 +140,7 @@
 
 ---
 
-## 7. AI 상태 계층 구조
+## 8. AI 상태 계층 구조
 
 AI 기능(추천, 지원가능성 분석, 정책 AI 요약)은 상태를 3계층으로 분리한다.
 
@@ -159,7 +209,7 @@ API `status` 값으로 `loading`, `done`, `error`, `PENDING`, `PARTIAL`을 내�
 
 ---
 
-## 8. RegionCode 허용 값
+## 9. RegionCode 허용 값
 
 `policy.region_code`, `user_profile.region_code`, 필터 파라미터에 사용.
 

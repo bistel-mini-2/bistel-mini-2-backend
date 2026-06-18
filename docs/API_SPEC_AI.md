@@ -140,11 +140,11 @@ type PolicyAiSummaryResponse = {
   priority: "medium"
   owner: "추천/회원"
   request: "email, password, nickname"
-  response: "user_id, email, nickname"
-  notes: "일반 회원가입 진입점"
+  response: "access_token, token_type, user summary"
+  notes: "일반 회원가입 진입점. 가입 성공 시 바로 로그인된 상태로 access token을 발급한다. 회원가입 온보딩에서 입력한 가족 상황은 이 토큰으로 인증한 뒤 PUT /api/v1/family-profiles/me로 저장한다."
 
 - id: users_me
-  name: "내 정보 조회"
+  name: "내 계정 정보 조회"
   method: GET
   path: "/api/v1/users/me"
   auth: "required"
@@ -152,29 +152,56 @@ type PolicyAiSummaryResponse = {
   owner: "추천/회원"
   request: "none"
   response: "user_id, email, nickname, role"
-  notes: "헤더/마이페이지 공통 사용자 정보"
+  notes: "헤더와 인증 사용자 식별용 계정 요약. 가족 상황, 추천 조건, 가족 구성원 정보는 포함하지 않는다."
 
-- id: profile_me_get
-  name: "내 프로필 조회"
+- id: family_profile_me_get
+  name: "내 가족 프로필 조회"
   method: GET
-  path: "/api/v1/profiles/me"
+  path: "/api/v1/family-profiles/me"
   auth: "required"
   priority: "high"
   owner: "추천/회원"
   request: "none"
-  response: "user_profile, family_members"
-  notes: "추천/분석 전 기본값으로 사용"
+  response_schema:
+    success: true
+    data:
+      family_profile:
+        stage: "pregnant | newborn | infant | child | teen"
+        childAge: "preborn | 0 | 1 | 2-5 | 6-12 | 13+"
+        income: "low | mid1 | mid2 | high | unknown"
+        region: "seoul | busan | daegu | incheon | gwangju | daejeon | ulsan | sejong | gyeonggi | gangwon | chungbuk | chungnam | jeonbuk | jeonnam | gyeongbuk | gyeongnam | jeju"
+        special: "Array<single | multi | disabled | many | dual>"
+        updated_at: "datetime?"
+    error: null
+    meta: {}
+  notes: "마이페이지 가족 프로필과 추천/지원가능성 분석의 기본 조건. users_me와 분리된 도메인 프로필 API다. 저장된 가족 프로필이 없으면 data.family_profile은 null이다."
 
-- id: profile_me_update
-  name: "내 프로필 수정"
+- id: family_profile_me_update
+  name: "내 가족 프로필 저장"
   method: PUT
-  path: "/api/v1/profiles/me"
+  path: "/api/v1/family-profiles/me"
   auth: "required"
   priority: "high"
   owner: "추천/회원"
-  request: "region_code, household_type, income_bracket, employment_status, pregnancy_status, family_members"
-  response: "updated profile"
-  notes: "저장 프로필은 현재 입력과 병합 시 기본값 역할"
+  request_schema:
+    stage: "pregnant | newborn | infant | child | teen"
+    childAge: "preborn | 0 | 1 | 2-5 | 6-12 | 13+"
+    income: "low | mid1 | mid2 | high | unknown"
+    region: "seoul | busan | daegu | incheon | gwangju | daejeon | ulsan | sejong | gyeonggi | gangwon | chungbuk | chungnam | jeonbuk | jeonnam | gyeongbuk | gyeongnam | jeju"
+    special: "Array<single | multi | disabled | many | dual>"
+  response_schema:
+    success: true
+    data:
+      family_profile:
+        stage: "string"
+        childAge: "string"
+        income: "string"
+        region: "string"
+        special: "string[]"
+        updated_at: "datetime?"
+    error: null
+    meta: {}
+  notes: "회원가입 온보딩, 마이페이지 가족 프로필 저장, 추천 조건 기본값 저장에 사용한다. 백엔드는 필요하면 내부 DB 필드(region_code, income_bracket, family_members 등)로 변환한다."
 ```
 
 ### 4.2 Policy Search and Detail
