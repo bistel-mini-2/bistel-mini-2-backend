@@ -6,7 +6,7 @@ from app.core.dependencies import CurrentUserDep, DbSessionDep
 from app.services.apply_preparation_service import ApplyPreparationService
 
 
-router = APIRouter(prefix="/policies", tags=["Apply Preparation"])
+router = APIRouter(prefix="/api/v1/policies", tags=["Apply Preparation"])
 
 
 @router.post("/{policy_slug}/apply", status_code=status.HTTP_201_CREATED)
