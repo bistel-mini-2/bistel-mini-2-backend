@@ -1,8 +1,12 @@
 from enum import StrEnum
 
+# -----------------------------------------------
+# 정책 DB 직접 필터용 (policy_raw_import 구조화 필드)
+# lifeArray, trgterIndvdlArray 에 한글 값으로 저장됨
+# -----------------------------------------------
 
 class LifeStage(StrEnum):
-    """SelectedConditions.stage 허용 값 (API spec 3.3)"""
+    """SelectedConditions.stage -> policy_raw_import.lifeArray 필터"""
     PREGNANT = "pregnant"
     NEWBORN = "newborn"
     INFANT = "infant"
@@ -13,7 +17,7 @@ class LifeStage(StrEnum):
     ELDERLY = "elderly"
 
 
-# API spec 영문값 → DB lifeArray 한글값
+# DB 필터 시 영문값 -> 한글값 변환에 사용
 LIFE_STAGE_TO_DB: dict[str, str] = {
     "pregnant": "임신 · 출산",
     "newborn": "영유아",
@@ -26,8 +30,33 @@ LIFE_STAGE_TO_DB: dict[str, str] = {
 }
 
 
+class SpecialCondition(StrEnum):
+    """SelectedConditions.special[] -> policy_raw_import.trgterIndvdlArray 필터"""
+    SINGLE_PARENT = "single"
+    MULTICULTURAL = "multi"
+    DISABILITY = "disabled"
+    MULTI_CHILD = "many"
+    LOW_INCOME = "dual"
+
+
+# DB 필터 시 영문값 -> 한글값 변환에 사용
+SPECIAL_CONDITION_TO_DB: dict[str, str] = {
+    "single": "한부모·조손",
+    "multi": "다문화·탈북민",
+    "disabled": "장애인",
+    "many": "다자녀",
+    "dual": "저소득",
+}
+
+
+# -----------------------------------------------
+# 유저 프로필 매칭용 (policy JSON에 구조화 필드 없음)
+# income: slctCritCn 자유 텍스트에 기술됨 -> AI 매칭 또는 policy_rule 테이블로 처리
+# region: 현재 적재 데이터(중앙정부 전국 정책)에 없음 -> 지자체 정책 추가 시 활성화
+# -----------------------------------------------
+
 class ChildAge(StrEnum):
-    """SelectedConditions.childAge 허용 값 (API spec 3.3)"""
+    """SelectedConditions.childAge -> 유저 프로필 매칭용 (policy JSON 필드 없음)"""
     PREBORN = "preborn"
     AGE_0 = "0"
     AGE_1 = "1"
@@ -37,7 +66,9 @@ class ChildAge(StrEnum):
 
 
 class IncomeLevel(StrEnum):
-    """SelectedConditions.income 허용 값 (API spec 3.3)"""
+    """SelectedConditions.income -> user_profile.income_bracket 매칭용
+    정책 조건은 slctCritCn 자유 텍스트에 있어 직접 필터 불가
+    """
     LOW = "low"
     MID1 = "mid1"
     MID2 = "mid2"
@@ -45,7 +76,7 @@ class IncomeLevel(StrEnum):
     UNKNOWN = "unknown"
 
 
-# API spec income 값 → DB income_bracket 저장값
+# user_profile.income_bracket 저장값 (기준 중위소득 %)
 INCOME_LEVEL_TO_DB: dict[str, str] = {
     "low": "50",
     "mid1": "100",
@@ -56,7 +87,9 @@ INCOME_LEVEL_TO_DB: dict[str, str] = {
 
 
 class RegionCode(StrEnum):
-    """SelectedConditions.region 및 policy.region_code 허용 값"""
+    """SelectedConditions.region -> user_profile.region_code / policy.region_code
+    현재 적재 정책(중앙정부 전국)에는 region 데이터 없음
+    """
     NATIONAL = "national"
     SEOUL = "seoul"
     BUSAN = "busan"
@@ -77,25 +110,6 @@ class RegionCode(StrEnum):
     JEJU = "jeju"
 
 
-class SpecialCondition(StrEnum):
-    """SelectedConditions.special[] 허용 값 (API spec 3.3)"""
-    SINGLE_PARENT = "single"
-    MULTICULTURAL = "multi"
-    DISABILITY = "disabled"
-    MULTI_CHILD = "many"
-    LOW_INCOME = "dual"
-
-
-# API spec 영문값 → DB trgterIndvdlArray 한글값
-SPECIAL_CONDITION_TO_DB: dict[str, str] = {
-    "single": "한부모·조손",
-    "multi": "다문화·탈북민",
-    "disabled": "장애인",
-    "many": "다자녀",
-    "dual": "저소득",
-}
-
-
 class HouseholdType(StrEnum):
     """user_profile.household_type 허용 값"""
     SINGLE = "single"
@@ -105,7 +119,10 @@ class HouseholdType(StrEnum):
     EXTENDED = "extended"
 
 
-# 프론트 필드명 → 내부 Python 변수명 (API spec 3.3 → Pydantic field)
+# -----------------------------------------------
+# 프론트 필드명 -> 내부 Python 변수명 (API spec 3.3 기준)
+# -----------------------------------------------
+
 POLICY_FILTER_ALIAS: dict[str, str] = {
     "stage": "target_stage",
     "childAge": "child_age",
