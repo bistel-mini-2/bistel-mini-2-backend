@@ -7,8 +7,14 @@ from app.common.schemas import ApiResponse
 from app.common.response import success_response
 from app.core.dependencies import CurrentUserDep, DbSessionDep
 from app.schemas.auth_schema import LoginRequest, SignUpRequest, TokenResponse
-from app.schemas.user_schema import UserResponse
+from app.schemas.user_schema import (
+    UserNicknameUpdateRequest,
+    UserPasswordUpdateRequest,
+    UserPasswordUpdateResponse,
+    UserResponse,
+)
 from app.services.auth_service import AuthService
+from app.services.user_service import UserService
 
 
 ERROR_RESPONSES: dict[int, dict[str, Any]] = {
@@ -105,3 +111,54 @@ async def login(
 )
 async def get_me(current_user: CurrentUserDep) -> JSONResponse:
     return success_response(data=UserResponse.model_validate(current_user))
+
+
+@users_router.patch(
+    "/me",
+    response_model=ApiResponse[UserResponse],
+    responses={
+        status.HTTP_401_UNAUTHORIZED: ERROR_RESPONSES[status.HTTP_401_UNAUTHORIZED],
+        status.HTTP_409_CONFLICT: ERROR_RESPONSES[status.HTTP_409_CONFLICT],
+        status.HTTP_422_UNPROCESSABLE_ENTITY: ERROR_RESPONSES[
+            status.HTTP_422_UNPROCESSABLE_ENTITY
+        ],
+    },
+    summary="내 계정 정보 수정",
+)
+async def update_me(
+    request: UserNicknameUpdateRequest,
+    db: DbSessionDep,
+    current_user: CurrentUserDep,
+) -> JSONResponse:
+    user = await UserService.update_nickname(
+        db,
+        current_user,
+        request.nickname,
+    )
+    return success_response(data=UserResponse.model_validate(user))
+
+
+@users_router.put(
+    "/me/password",
+    response_model=ApiResponse[UserPasswordUpdateResponse],
+    responses={
+        status.HTTP_400_BAD_REQUEST: ERROR_RESPONSES[status.HTTP_400_BAD_REQUEST],
+        status.HTTP_401_UNAUTHORIZED: ERROR_RESPONSES[status.HTTP_401_UNAUTHORIZED],
+        status.HTTP_422_UNPROCESSABLE_ENTITY: ERROR_RESPONSES[
+            status.HTTP_422_UNPROCESSABLE_ENTITY
+        ],
+    },
+    summary="내 비밀번호 변경",
+)
+async def update_my_password(
+    request: UserPasswordUpdateRequest,
+    db: DbSessionDep,
+    current_user: CurrentUserDep,
+) -> JSONResponse:
+    await UserService.update_password(
+        db,
+        current_user,
+        request.current_password,
+        request.new_password,
+    )
+    return success_response(data=UserPasswordUpdateResponse(changed=True))

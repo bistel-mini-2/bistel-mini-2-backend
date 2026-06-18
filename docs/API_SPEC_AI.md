@@ -154,6 +154,36 @@ type PolicyAiSummaryResponse = {
   response: "user_id, email, nickname, role"
   notes: "헤더와 인증 사용자 식별용 계정 요약. 가족 상황, 추천 조건, 가족 구성원 정보는 포함하지 않는다."
 
+- id: users_me_update
+  name: "내 계정 정보 수정"
+  method: PATCH
+  path: "/api/v1/users/me"
+  auth: "required"
+  priority: "medium"
+  owner: "추천/회원"
+  request_schema:
+    nickname: "string"
+  response: "user_id, email, nickname, role"
+  notes: "현재는 닉네임 변경만 지원한다. 이메일 변경은 지원하지 않는다."
+
+- id: users_me_password_update
+  name: "내 비밀번호 변경"
+  method: PUT
+  path: "/api/v1/users/me/password"
+  auth: "required"
+  priority: "medium"
+  owner: "추천/회원"
+  request_schema:
+    current_password: "string"
+    new_password: "string"
+  response_schema:
+    success: true
+    data:
+      changed: true
+    error: null
+    meta: {}
+  notes: "현재 비밀번호를 확인한 뒤 새 비밀번호를 bcrypt 해시로 저장한다. 이메일 변경은 지원하지 않는다."
+
 - id: family_profile_me_get
   name: "내 가족 프로필 조회"
   method: GET
