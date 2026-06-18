@@ -37,6 +37,7 @@ class SpecialCondition(StrEnum):
     DISABILITY = "disabled"
     MULTI_CHILD = "many"
     LOW_INCOME = "dual"
+    VETERAN = "veteran"
 
 
 # DB 필터 시 영문값 -> 한글값 변환에 사용
@@ -46,6 +47,7 @@ SPECIAL_CONDITION_TO_DB: dict[str, str] = {
     "disabled": "장애인",
     "many": "다자녀",
     "dual": "저소득",
+    "veteran": "보훈대상자",
 }
 
 
@@ -77,12 +79,12 @@ class IncomeLevel(StrEnum):
 
 
 # user_profile.income_bracket 저장값 (기준 중위소득 %)
-INCOME_LEVEL_TO_DB: dict[str, str] = {
+INCOME_LEVEL_TO_DB: dict[str, str | None] = {
     "low": "50",
     "mid1": "100",
     "mid2": "150",
     "high": "200",
-    "unknown": "",
+    "unknown": None,
 }
 
 
