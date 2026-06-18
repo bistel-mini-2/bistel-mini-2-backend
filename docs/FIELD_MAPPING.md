@@ -90,7 +90,60 @@
 
 ---
 
-## 7. RegionCode 허용 값
+## 7. AI 상태 계층 구조
+
+AI 기능(추천, 지원가능성 분석)은 상태를 3계층으로 분리한다.
+
+### 계층 개요
+
+| 계층 | Enum | 저장 위치 | 외부 노출 |
+|------|------|-----------|-----------|
+| 비동기 요청 생명주기 | `RequestStatus` | `recommendation_request.request_status` | O (API `status` 필드) |
+| 내부 판단 결과 | `AssessmentStatus` | `policy_assessment.assessment_status` | X (내부 전용) |
+| 사용자 노출 결과 | `UserStatus` | — | O (API `user_status` 필드) |
+
+### RequestStatus — 비동기 요청 생명주기
+
+추천 요청(`recommendation_request`) 및 지원가능성 요청의 처리 단계.
+
+| 값 | 의미 |
+|----|------|
+| `PROCESSING` | 에이전트 실행 중 |
+| `COMPLETED` | 정상 완료 |
+| `FOLLOW_UP_REQUIRED` | 후속 질문 필요 (결과 확정 전) |
+| `FAILED` | 처리 실패 |
+
+### AssessmentStatus — 내부 판단 5상태
+
+`policy_assessment.assessment_status` 컬럼에 저장. 사용자에게 직접 노출하지 않는다.
+
+| 값 | 의미 |
+|----|------|
+| `LIKELY_MATCH` | 현재 정보 기준 추천 가능성 높음 |
+| `NEEDS_MORE_INFO` | 추가 정보에 따라 정밀도가 달라질 수 있으나 방향은 유지 |
+| `NOT_MATCH` | 핵심 조건 불충족 |
+| `INSUFFICIENT_PROFILE` | 핵심 필드 2개 이상 누락으로 신뢰도 낮음 |
+| `CONFLICTING_PROFILE` | 입력 충돌로 정규화 결과가 불안정 |
+
+### UserStatus — 사용자 노출 3상태
+
+`AssessmentStatus`를 사용자에게 보여줄 수 있는 3단계로 변환한 값. API 응답 `user_status` 필드에 사용.
+
+| 값 | 의미 | 매핑 대상 AssessmentStatus |
+|----|------|---------------------------|
+| `RECOMMENDABLE` | 추천 가능 | `LIKELY_MATCH` |
+| `NEEDS_CONFIRMATION` | 추가 확인 필요 | `NEEDS_MORE_INFO`, `INSUFFICIENT_PROFILE`, `CONFLICTING_PROFILE` |
+| `DIFFICULT_TO_RECOMMEND` | 추천 어려움 | `NOT_MATCH` |
+
+### 구현 위치
+
+- Enum 정의: `app/common/ai_status.py`
+- `AssessmentStatus → UserStatus` 변환 함수: `map_assessment_to_user_status()`
+- Graph 적용 위치: Recommendation Graph / Eligibility Graph의 `User Status Mapping Node`
+
+---
+
+## 8. RegionCode 허용 값
 
 `policy.region_code`, `user_profile.region_code`, 필터 파라미터에 사용.
 
