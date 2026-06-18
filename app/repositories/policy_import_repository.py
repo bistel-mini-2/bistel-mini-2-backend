@@ -252,17 +252,19 @@ class PolicyImportRepository:
                             AS required_document_id,
                         policy_id,
                         document_name,
-                        CASE
-                            WHEN document_name LIKE '%신청서%'
-                              OR document_name LIKE '%동의서%'
-                              OR document_name LIKE '%확인서%'
-                            THEN 'REQUIRED'
-                            ELSE 'REFERENCE'
-                        END AS required_type,
+                        'REQUIRED' AS required_type,
                         NULL::text AS issue_place,
                         document_link AS description
                     FROM document_items
                     WHERE document_name IS NOT NULL
+                      AND (
+                        document_name LIKE '%신청%서%'
+                        OR document_name LIKE '%동의서%'
+                        OR document_name LIKE '%확인서%'
+                        OR document_name LIKE '%위임장%'
+                        OR document_name LIKE '%진단서%'
+                        OR document_name LIKE '%증명서%'
+                      )
                 ),
                 inserted AS (
                     INSERT INTO required_document (
@@ -282,6 +284,86 @@ class PolicyImportRepository:
                         description
                     FROM normalized_documents
                     RETURNING required_document_id
+                )
+                SELECT COUNT(*) FROM inserted
+            """,
+        )
+
+    @classmethod
+    async def replace_policy_documents(cls, conn) -> int:
+        await cls._execute(
+            conn,
+            """
+                DELETE FROM policy_document d
+                USING policy_raw_import r
+                JOIN policy p ON p.policy_code = r.serv_id
+                WHERE d.policy_id = p.policy_id
+                  AND r.list_json IS NOT NULL
+                  AND r.detail_json IS NOT NULL
+                  AND r.detail_status = 'COMPLETED'
+            """,
+        )
+
+        return await cls._fetch_count(
+            conn,
+            """
+                WITH document_items AS (
+                    SELECT
+                        p.policy_id,
+                        form_item.ordinality::int AS item_order,
+                        NULLIF(form_item.item->>'servSeDetailNm', '')
+                            AS source_title,
+                        NULLIF(form_item.item->>'servSeDetailLink', '')
+                            AS source_url
+                    FROM policy_raw_import r
+                    JOIN policy p ON p.policy_code = r.serv_id
+                    CROSS JOIN LATERAL jsonb_array_elements(
+                        COALESCE(r.detail_json->'basfrmList', '[]'::jsonb)
+                    ) WITH ORDINALITY AS form_item(item, ordinality)
+                    WHERE r.list_json IS NOT NULL
+                      AND r.detail_json IS NOT NULL
+                      AND r.detail_status = 'COMPLETED'
+                ),
+                normalized_documents AS (
+                    SELECT
+                        (policy_id * 10000 + 3000 + item_order)::bigint
+                            AS document_id,
+                        policy_id,
+                        source_title,
+                        source_url,
+                        'POLICY_REFERENCE' AS source_type,
+                        NULL::text AS raw_text
+                    FROM document_items
+                    WHERE source_title IS NOT NULL
+                      AND NOT (
+                        source_title LIKE '%신청%서%'
+                        OR source_title LIKE '%동의서%'
+                        OR source_title LIKE '%확인서%'
+                        OR source_title LIKE '%위임장%'
+                        OR source_title LIKE '%진단서%'
+                        OR source_title LIKE '%증명서%'
+                      )
+                ),
+                inserted AS (
+                    INSERT INTO policy_document (
+                        document_id,
+                        policy_id,
+                        source_title,
+                        source_url,
+                        source_type,
+                        raw_text,
+                        updated_at
+                    )
+                    SELECT
+                        document_id,
+                        policy_id,
+                        source_title,
+                        source_url,
+                        source_type,
+                        raw_text,
+                        CURRENT_TIMESTAMP
+                    FROM normalized_documents
+                    RETURNING document_id
                 )
                 SELECT COUNT(*) FROM inserted
             """,
@@ -403,6 +485,14 @@ class PolicyImportRepository:
                     WHERE r.list_json IS NOT NULL
                       AND r.detail_json IS NOT NULL
                       AND r.detail_status = 'COMPLETED'
+                      AND (
+                        form_item.item->>'servSeDetailNm' LIKE '%신청%서%'
+                        OR form_item.item->>'servSeDetailNm' LIKE '%동의서%'
+                        OR form_item.item->>'servSeDetailNm' LIKE '%확인서%'
+                        OR form_item.item->>'servSeDetailNm' LIKE '%위임장%'
+                        OR form_item.item->>'servSeDetailNm' LIKE '%진단서%'
+                        OR form_item.item->>'servSeDetailNm' LIKE '%증명서%'
+                      )
                 ),
                 normalized_items AS (
                     SELECT
