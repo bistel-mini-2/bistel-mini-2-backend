@@ -11,12 +11,16 @@ from app.common.schemas import ApiResponse, ErrorDetail
 
 class ErrorCode(StrEnum):
     INVALID_INPUT = "INVALID_INPUT"
+    VALIDATION_ERROR = "VALIDATION_ERROR"
     UNAUTHORIZED = "UNAUTHORIZED"
     NOT_FOUND = "NOT_FOUND"
     CONFLICT = "CONFLICT"
     DUPLICATE_EMAIL = "DUPLICATE_EMAIL"
     DUPLICATE_NICKNAME = "DUPLICATE_NICKNAME"
+    EMAIL_ALREADY_EXISTS = "EMAIL_ALREADY_EXISTS"
+    NICKNAME_ALREADY_EXISTS = "NICKNAME_ALREADY_EXISTS"
     INVALID_CREDENTIALS = "INVALID_CREDENTIALS"
+    PASSWORD_UNCHANGED = "PASSWORD_UNCHANGED"
     POLICY_NOT_FOUND = "POLICY_NOT_FOUND"
     AI_TIMEOUT = "AI_TIMEOUT"
     INTERNAL_SERVER_ERROR = "INTERNAL_SERVER_ERROR"
@@ -41,7 +45,7 @@ _HTTP_STATUS_TO_ERROR_CODE: dict[int, ErrorCode] = {
     401: ErrorCode.UNAUTHORIZED,
     404: ErrorCode.NOT_FOUND,
     409: ErrorCode.CONFLICT,
-    422: ErrorCode.INVALID_INPUT,
+    422: ErrorCode.VALIDATION_ERROR,
 }
 
 
@@ -95,7 +99,7 @@ async def _validation_exception_handler(
         }
         for error in exc.errors()
     ]
-    return _error_response(422, ErrorCode.INVALID_INPUT, message, details)
+    return _error_response(422, ErrorCode.VALIDATION_ERROR, message, details)
 
 
 async def _unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:

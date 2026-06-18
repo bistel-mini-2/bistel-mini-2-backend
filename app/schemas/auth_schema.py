@@ -82,3 +82,7 @@ class TokenResponse(BaseModel):
     access_token: str = Field(examples=["eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."])
     token_type: Literal["bearer"] = "bearer"
     user: UserResponse
+
+
+class SignUpValidateResponse(BaseModel):
+    valid: bool = Field(examples=[True])
