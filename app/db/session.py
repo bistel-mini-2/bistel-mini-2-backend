@@ -2,7 +2,6 @@ from collections.abc import AsyncGenerator
 from typing import Annotated
 
 from fastapi import Depends
-from psycopg_pool import AsyncConnectionPool
 from sqlalchemy.ext.asyncio import (
     AsyncAttrs,
     AsyncSession,
@@ -24,13 +23,6 @@ AsyncSessionLocal = async_sessionmaker(
     class_=AsyncSession,
     expire_on_commit=False,
     autoflush=False,
-)
-
-psycopg_pool = AsyncConnectionPool(
-    conninfo=settings.psycopg_database_url,
-    min_size=0,
-    max_size=10,
-    open=False,
 )
 
 
