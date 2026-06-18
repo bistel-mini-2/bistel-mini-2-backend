@@ -2,7 +2,7 @@ from enum import StrEnum
 
 
 class RequestStatus(StrEnum):
-    """비동기 요청 생명주기 상태 — recommendation_request.request_status, eligibility_request.request_status"""
+    """비동기 요청 생명주기 상태 — API 응답 status 필드에 그대로 사용한다."""
     READY = "READY"                          # DB DEFAULT — row 생성 후 Graph 시작 전
     PROCESSING = "PROCESSING"
     COMPLETED = "COMPLETED"

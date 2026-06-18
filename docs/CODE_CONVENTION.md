@@ -28,7 +28,7 @@ DEFAULT_PAGE_SIZE = 20
 
 - Python 파일은 소문자와 underscore를 사용합니다.
 - 기능별로 폴더를 분리합니다.
-- 공통으로 쓰는 코드는 `api/common/`에 둡니다.
+- 공통으로 쓰는 코드는 `app/common/`에 둡니다.
 - 한 파일이 너무 커지면 역할별로 나눕니다.
 
 예시:
@@ -41,12 +41,14 @@ policy_schema.py
 
 ## 현재 프로젝트 폴더 역할
 
-- `api/common/`: 공통 설정, 예외 처리, 공통 유틸
-- `api/policy/`: 정책 목록/상세 관련 API
-- `api/recommend/`: 사용자 조건 기반 정책 추천 API
-- `api/rag/`: RAG 기반 질의응답 API
-- `static/common/`: 정적 리소스
-- `templates/`: 템플릿 파일
+- `app/api/`: FastAPI 라우터
+- `app/common/`: 공통 응답, 예외, AI 상태 Enum
+- `app/core/`: 설정, 보안, 의존성
+- `app/db/`: DB 세션과 모델
+- `app/repositories/`: DB 접근 계층
+- `app/schemas/`: Pydantic 요청/응답 스키마
+- `app/services/`: 비즈니스 로직, 외부 API 호출, LangChain 호출
+- `app/static/`: 정적 리소스
 - `docs/`: 문서
 
 ## FastAPI 작성 규칙
@@ -74,15 +76,23 @@ API 경로 예시:
 - model: DB 엔티티
 - rag: 문서 검색, 임베딩, 질의응답 관련 로직
 
-기능이 커지면 아래처럼 분리합니다.
+기능이 커지면 아래처럼 계층별 파일을 분리합니다.
 
 ```text
-api/policy/
-├── router.py
-├── service.py
-├── schema.py
-└── model.py
+app/api/policy_controller.py
+app/services/policy_service.py
+app/schemas/policy_schema.py
+app/repositories/policy_repository.py
+app/db/models/policy.py
 ```
+
+## AI 상태 작성 규칙
+
+- API 응답의 `status` 필드는 `app/common/ai_status.py`의 `RequestStatus` 값을 사용합니다.
+- `status`에는 `READY`, `PROCESSING`, `COMPLETED`, `FOLLOW_UP_REQUIRED`, `FAILED`만 내려줍니다.
+- `loading`, `done`, `error`, `success`, `warning`은 프론트 UI variant이며 API 값으로 내려주지 않습니다.
+- 내부 판단 상태는 `AssessmentStatus`를 사용하고, 사용자 노출 판단은 `map_assessment_to_user_status()`로 `UserStatus`에 매핑합니다.
+- 상세 규칙은 `docs/API_SPEC_AI.md`와 `docs/FIELD_MAPPING.md`를 기준으로 합니다.
 
 ## 환경 변수 규칙
 
@@ -102,7 +112,7 @@ api/policy/
 
 - API 오류 응답에는 FastAPI `HTTPException`을 사용합니다.
 - 상태 코드는 상황에 맞게 사용합니다.
-- 같은 형태의 예외가 반복되면 추후 `api/common/`의 공통 예외 처리 모듈로 분리할 수 있습니다.
+- 같은 형태의 예외가 반복되면 `app/common/`의 공통 예외 처리 모듈로 분리합니다.
 
 예시:
 
@@ -115,7 +125,7 @@ raise HTTPException(status_code=404, detail="Policy not found")
 
 ## RAG 관련 규칙
 
-- RAG 관련 코드는 `api/rag/` 또는 별도 서비스 계층으로 분리합니다.
+- RAG 관련 코드는 `app/services/`, `app/repositories/`, `app/api/`의 계층 구조에 맞춰 분리합니다.
 - 원본 문서와 임베딩 결과는 Git에 올리지 않습니다.
 - 대용량 파일은 Git이 아니라 별도 공유 방식으로 관리합니다.
 - 문서 전처리 결과는 꼭 필요한 경우 작은 샘플만 관리합니다.
