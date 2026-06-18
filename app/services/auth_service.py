@@ -15,7 +15,7 @@ class AuthService:
         email: str,
         password: str,
         nickname: str,
-    ) -> User:
+    ) -> tuple[str, User]:
         normalized_email = email.strip().lower()
         normalized_nickname = nickname.strip()
 
@@ -40,13 +40,16 @@ class AuthService:
             role="USER",
         )
         try:
-            return await UserRepository.save(db, user)
+            saved_user = await UserRepository.save(db, user)
         except IntegrityError as exc:
             raise AppException(
                 status_code=status.HTTP_409_CONFLICT,
                 code=ErrorCode.CONFLICT,
                 message="Email or nickname already registered",
             ) from exc
+
+        access_token = create_access_token(subject=saved_user.user_id)
+        return access_token, saved_user
 
     @staticmethod
     async def login(db: AsyncSession, email: str, password: str) -> tuple[str, User]:

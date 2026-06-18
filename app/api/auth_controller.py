@@ -7,7 +7,7 @@ from app.common.schemas import ApiResponse
 from app.common.response import success_response
 from app.core.dependencies import CurrentUserDep, DbSessionDep
 from app.schemas.auth_schema import LoginRequest, SignUpRequest, TokenResponse
-from app.schemas.user_schema import UserPublicResponse, UserResponse
+from app.schemas.user_schema import UserResponse
 from app.services.auth_service import AuthService
 
 
@@ -37,7 +37,7 @@ users_router = APIRouter(prefix="/api/v1/users", tags=["Users"])
 @auth_router.post(
     "/signup",
     status_code=status.HTTP_201_CREATED,
-    response_model=ApiResponse[UserPublicResponse],
+    response_model=ApiResponse[TokenResponse],
     responses={
         status.HTTP_409_CONFLICT: ERROR_RESPONSES[status.HTTP_409_CONFLICT],
         status.HTTP_422_UNPROCESSABLE_ENTITY: ERROR_RESPONSES[
@@ -50,14 +50,18 @@ async def sign_up(
     request: SignUpRequest,
     db: DbSessionDep,
 ) -> JSONResponse:
-    user = await AuthService.sign_up(
+    access_token, user = await AuthService.sign_up(
         db,
         email=request.email,
         password=request.password,
         nickname=request.nickname,
     )
     return success_response(
-        data=UserPublicResponse.model_validate(user),
+        data=TokenResponse(
+            access_token=access_token,
+            token_type="bearer",
+            user=UserResponse.model_validate(user),
+        ),
         status_code=status.HTTP_201_CREATED,
     )
 
