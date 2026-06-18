@@ -201,7 +201,7 @@ class PolicyImportRepository:
                                 COALESCE(detail_json->'applmetList', '[]'::jsonb)
                             ) AS method_item
                         ),
-                        NULL,
+                        NULLIF(detail_json->>'sprtCycNm', ''),
                         NULLIF(detail_json->>'slctCritCn', '')
                     FROM raw
                     ON CONFLICT (policy_id) DO UPDATE SET
