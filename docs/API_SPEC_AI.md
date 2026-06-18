@@ -143,6 +143,26 @@ type PolicyAiSummaryResponse = {
   response: "access_token, token_type, user summary"
   notes: "일반 회원가입 진입점. 가입 성공 시 바로 로그인된 상태로 access token을 발급한다. 회원가입 온보딩에서 입력한 가족 상황은 이 토큰으로 인증한 뒤 PUT /api/v1/family-profiles/me로 저장한다."
 
+- id: auth_signup_validate
+  name: "회원가입 사전 검증"
+  method: POST
+  path: "/api/v1/auth/signup/validate"
+  auth: "none"
+  priority: "medium"
+  owner: "추천/회원"
+  request: "email, password, nickname"
+  response_schema:
+    success: true
+    data:
+      valid: true
+    error: null
+    meta: {}
+  error_codes:
+    - EMAIL_ALREADY_EXISTS
+    - NICKNAME_ALREADY_EXISTS
+    - VALIDATION_ERROR
+  notes: "계정을 생성하지 않고 회원가입 입력값과 이메일/닉네임 중복 여부를 검증한다. 회원가입 온보딩의 '가족 상황 입력하기' 단계 전환 전에 호출하며, 실제 계정 생성과 access token 발급은 POST /api/v1/auth/signup에서만 수행한다."
+
 - id: users_me
   name: "내 계정 정보 조회"
   method: GET
@@ -182,7 +202,11 @@ type PolicyAiSummaryResponse = {
       changed: true
     error: null
     meta: {}
-  notes: "현재 비밀번호를 확인한 뒤 새 비밀번호를 bcrypt 해시로 저장한다. 이메일 변경은 지원하지 않는다."
+  error_codes:
+    - INVALID_CREDENTIALS
+    - PASSWORD_UNCHANGED
+    - VALIDATION_ERROR
+  notes: "현재 비밀번호를 확인한 뒤 새 비밀번호를 bcrypt 해시로 저장한다. 새 비밀번호는 현재 비밀번호와 달라야 하며, 이메일 변경은 지원하지 않는다."
 
 - id: family_profile_me_get
   name: "내 가족 프로필 조회"

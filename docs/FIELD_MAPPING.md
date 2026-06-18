@@ -45,7 +45,9 @@
 ## 3. 가족 프로필 저장 API
 
 가족 상황은 계정 요약 API(`GET /api/v1/users/me`)에 섞지 않고 별도 도메인 API로 저장한다.
-회원가입 온보딩에서 가족 상황을 입력한 경우에도 회원가입 payload에 포함하지 않고, 가입 성공 응답의 access token으로 인증한 뒤 아래 API로 저장한다.
+회원가입 온보딩에서 `가족 상황 입력하기`를 누를 때는 `POST /api/v1/auth/signup/validate`로
+`email`, `password`, `nickname`을 보내 계정 생성 없이 입력값과 중복 여부를 먼저 확인한다.
+가족 상황 입력 후에는 `POST /api/v1/auth/signup` 성공 응답의 access token으로 인증한 뒤 아래 API로 저장한다.
 
 ```text
 GET /api/v1/family-profiles/me
@@ -87,6 +89,9 @@ PUT /api/v1/family-profiles/me
 ```
 
 `users/me`는 `user_id`, `email`, `nickname`, `role` 같은 계정 요약만 반환하고 가족 상황을 포함하지 않는다.
+닉네임 수정은 `PATCH /api/v1/users/me`에 `{ "nickname": "새 닉네임" }`을 보내며, 이메일 변경은 지원하지 않는다.
+비밀번호 변경은 `PUT /api/v1/users/me/password`에 `current_password`, `new_password`를 보내 처리한다.
+`new_password`는 `current_password`와 달라야 한다.
 
 ---
 

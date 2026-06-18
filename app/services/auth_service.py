@@ -10,6 +10,29 @@ from app.repositories.user_repository import UserRepository
 
 class AuthService:
     @staticmethod
+    async def validate_sign_up(
+        db: AsyncSession,
+        email: str,
+        nickname: str,
+    ) -> None:
+        normalized_email = email.strip().lower()
+        normalized_nickname = nickname.strip()
+
+        if await UserRepository.find_by_email(db, normalized_email) is not None:
+            raise AppException(
+                status_code=status.HTTP_409_CONFLICT,
+                code=ErrorCode.EMAIL_ALREADY_EXISTS,
+                message="Email already registered",
+            )
+
+        if await UserRepository.find_by_nickname(db, normalized_nickname) is not None:
+            raise AppException(
+                status_code=status.HTTP_409_CONFLICT,
+                code=ErrorCode.NICKNAME_ALREADY_EXISTS,
+                message="Nickname already registered",
+            )
+
+    @staticmethod
     async def sign_up(
         db: AsyncSession,
         email: str,
@@ -19,19 +42,7 @@ class AuthService:
         normalized_email = email.strip().lower()
         normalized_nickname = nickname.strip()
 
-        if await UserRepository.find_by_email(db, normalized_email) is not None:
-            raise AppException(
-                status_code=status.HTTP_409_CONFLICT,
-                code=ErrorCode.DUPLICATE_EMAIL,
-                message="Email already registered",
-            )
-
-        if await UserRepository.find_by_nickname(db, normalized_nickname) is not None:
-            raise AppException(
-                status_code=status.HTTP_409_CONFLICT,
-                code=ErrorCode.DUPLICATE_NICKNAME,
-                message="Nickname already registered",
-            )
+        await AuthService.validate_sign_up(db, normalized_email, normalized_nickname)
 
         user = User(
             email=normalized_email,

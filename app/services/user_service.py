@@ -52,5 +52,12 @@ class UserService:
                 message="Invalid current password",
             )
 
+        if verify_password(new_password, user.password_hash):
+            raise AppException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                code=ErrorCode.PASSWORD_UNCHANGED,
+                message="New password must be different from current password",
+            )
+
         user.password_hash = get_password_hash(new_password)
         await UserRepository.save(db, user)

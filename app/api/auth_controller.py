@@ -6,7 +6,12 @@ from fastapi.responses import JSONResponse
 from app.common.schemas import ApiResponse
 from app.common.response import success_response
 from app.core.dependencies import CurrentUserDep, DbSessionDep
-from app.schemas.auth_schema import LoginRequest, SignUpRequest, TokenResponse
+from app.schemas.auth_schema import (
+    LoginRequest,
+    SignUpRequest,
+    SignUpValidateResponse,
+    TokenResponse,
+)
 from app.schemas.user_schema import (
     UserNicknameUpdateRequest,
     UserPasswordUpdateRequest,
@@ -38,6 +43,29 @@ ERROR_RESPONSES: dict[int, dict[str, Any]] = {
 
 auth_router = APIRouter(prefix="/api/v1/auth", tags=["Auth"])
 users_router = APIRouter(prefix="/api/v1/users", tags=["Users"])
+
+
+@auth_router.post(
+    "/signup/validate",
+    response_model=ApiResponse[SignUpValidateResponse],
+    responses={
+        status.HTTP_409_CONFLICT: ERROR_RESPONSES[status.HTTP_409_CONFLICT],
+        status.HTTP_422_UNPROCESSABLE_ENTITY: ERROR_RESPONSES[
+            status.HTTP_422_UNPROCESSABLE_ENTITY
+        ],
+    },
+    summary="회원가입 사전 검증",
+)
+async def validate_sign_up(
+    request: SignUpRequest,
+    db: DbSessionDep,
+) -> JSONResponse:
+    await AuthService.validate_sign_up(
+        db,
+        email=request.email,
+        nickname=request.nickname,
+    )
+    return success_response(data=SignUpValidateResponse(valid=True))
 
 
 @auth_router.post(
