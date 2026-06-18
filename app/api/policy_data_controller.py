@@ -3,9 +3,8 @@ from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Query
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, Response
 
-from app.common.response import success_response
 from app.core.dependencies import DbSessionDep
 from app.schemas.policy_data_schema import (
     PolicyRawDetailSaveResponse,
@@ -13,7 +12,6 @@ from app.schemas.policy_data_schema import (
     PolicyRawPendingSaveResponse,
 )
 from app.services.policy_data_service import PolicyDataService
-from app.services.policy_import_service import PolicyImportServiceDep
 
 
 logger = logging.getLogger(__name__)
@@ -31,12 +29,6 @@ async def policy_raw_import_page() -> FileResponse:
 async def init_db(db: DbSessionDep) -> dict[str, str]:
     await PolicyDataService.create_raw_import_table(db)
     return {"message": "policy_raw_import table is ready"}
-
-
-@router.post("/import")
-async def import_raw_policies(service: PolicyImportServiceDep) -> JSONResponse:
-    result = await service.import_raw_policies()
-    return success_response(data=result)
 
 
 @router.get("/list")
