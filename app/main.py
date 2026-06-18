@@ -10,10 +10,11 @@ from fastapi.middleware.cors import CORSMiddleware
 load_dotenv()
 
 from app.api.auth_controller import router as auth_router
-from app.common.exceptions import register_exception_handlers
 from app.api.policy_data_controller import router as policy_data_router
+from app.common.exceptions import register_exception_handlers
+from app.common.psycopg_pool_conf import psycopg_pool
 from app.core.config import settings
-from app.db.session import engine, psycopg_pool
+from app.db.session import engine
 from app.utils.logger import setup_logging
 
 
