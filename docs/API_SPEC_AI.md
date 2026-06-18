@@ -43,20 +43,34 @@ identifier_contract:
   reason: "The current frontend dummy data and routing use string slugs instead of numeric ids."
 ```
 
-### 3.2 User-Facing Eligibility Status
+### 3.2 AI Status Contracts
 
 ```ts
-type UserStatus =
-  | "RECOMMENDABLE"
-  | "NEEDS_CONFIRMATION"
-  | "DIFFICULT_TO_RECOMMEND";
-
-type AsyncStatus =
+type RequestStatus =
+  | "READY"
   | "PROCESSING"
   | "COMPLETED"
   | "FOLLOW_UP_REQUIRED"
   | "FAILED";
+
+// Backend internal assessment state. Do not use this directly as a user-facing UI label.
+type AssessmentStatus =
+  | "LIKELY_MATCH"
+  | "NEEDS_MORE_INFO"
+  | "NOT_MATCH"
+  | "INSUFFICIENT_PROFILE"
+  | "CONFLICTING_PROFILE";
+
+type UserStatus =
+  | "RECOMMENDABLE"
+  | "NEEDS_CONFIRMATION"
+  | "DIFFICULT_TO_RECOMMEND";
 ```
+
+- `status` is a `RequestStatus` and controls request lifecycle UI.
+- `user_status` is a `UserStatus` and controls user-facing recommendation/eligibility judgment UI.
+- `AssessmentStatus` is for backend internal judgment only. If it appears in a response, frontend screens still prefer `user_status`.
+- `loading`, `success`, `warning`, and `error` are frontend UI variants, not API status values.
 
 ### 3.3 Frontend Condition Input
 
@@ -93,6 +107,12 @@ type PolicyAiSummary = {
   evidences: Evidence[];
   generated_at: string;
   summary_version: string;
+};
+
+type PolicyAiSummaryResponse = {
+  request_id?: string;
+  status: RequestStatus;
+  summary: PolicyAiSummary | null;
 };
 ```
 
@@ -240,30 +260,34 @@ type PolicyAiSummary = {
     - include_evidences
   response_schema:
     data:
-      policy_id: "string"
-      slug: "string"
-      easy_summary: "string"
-      key_points:
-        - label: "string"
-          content: "string"
-      target_summary: "string"
-      benefit_summary: "string"
-      application_summary: "string"
-      cautions: "string[]"
-      next_actions:
-        - action: "eligibility | compare | apply | chat"
-          label: "string"
-          href: "string?"
-      evidences:
-        - snippet: "string"
-          source_title: "string"
-          source_url: "string"
-          evidence_role: "summary | target | benefit | application | caution"
-      generated_at: "datetime"
-      summary_version: "string"
+      request_id: "string?"
+      status: "READY | PROCESSING | COMPLETED | FOLLOW_UP_REQUIRED | FAILED"
+      summary: "PolicyAiSummary | null"
+      summary_schema_when_completed:
+        policy_id: "string"
+        slug: "string"
+        easy_summary: "string"
+        key_points:
+          - label: "string"
+            content: "string"
+        target_summary: "string"
+        benefit_summary: "string"
+        application_summary: "string"
+        cautions: "string[]"
+        next_actions:
+          - action: "eligibility | compare | apply | chat"
+            label: "string"
+            href: "string?"
+        evidences:
+          - snippet: "string"
+            source_title: "string"
+            source_url: "string"
+            evidence_role: "summary | target | benefit | application | caution"
+        generated_at: "datetime"
+        summary_version: "string"
     meta:
       source: "cache | generated"
-  notes: "기능명세서의 정책 상세 = 기본정보 + AI요약 + 다음 액션. 정책 설명 생성 엔진의 결과를 카드형으로 반환한다."
+  notes: "status는 RequestStatus이며 프론트는 getRequestStatusUi(status)로 로딩/완료/오류 UI를 표시한다. COMPLETED이면 summary를 렌더링하고, PROCESSING이면 로딩 UI, FAILED이면 에러 UI를 표시한다. 정책 AI 요약은 사용자 추천 판단이 아니므로 user_status를 사용하지 않는다."
 
 - id: policy_ai_summary_create
   name: "정책 AI 요약 생성/갱신"
@@ -281,12 +305,12 @@ type PolicyAiSummary = {
   response_schema:
     data:
       policy_id: "string"
-      status: "COMPLETED | PROCESSING"
+      status: "READY | PROCESSING | COMPLETED | FOLLOW_UP_REQUIRED | FAILED"
       summary: "PolicyAiSummary?"
       request_id: "string?"
     meta:
       source: "cache | generated"
-  notes: "정책 문서를 쉬운 설명으로 변환하는 공통 엔진 호출 API. 캐시가 있으면 즉시 반환하고, 생성 비용이 크면 request_id 기반 비동기로 확장 가능."
+  notes: "status는 RequestStatus이며 API 값으로 loading/done/error를 내려주지 않는다. 프론트는 getRequestStatusUi(status)를 사용한다. 캐시가 있으면 COMPLETED와 summary를 즉시 반환하고, 생성 비용이 크면 PROCESSING과 request_id를 반환한다. 정책 AI 요약은 사용자 추천 판단이 아니므로 user_status를 사용하지 않는다."
 
 - id: policy_related_list
   name: "관련 정책 조회"
@@ -392,7 +416,7 @@ type PolicyAiSummary = {
     success: true
     data:
       request_id: "string"
-      status: "PROCESSING | COMPLETED | FOLLOW_UP_REQUIRED | FAILED"
+      status: "READY | PROCESSING | COMPLETED | FOLLOW_UP_REQUIRED | FAILED"
       user_status: "RECOMMENDABLE | NEEDS_CONFIRMATION | DIFFICULT_TO_RECOMMEND?"
       reason_summary: "string?"
       recommendations:
@@ -502,7 +526,7 @@ type PolicyAiSummary = {
   response_schema:
     data:
       request_id: "string"
-      status: "PROCESSING | COMPLETED | FOLLOW_UP_REQUIRED | FAILED"
+      status: "READY | PROCESSING | COMPLETED | FOLLOW_UP_REQUIRED | FAILED"
       policy_id: "string"
       slug: "string"
       policy_name: "string"
@@ -705,7 +729,7 @@ type PolicyAiSummary = {
     item_status: "PENDING | DONE"
     note: "string?"
   response: "updated checklist item"
-  notes: "PENDING 또는 DONE 중심으로 관리"
+  notes: "PENDING 또는 DONE 중심으로 관리. 이 값은 신청 체크리스트 항목 상태이며 AI RequestStatus와 무관."
 ```
 
 ### 4.8 Chat
@@ -982,6 +1006,9 @@ type PolicyAiSummary = {
   type: "response contract"
   request: "policy_id, optional user context"
   required_fields:
+    - status
+    - summary
+  summary_fields_when_completed:
     - easy_summary
     - key_points
     - target_summary
@@ -992,7 +1019,7 @@ type PolicyAiSummary = {
     - evidences
     - generated_at
     - summary_version
-  notes: "정책 설명 생성 엔진의 카드형 렌더링 결과. 요약은 근거 없는 자유 생성이 아니라 RAG evidences와 함께 반환한다."
+  notes: "status는 RequestStatus이며 getRequestStatusUi(status)로 표시한다. COMPLETED일 때 summary 필드를 렌더링한다. 정책 AI 요약은 사용자 추천 판단이 아니므로 user_status를 사용하지 않는다."
 
 - id: eligibility_ui_response_contract
   name: "지원 가능성 UI 응답 계약"

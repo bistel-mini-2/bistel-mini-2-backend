@@ -26,16 +26,17 @@
 ```text
 bistel-mini-2-backend/
 ├── .github/              # GitHub Actions, PR/Issue 템플릿
-├── api/
-│   ├── common/           # 공통 설정, 예외 처리, 공통 유틸
-│   ├── policy/           # 정책 목록/상세 API
-│   ├── recommend/        # 사용자 조건 기반 정책 추천 API
-│   └── rag/              # RAG 기반 질의응답 API
-├── static/
-│   └── common/           # 정적 리소스
-├── templates/            # Jinja2 템플릿
+├── app/
+│   ├── api/              # FastAPI 라우터
+│   ├── common/           # 공통 응답, 예외, AI 상태 Enum
+│   ├── core/             # 설정, 보안, 의존성
+│   ├── db/               # DB 세션과 모델
+│   ├── repositories/     # DB 접근 계층
+│   ├── schemas/          # Pydantic 요청/응답 스키마
+│   ├── services/         # 비즈니스 로직
+│   └── static/           # 정적 리소스
 ├── docs/                 # 온보딩, 협업 규칙, 코드 컨벤션 문서
-├── main.py               # FastAPI 앱 진입점
+├── app/main.py           # FastAPI 앱 진입점
 └── requirements.txt      # Python 패키지 목록
 ```
 
@@ -80,7 +81,7 @@ pip install -r requirements.txt
 ### 4. 서버 실행
 
 ```bash
-python main.py
+uvicorn app.main:app --reload
 ```
 
 실행 후 아래 주소로 접속합니다.
@@ -167,6 +168,8 @@ fix: CORS 설정 오류 수정
 - [프로젝트 참여 및 실행 가이드](docs/ONBOARDING.md)
 - [GitHub 협업 규칙](docs/CONVENTION.md)
 - [백엔드 코드 작성 규칙](docs/CODE_CONVENTION.md)
+- [AI/API 명세서](docs/API_SPEC_AI.md)
+- [필드 매핑 및 AI 상태 규칙](docs/FIELD_MAPPING.md)
 
 ## 주의사항
 

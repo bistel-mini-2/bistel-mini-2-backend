@@ -92,7 +92,7 @@
 
 ## 7. AI 상태 계층 구조
 
-AI 기능(추천, 지원가능성 분석)은 상태를 3계층으로 분리한다.
+AI 기능(추천, 지원가능성 분석, 정책 AI 요약)은 상태를 3계층으로 분리한다.
 
 ### 계층 개요
 
@@ -104,14 +104,29 @@ AI 기능(추천, 지원가능성 분석)은 상태를 3계층으로 분리한�
 
 ### RequestStatus — 비동기 요청 생명주기
 
-추천 요청(`recommendation_request`) 및 지원가능성 요청의 처리 단계.
+추천 요청(`recommendation_request`), 지원가능성 요청, 정책 AI 요약 요청의 처리 단계.
+API 응답의 `status` 필드는 반드시 아래 `RequestStatus` 값만 사용한다.
 
 | 값 | 의미 |
 |----|------|
+| `READY` | 요청 생성 후 Graph/작업 시작 전 초기 상태 |
 | `PROCESSING` | 에이전트 실행 중 |
 | `COMPLETED` | 정상 완료 |
 | `FOLLOW_UP_REQUIRED` | 후속 질문 필요 (결과 확정 전) |
 | `FAILED` | 처리 실패 |
+
+`loading`, `success`, `warning`, `error`는 프론트 UI variant이며 API status 값이 아니다.
+API `status` 값으로 `loading`, `done`, `error`, `PENDING`, `PARTIAL`을 내려주지 않는다.
+
+프론트 UI variant 매핑은 다음 기준을 따른다.
+
+| RequestStatus | UI variant |
+|---------------|------------|
+| `READY` | `idle` |
+| `PROCESSING` | `loading` |
+| `COMPLETED` | `success` |
+| `FOLLOW_UP_REQUIRED` | `warning` |
+| `FAILED` | `error` |
 
 ### AssessmentStatus — 내부 판단 5상태
 
@@ -140,6 +155,7 @@ AI 기능(추천, 지원가능성 분석)은 상태를 3계층으로 분리한�
 - Enum 정의: `app/common/ai_status.py`
 - `AssessmentStatus → UserStatus` 변환 함수: `map_assessment_to_user_status()`
 - Graph 적용 위치: Recommendation Graph / Eligibility Graph의 `User Status Mapping Node`
+- API `status` 필드: `RequestStatus` 값 사용
 
 ---
 
