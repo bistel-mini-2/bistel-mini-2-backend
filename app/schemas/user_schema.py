@@ -1,13 +1,13 @@
-from datetime import datetime
-
-from pydantic import BaseModel, ConfigDict, EmailStr
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
-class UserResponse(BaseModel):
-    user_id: int
-    email: EmailStr
-    nickname: str
-    role: str
-    created_at: datetime | None
+class UserPublicResponse(BaseModel):
+    user_id: int = Field(examples=[1])
+    email: EmailStr = Field(examples=["user@example.com"])
+    nickname: str = Field(examples=["parent_user"])
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class UserResponse(UserPublicResponse):
+    role: str = Field(examples=["USER"])

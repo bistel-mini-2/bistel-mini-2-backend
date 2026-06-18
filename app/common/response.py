@@ -8,7 +8,7 @@ from app.common.schemas import ApiResponse, PaginationMeta
 
 
 def success_response(data: Any = None, status_code: int = 200) -> JSONResponse:
-    body = ApiResponse(success=True, data=jsonable_encoder(data))
+    body = ApiResponse(success=True, data=jsonable_encoder(data), meta={})
     return JSONResponse(status_code=status_code, content=body.model_dump())
 
 
@@ -25,5 +25,9 @@ def paginated_response(
         total=total,
         total_pages=math.ceil(total / size) if size > 0 else 0,
     )
-    body = ApiResponse(success=True, data=jsonable_encoder(data), meta=meta)
+    body = ApiResponse(
+        success=True,
+        data=jsonable_encoder(data),
+        meta=meta.model_dump(),
+    )
     return JSONResponse(status_code=status_code, content=body.model_dump())

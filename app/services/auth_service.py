@@ -1,5 +1,6 @@
 from fastapi import status
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import IntegrityError
 
 from app.common.exceptions import AppException, ErrorCode
 from app.core.security import create_access_token, get_password_hash, verify_password
@@ -15,14 +16,17 @@ class AuthService:
         password: str,
         nickname: str,
     ) -> User:
-        if await UserRepository.find_by_email(db, email) is not None:
+        normalized_email = email.strip().lower()
+        normalized_nickname = nickname.strip()
+
+        if await UserRepository.find_by_email(db, normalized_email) is not None:
             raise AppException(
                 status_code=status.HTTP_409_CONFLICT,
                 code=ErrorCode.DUPLICATE_EMAIL,
                 message="Email already registered",
             )
 
-        if await UserRepository.find_by_nickname(db, nickname) is not None:
+        if await UserRepository.find_by_nickname(db, normalized_nickname) is not None:
             raise AppException(
                 status_code=status.HTTP_409_CONFLICT,
                 code=ErrorCode.DUPLICATE_NICKNAME,
@@ -30,16 +34,23 @@ class AuthService:
             )
 
         user = User(
-            email=email,
+            email=normalized_email,
             password_hash=get_password_hash(password),
-            nickname=nickname,
+            nickname=normalized_nickname,
             role="USER",
         )
-        return await UserRepository.save(db, user)
+        try:
+            return await UserRepository.save(db, user)
+        except IntegrityError as exc:
+            raise AppException(
+                status_code=status.HTTP_409_CONFLICT,
+                code=ErrorCode.CONFLICT,
+                message="Email or nickname already registered",
+            ) from exc
 
     @staticmethod
     async def login(db: AsyncSession, email: str, password: str) -> tuple[str, User]:
-        user = await UserRepository.find_by_email(db, email)
+        user = await UserRepository.find_by_email(db, email.strip().lower())
         if user is None or not verify_password(password, user.password_hash):
             raise AppException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
