@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 load_dotenv()
 
+from app.api.apply_controller import router as apply_router
 from app.api.auth_controller import router as auth_router
 from app.api.policy_data_controller import router as policy_data_router
 from app.common.exceptions import register_exception_handlers
@@ -46,6 +47,7 @@ app.add_middleware(
 
 app.include_router(auth_router)
 app.include_router(policy_data_router)
+app.include_router(apply_router)
 register_exception_handlers(app)
 
 
