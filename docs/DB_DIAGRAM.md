@@ -1,0 +1,395 @@
+Project policy_rag_agent_platform {
+database_type: "PostgreSQL"
+Note: "Dodam integrated schema for policy recommendation, chat session history, RAG evidence, eligibility assessment, and user policy checklist progress"
+}
+
+Table users {
+user_id bigint [pk, increment]
+email varchar(255) [not null, unique]
+password_hash varchar(255) [not null]
+nickname varchar(100) [not null, unique]
+role varchar(20) [not null, default: 'USER']
+created_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+updated_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+}
+
+Table user_profile {
+profile_id bigint [pk, increment]
+user_id bigint [not null, unique]
+region_code varchar(50)
+household_type varchar(50)
+income_bracket varchar(50)
+employment_status varchar(50)
+pregnancy_status boolean [not null, default: false]
+profile_json jsonb [note: 'stable user profile only']
+created_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+updated_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+}
+
+Table family_member {
+family_member_id bigint [pk, increment]
+user_id bigint [not null]
+relation varchar(50) [not null]
+birth_year integer
+life_stage varchar(50)
+note text
+created_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+updated_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+}
+
+Table policy {
+policy_id bigint [pk, increment]
+policy_code varchar(100) [not null, unique]
+policy_name varchar(255) [not null]
+main_category varchar(100)
+sub_category varchar(100)
+provider_name varchar(255)
+provider_type varchar(50)
+region_scope varchar(50) [note: 'NATIONAL, LOCAL']
+region_code varchar(50)
+benefit_type varchar(50)
+application_status varchar(50)
+application_start_date date
+application_end_date date
+official_url text
+contact varchar(255)
+last_verified_at timestamp
+is_active boolean [not null, default: true]
+created_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+updated_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+}
+
+Table policy_detail {
+policy_id bigint [pk]
+easy_summary text
+target_description text
+benefit_description text
+application_method text
+application_period_text text
+caution text
+}
+
+Table policy_tag {
+policy_id bigint [not null]
+tag_name varchar(100) [not null]
+
+indexes {
+(policy_id, tag_name) [pk]
+}
+}
+
+Table policy_rule {
+rule_id bigint [pk, increment]
+policy_id bigint [not null]
+rule_type varchar(50) [not null, note: 'AGE, REGION, INCOME, HOUSEHOLD, EMPLOYMENT, CHILD, EXCLUSION']
+operator varchar(30) [not null, note: 'EQ, IN, GTE, LTE, EXISTS']
+field_name varchar(100) [not null]
+value_json jsonb [not null]
+is_hard_filter boolean [not null, default: true]
+manual_check_required boolean [not null, default: false]
+manual_check_reason text
+note text
+}
+
+Table required_document {
+required_document_id bigint [pk, increment]
+policy_id bigint [not null]
+document_name varchar(255) [not null]
+required_type varchar(50)
+issue_place varchar(255)
+description text
+}
+
+Table policy_document {
+document_id bigint [pk, increment]
+policy_id bigint [not null]
+source_title varchar(255)
+source_url text
+source_type varchar(50) [note: 'PDF, HTML, NOTICE']
+raw_text text
+collected_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+updated_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+}
+
+Table policy_document_chunk {
+chunk_id bigint [pk, increment]
+document_id bigint [not null]
+chunk_index integer [not null]
+chunk_text text [not null]
+metadata_json jsonb
+
+indexes {
+(document_id, chunk_index) [unique]
+}
+}
+
+Table chat_session {
+chat_session_id bigint [pk, increment]
+user_id bigint [not null]
+title varchar(255)
+session_status varchar(30) [not null, default: 'ACTIVE']
+last_message_at timestamp
+latest_request_id bigint
+created_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+updated_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+}
+
+Table chat_message {
+chat_message_id bigint [pk, increment]
+chat_session_id bigint [not null]
+parent_message_id bigint
+role varchar(20) [not null, note: 'USER, ASSISTANT, SYSTEM, TOOL']
+message_type varchar(30) [not null, default: 'TEXT']
+content text
+structured_json jsonb [note: 'tool output, parsed conditions, UI action payloads']
+sequence_no integer [not null]
+created_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+
+indexes {
+(chat_session_id, sequence_no) [unique]
+}
+}
+
+Table recommendation_request {
+request_id bigint [pk, increment]
+user_id bigint [not null]
+chat_session_id bigint
+trigger_message_id bigint
+source_type varchar(30) [not null, default: 'CHAT', note: 'CHAT, FORM, POLICY_DETAIL, COMPARE']
+raw_query text [not null]
+parsed_query_json jsonb [note: 'input parsing result before profile merge']
+merged_condition_json jsonb [note: 'normalized final condition set after profile merge']
+profile_conflict_json jsonb [note: 'conflicts between stored profile and current input']
+request_status varchar(50) [not null, default: 'READY']
+created_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+updated_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+}
+
+Table follow_up_question {
+follow_up_id bigint [pk, increment]
+request_id bigint [not null]
+field_name varchar(100) [not null]
+question_text text [not null]
+reason text
+answer_value_json jsonb
+answer_message_id bigint
+answered_at timestamp
+created_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+}
+
+Table recommendation_candidate {
+candidate_id bigint [pk, increment]
+request_id bigint [not null]
+policy_id bigint [not null]
+filter_match_json jsonb [note: 'why candidate survived DB filtering']
+retrieval_score decimal(10,4)
+rerank_score decimal(10,4)
+candidate_status varchar(50) [not null, default: 'CANDIDATE']
+created_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+
+indexes {
+(request_id, policy_id) [unique]
+}
+}
+
+Table policy_assessment {
+assessment_id bigint [pk, increment]
+request_id bigint [not null]
+policy_id bigint [not null]
+
+assessment_type varchar(50) [not null, note: 'recommendation_assessment, eligibility_detail']
+
+assessment_status varchar(50) [not null, note: 'LIKELY_MATCH, NEEDS_MORE_INFO, NOT_MATCH, INSUFFICIENT_PROFILE, CONFLICTING_PROFILE']
+confidence_score decimal(5,2)
+
+matched_conditions_json jsonb
+missing_conditions_json jsonb
+conflicting_conditions_json jsonb
+manual_check_points_json jsonb
+reason_summary text
+
+selected_for_result boolean [not null, default: false]
+created_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+
+indexes {
+(request_id, policy_id, assessment_type) [unique]
+}
+}
+Table assessment_evidence {
+evidence_id bigint [pk, increment]
+assessment_id bigint [not null]
+chunk_id bigint [not null]
+snippet text
+similarity_score decimal(10,4)
+evidence_role varchar(50) [note: 'TARGET, BENEFIT, CONDITION, CAUTION']
+created_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+}
+
+Table chat_message_policy {
+chat_message_policy_id bigint [pk, increment]
+chat_message_id bigint [not null]
+policy_id bigint [not null]
+action_type varchar(30) [not null, note: 'RECOMMENDED, COMPARED, ELIGIBILITY_TARGET, APPLY_TARGET']
+}
+
+Table chat_message_evidence {
+chat_message_evidence_id bigint [pk, increment]
+chat_message_id bigint [not null]
+chunk_id bigint [not null]
+snippet text
+evidence_role varchar(30) [note: 'SOURCE, CONDITION, BENEFIT, CAUTION']
+}
+
+Table favorite_policy {
+favorite_id bigint [pk, increment]
+user_id bigint [not null]
+policy_id bigint [not null]
+created_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+
+indexes {
+(user_id, policy_id) [unique]
+}
+}
+
+Table compare_basket {
+compare_id bigint [pk, increment]
+user_id bigint [not null]
+policy_id bigint [not null]
+created_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+
+indexes {
+(user_id, policy_id) [unique]
+}
+}
+
+Table user_policy_progress {
+progress_id bigint [pk, increment]
+user_id bigint [not null]
+policy_id bigint [not null]
+
+progress_status varchar(50) [not null, default: 'NOT_STARTED', note: 'NOT_STARTED, PREPARING, APPLIED, UNDER_REVIEW, APPROVED, REJECTED, RECEIVED']
+progress_percent integer [not null, default: 0, note: '0~100, checklist completion cached value']
+memo text
+
+started_at timestamp
+applied_at timestamp
+decided_at timestamp
+received_at timestamp
+
+created_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+updated_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+
+indexes {
+(user_id, policy_id) [unique]
+}
+}
+
+Table policy_checklist_template {
+template_item_id bigint [pk, increment]
+policy_id bigint [not null]
+
+item_code varchar(100) [not null, note: 'unique within each policy']
+item_label varchar(255) [not null]
+item_description text
+is_required boolean [not null, default: true]
+display_order integer [not null, default: 0]
+is_active boolean [not null, default: true]
+
+created_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+updated_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+
+indexes {
+(policy_id, item_code) [unique]
+}
+}
+
+Table user_policy_checklist_item {
+user_checklist_item_id bigint [pk, increment]
+progress_id bigint [not null]
+template_item_id bigint [not null]
+
+item_status varchar(30) [not null, default: 'PENDING', note: 'PENDING, DONE']
+checked_at timestamp
+note text
+
+created_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+updated_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+
+indexes {
+(progress_id, template_item_id) [unique]
+}
+}
+Table compare_history {
+compare_history_id bigint [pk, increment]
+user_id bigint [not null]
+title varchar(255)
+compared_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+deleted_at timestamp
+
+indexes {
+(user_id, compared_at)
+}
+}
+
+Table compare_history_item {
+compare_history_item_id bigint [pk, increment]
+compare_history_id bigint [not null]
+policy_id bigint [not null]
+added_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+
+indexes {
+(compare_history_id, policy_id) [unique]
+}
+}
+
+Ref: compare_history.user_id > users.user_id [delete: cascade]
+Ref: compare_history_item.compare_history_id > compare_history.compare_history_id [delete: cascade]
+Ref: compare_history_item.policy_id > policy.policy_id [delete: cascade]
+
+Ref: user_profile.user_id > users.user_id [delete: cascade]
+Ref: family_member.user_id > users.user_id [delete: cascade]
+
+Ref: policy_detail.policy_id > policy.policy_id [delete: cascade]
+Ref: policy_tag.policy_id > policy.policy_id [delete: cascade]
+Ref: policy_rule.policy_id > policy.policy_id [delete: cascade]
+Ref: required_document.policy_id > policy.policy_id [delete: cascade]
+Ref: policy_document.policy_id > policy.policy_id [delete: cascade]
+Ref: policy_document_chunk.document_id > policy_document.document_id [delete: cascade]
+
+Ref: chat_session.user_id > users.user_id [delete: cascade]
+Ref: chat_message.chat_session_id > chat_session.chat_session_id [delete: cascade]
+Ref: chat_message.parent_message_id > chat_message.chat_message_id [delete: set null]
+
+Ref: recommendation_request.user_id > users.user_id [delete: cascade]
+Ref: recommendation_request.chat_session_id > chat_session.chat_session_id [delete: set null]
+Ref: recommendation_request.trigger_message_id > chat_message.chat_message_id [delete: set null]
+
+Ref: follow_up_question.request_id > recommendation_request.request_id [delete: cascade]
+Ref: follow_up_question.answer_message_id > chat_message.chat_message_id [delete: set null]
+
+Ref: recommendation_candidate.request_id > recommendation_request.request_id [delete: cascade]
+Ref: recommendation_candidate.policy_id > policy.policy_id [delete: cascade]
+
+Ref: policy_assessment.request_id > recommendation_request.request_id [delete: cascade]
+Ref: policy_assessment.policy_id > policy.policy_id [delete: cascade]
+
+Ref: assessment_evidence.assessment_id > policy_assessment.assessment_id [delete: cascade]
+Ref: assessment_evidence.chunk_id > policy_document_chunk.chunk_id [delete: cascade]
+
+Ref: chat_message_policy.chat_message_id > chat_message.chat_message_id [delete: cascade]
+Ref: chat_message_policy.policy_id > policy.policy_id [delete: cascade]
+
+Ref: chat_message_evidence.chat_message_id > chat_message.chat_message_id [delete: cascade]
+Ref: chat_message_evidence.chunk_id > policy_document_chunk.chunk_id [delete: cascade]
+
+Ref: favorite_policy.user_id > users.user_id [delete: cascade]
+Ref: favorite_policy.policy_id > policy.policy_id [delete: cascade]
+
+Ref: compare_basket.user_id > users.user_id [delete: cascade]
+Ref: compare_basket.policy_id > policy.policy_id [delete: cascade]
+
+Ref: user_policy_progress.user_id > users.user_id [delete: cascade]
+Ref: user_policy_progress.policy_id > policy.policy_id [delete: cascade]
+Ref: policy_checklist_template.policy_id > policy.policy_id [delete: cascade]
+Ref: user_policy_checklist_item.progress_id > user_policy_progress.progress_id [delete: cascade]
+Ref: user_policy_checklist_item.template_item_id > policy_checklist_template.template_item_id [delete: cascade]
