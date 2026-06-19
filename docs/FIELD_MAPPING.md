@@ -140,7 +140,7 @@ PUT /api/v1/family-profiles/me
 | `multi` | 다문화·탈북민 | `010` |
 | `disabled` | 장애인 | `040` |
 | `many` | 다자녀 가구 | `020` |
-| `dual` | 저소득 | `050` |
+| `dual` | 맞벌이 | `050` |
 | `veteran` | 보훈대상자 | `030` |
 
 ---
