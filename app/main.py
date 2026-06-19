@@ -16,6 +16,7 @@ from app.api.apply_controller import (
 from app.api.auth_controller import auth_router, users_router
 from app.api.family_profile_controller import router as family_profile_router
 from app.api.policy_data_controller import router as policy_data_router
+from app.api.policy_document_controller import router as policy_document_router
 from app.api.policy_import_controller import router as policy_import_router
 from app.common.exceptions import register_exception_handlers
 from app.common.psycopg_pool_conf import psycopg_pool
@@ -55,6 +56,7 @@ app.include_router(users_router)
 app.include_router(family_profile_router)
 app.include_router(policy_data_router)
 app.include_router(policy_import_router)
+app.include_router(policy_document_router)
 app.include_router(apply_router)
 app.include_router(apply_checklist_router)
 register_exception_handlers(app)
