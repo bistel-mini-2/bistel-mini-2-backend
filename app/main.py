@@ -14,6 +14,7 @@ from app.api.apply_controller import (
     router as apply_router,
 )
 from app.api.auth_controller import auth_router, users_router
+from app.api.chat_controller import router as chat_router
 from app.api.family_profile_controller import router as family_profile_router
 from app.api.policy_data_controller import router as policy_data_router
 from app.api.policy_import_controller import router as policy_import_router
@@ -57,6 +58,7 @@ app.include_router(policy_data_router)
 app.include_router(policy_import_router)
 app.include_router(apply_router)
 app.include_router(apply_checklist_router)
+app.include_router(chat_router)
 register_exception_handlers(app)
 
 
