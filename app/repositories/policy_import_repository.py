@@ -201,7 +201,7 @@ class PolicyImportRepository:
                                 COALESCE(detail_json->'applmetList', '[]'::jsonb)
                             ) AS method_item
                         ),
-                        NULLIF(detail_json->>'sprtCycNm', ''),
+                        NULLIF(list_json->>'sprtCycNm', ''),
                         NULLIF(detail_json->>'slctCritCn', '')
                     FROM raw
                     ON CONFLICT (policy_id) DO UPDATE SET
@@ -443,23 +443,18 @@ class PolicyImportRepository:
 
     @classmethod
     async def replace_policy_checklist_templates(cls, conn) -> int:
-        await cls._execute(
-            conn,
-            """
-                DELETE FROM policy_checklist_template t
-                USING policy_raw_import r
-                JOIN policy p ON p.policy_code = r.serv_id
-                WHERE t.policy_id = p.policy_id
-                  AND r.list_json IS NOT NULL
-                  AND r.detail_json IS NOT NULL
-                  AND r.detail_status = 'COMPLETED'
-            """,
-        )
-
         return await cls._fetch_count(
             conn,
             """
-                WITH checklist_items AS (
+                WITH import_policies AS (
+                    SELECT p.policy_id
+                    FROM policy_raw_import r
+                    JOIN policy p ON p.policy_code = r.serv_id
+                    WHERE r.list_json IS NOT NULL
+                      AND r.detail_json IS NOT NULL
+                      AND r.detail_status = 'COMPLETED'
+                ),
+                checklist_items AS (
                     SELECT
                         p.policy_id,
                         'APPLY_STEP_' || lpad(step_item.ordinality::text, 3, '0')
@@ -519,7 +514,19 @@ class PolicyImportRepository:
                     FROM checklist_items
                     WHERE item_label IS NOT NULL
                 ),
-                inserted AS (
+                deactivated AS (
+                    UPDATE policy_checklist_template t
+                    SET
+                        is_active = FALSE,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE t.policy_id IN (SELECT policy_id FROM import_policies)
+                      AND t.template_item_id NOT IN (
+                        SELECT template_item_id FROM normalized_items
+                      )
+                      AND t.is_active = TRUE
+                    RETURNING t.template_item_id
+                ),
+                upserted AS (
                     INSERT INTO policy_checklist_template (
                         template_item_id,
                         policy_id,
@@ -542,9 +549,18 @@ class PolicyImportRepository:
                         TRUE,
                         CURRENT_TIMESTAMP
                     FROM normalized_items
+                    ON CONFLICT (template_item_id) DO UPDATE SET
+                        policy_id = EXCLUDED.policy_id,
+                        item_code = EXCLUDED.item_code,
+                        item_label = EXCLUDED.item_label,
+                        item_description = EXCLUDED.item_description,
+                        is_required = EXCLUDED.is_required,
+                        display_order = EXCLUDED.display_order,
+                        is_active = TRUE,
+                        updated_at = CURRENT_TIMESTAMP
                     RETURNING template_item_id
                 )
-                SELECT COUNT(*) FROM inserted
+                SELECT COUNT(*) FROM upserted
             """,
         )
 
