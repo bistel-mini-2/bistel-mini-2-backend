@@ -229,6 +229,7 @@ class PolicyImportRepository:
                 USING policy_raw_import r
                 JOIN policy p ON p.policy_code = r.serv_id
                 WHERE d.policy_id = p.policy_id
+                  AND d.source_type = 'POLICY_REFERENCE'
                   AND r.list_json IS NOT NULL
                   AND r.detail_json IS NOT NULL
                   AND r.detail_status = 'COMPLETED'
