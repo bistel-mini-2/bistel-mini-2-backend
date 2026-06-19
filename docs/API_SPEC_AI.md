@@ -800,9 +800,12 @@ type PolicyAiSummaryResponse = {
   priority: "medium"
   owner: "챗봇/신청"
   body:
-    title: "string?"
-  response: "chat_session_id, session_status"
-  notes: "새 상담 세션 시작"
+    title: "string? (max 255)"
+  response_schema:
+    data:
+      chat_session_id: "string"
+      session_status: "string"
+  notes: "새 상담 세션 시작. session_status는 default ACTIVE. title은 옵셔널이며 최대 255자."
 
 - id: chat_session_list
   name: "채팅 세션 목록 조회"
@@ -811,11 +814,16 @@ type PolicyAiSummaryResponse = {
   auth: "required"
   priority: "medium"
   owner: "챗봇/신청"
-  query_params:
-    - page
-    - size
-  response: "chat session list"
-  notes: "최근 상담 이력 목록"
+  response_schema:
+    data:
+      sessions:
+        - chat_session_id: "string"
+          title: "string?"
+          session_status: "string"
+          last_message_at: "string (iso8601)?"
+          created_at: "string (iso8601)?"
+          updated_at: "string (iso8601)?"
+  notes: "본인 세션 목록. 정렬 last_message_at DESC NULLS LAST, created_at DESC. 페이지네이션 미사용(전체 반환)."
 
 - id: chat_message_send
   name: "채팅 메시지 전송"
@@ -864,8 +872,17 @@ type PolicyAiSummaryResponse = {
   owner: "챗봇/신청"
   path_params:
     - chat_session_id
-  response: "messages, linked_policies, evidences"
-  notes: "대화 맥락 복원용"
+  response_schema:
+    data:
+      chat_session_id: "string"
+      messages:
+        - chat_message_id: "string"
+          role: "string"
+          message_type: "string"
+          content: "string?"
+          sequence_no: "integer"
+          created_at: "string (iso8601)?"
+  notes: "대화 맥락 복원용. 정렬 sequence_no ASC. 본인 세션이 아니거나 존재하지 않는 chat_session_id 접근 시 404 NOT_FOUND. linked_policies / evidences는 #39 메시지 전송 구현 시 함께 추가 예정."
 ```
 
 ## 5. Internal Service and Graph Contracts
