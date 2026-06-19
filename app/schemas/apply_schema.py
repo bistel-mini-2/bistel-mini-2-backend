@@ -19,3 +19,12 @@ class ApplyPreparationResponse(BaseModel):
     progress_percent: int
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class ChecklistItemPatchRequest(BaseModel):
+    done: bool
+
+
+class ChecklistItemPatchResponse(BaseModel):
+    item: ChecklistItem
+    progress_percent: int

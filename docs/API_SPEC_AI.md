@@ -716,101 +716,76 @@ type PolicyAiSummaryResponse = {
 - id: application_preparation_create
   name: "신청 준비 생성"
   method: POST
-  path: "/api/v1/application-preparations"
+  path: "/api/v1/policies/{slug}/apply"
   auth: "required"
   priority: "high"
   owner: "챗봇/신청"
-  body:
-    policy_id: "string"
-    raw_query: "string?"
-    selected_conditions: "SelectedConditions?"
+  path_params:
+    - slug
   response_schema:
     data:
-      progress_id: "string"
-      policy_id: "string"
-      slug: "string"
-      policy_name: "string"
-      tag: "string"
-      tagTone: "string"
-      icon: "string?"
-      application_method: "string"
-      application_period: "string"
-      contact: "string"
-      official_url: "string"
-      required_documents:
-        - document_name: "string"
-          required_type: "string"
-          issue_place: "string?"
-          description: "string?"
-      cautions: "string[]"
-      checklist_items:
-        - user_checklist_item_id: "string"
-          item_label: "string"
-          item_description: "string?"
-          item_status: "PENDING | DONE"
-          note: "string?"
-      evidences:
-        - snippet: "string"
-          source_title: "string"
-          source_url: "string"
-          evidence_role: "string"
-  notes: "ApplyPrep 컴포넌트는 신청방법, 신청기간, 문의처, 공식 URL, 체크리스트, 주의사항을 바로 표시"
+      apply_id: "string"
+      policy_id: "string (slug)"
+      how_to_apply: "string?"
+      apply_period: "string?"
+      contact: "string?"
+      official_url: "string?"
+      checklist:
+        - id: "string (template_item_id)"
+          label: "string"
+          done: "boolean"
+      caution: "string?"
+      progress_percent: "integer"
+  notes: "POST는 idempotent — 기존 진행 상태 있으면 재사용, 없으면 user_policy_progress + user_policy_checklist_item 생성. progress_percent는 동적 계산(캐시 미사용)."
 
 - id: application_preparation_get
   name: "신청 준비 조회"
   method: GET
-  path: "/api/v1/application-preparations/{policy_id}"
+  path: "/api/v1/policies/{slug}/apply"
   auth: "required"
   priority: "medium"
   owner: "챗봇/신청"
   path_params:
-    - policy_id
-  response: "existing progress, checklist_items, required_documents"
-  notes: "이미 생성된 신청 준비 상태 재조회"
+    - slug
+  response: "application_preparation_create와 동일 스키마"
+  notes: "이미 생성된 신청 준비 상태 재조회. 없으면 404 NOT_FOUND."
 
 - id: mypage_progress_list
   name: "신청 진행 목록 조회"
   method: GET
-  path: "/api/v1/mypage/progress"
+  path: "/api/v1/users/me/apply-progress"
   auth: "required"
   priority: "medium"
   owner: "챗봇/신청"
-  query_params:
-    - status
-    - page
-    - size
-  response: "user_policy_progress list with checklist summary"
-  notes: "마이페이지 신청 진행 현황"
-
-- id: mypage_progress_update
-  name: "신청 진행 상태 수정"
-  method: PATCH
-  path: "/api/v1/mypage/progress/{progress_id}"
-  auth: "required"
-  priority: "medium"
-  owner: "챗봇/신청"
-  path_params:
-    - progress_id
-  body:
-    progress_status: "string"
-    memo: "string?"
-  response: "updated progress"
-  notes: "PREPARING, APPLIED 등 상태 갱신"
+  response_schema:
+    data:
+      - apply_id: "string"
+        policy_id: "string (slug)"
+        policy_name: "string"
+        progress_percent: "integer"
+        updated_at: "string (iso8601)"
+  notes: "마이페이지 신청 진행 현황. progress_percent는 단일 쿼리 집계로 동적 계산. 정렬 updated_at DESC. progress_status는 응답 미포함(현재 미사용). #64에서 구현 예정."
 
 - id: checklist_item_update
   name: "체크리스트 항목 수정"
   method: PATCH
-  path: "/api/v1/mypage/checklist-items/{user_checklist_item_id}"
+  path: "/api/v1/apply/{apply_id}/checklist/{item_id}"
   auth: "required"
   priority: "medium"
   owner: "챗봇/신청"
   path_params:
-    - user_checklist_item_id
+    - apply_id
+    - item_id
   body:
-    item_status: "PENDING | DONE"
-    note: "string?"
-  response: "updated checklist item"
-  notes: "PENDING 또는 DONE 중심으로 관리. 이 값은 신청 체크리스트 항목 상태이며 AI RequestStatus와 무관."
+    done: "boolean"
+  response_schema:
+    data:
+      item:
+        id: "string (template_item_id)"
+        label: "string"
+        done: "boolean"
+      progress_percent: "integer"
+  notes: "item_id는 template_item_id. done set 의미(토글 아님). progress.updated_at도 갱신. progress_percent는 동적 계산. 다른 사용자의 apply_id 접근 시 404."
 ```
 
 ### 4.8 Chat

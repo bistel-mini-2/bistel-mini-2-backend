@@ -10,7 +10,11 @@ from app.db.models.policy_detail import PolicyDetail
 from app.db.models.user_policy_checklist_item import UserPolicyChecklistItem
 from app.db.models.user_policy_progress import UserPolicyProgress
 from app.repositories.apply_preparation_repository import ApplyPreparationRepository
-from app.schemas.apply_schema import ApplyPreparationResponse, ChecklistItem
+from app.schemas.apply_schema import (
+    ApplyPreparationResponse,
+    ChecklistItem,
+    ChecklistItemPatchResponse,
+)
 
 
 _APPLY_PERIOD_FALLBACK = "별도 확인 필요"
@@ -70,6 +74,55 @@ class ApplyPreparationService:
                 message="Apply preparation not found",
             )
         return await _build_response(db, policy, progress)
+
+    @staticmethod
+    async def update_checklist_item(
+        db: AsyncSession,
+        user_id: int,
+        apply_id: int,
+        template_item_id: int,
+        done: bool,
+    ) -> ChecklistItemPatchResponse:
+        progress = await ApplyPreparationRepository.find_progress_by_id(db, apply_id)
+        if progress is None or progress.user_id != user_id:
+            raise AppException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                code=ErrorCode.NOT_FOUND,
+                message="Apply preparation not found",
+            )
+
+        pair = await ApplyPreparationRepository.find_user_item_with_template(
+            db, progress.progress_id, template_item_id
+        )
+        if pair is None:
+            raise AppException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                code=ErrorCode.NOT_FOUND,
+                message="Checklist item not found",
+            )
+        user_item, template = pair
+
+        now = datetime.now()
+        user_item.item_status = "DONE" if done else "PENDING"
+        user_item.checked_at = now if done else None
+        progress.updated_at = now
+        await db.flush()
+
+        items = await ApplyPreparationRepository.find_checklist_items(
+            db, progress.progress_id
+        )
+        done_count = sum(1 for item in items if item.item_status == "DONE")
+        total = len(items)
+        progress_percent = round(done_count * 100 / total) if total else 0
+
+        return ChecklistItemPatchResponse(
+            item=ChecklistItem(
+                id=str(template.template_item_id),
+                label=template.item_label,
+                done=(user_item.item_status == "DONE"),
+            ),
+            progress_percent=progress_percent,
+        )
 
 
 async def _get_policy_or_raise(db: AsyncSession, policy_slug: str) -> Policy:
