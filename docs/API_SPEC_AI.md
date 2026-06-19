@@ -71,6 +71,7 @@ type UserStatus =
 - `user_status` is a `UserStatus` and controls user-facing recommendation/eligibility judgment UI.
 - `AssessmentStatus` is for backend internal judgment only. If it appears in a response, frontend screens still prefer `user_status`.
 - `loading`, `success`, `warning`, and `error` are frontend UI variants, not API status values.
+- Condition Agent, Policy Assessment Agent, and Graph implementations import shared input/output contracts from `app.schemas.ai_contract`; enum values must stay identical to this section.
 
 ### 3.3 Frontend Condition Input
 

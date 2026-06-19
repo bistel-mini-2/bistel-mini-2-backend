@@ -75,6 +75,8 @@ Tool은 실제 DB 연결 대신 인터페이스와 mock 구현부터 만들어�
 
 ## 2. 추천/판단 공통 원칙
 
+Condition Agent, Policy Assessment Agent, Graph 구현 시 공통 입출력 타입은 `app.schemas.ai_contract`에서 import하며, enum 값은 2.5/2.6의 상태 정의와 동일하게 유지한다.
+
 ### 2.1 입력 진입점
 
 입력 진입점은 2가지다.
