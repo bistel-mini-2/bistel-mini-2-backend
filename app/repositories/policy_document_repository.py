@@ -27,7 +27,11 @@ class PolicyDocumentRepository:
                         d.caution
                     FROM policy p
                     JOIN policy_detail d ON d.policy_id = p.policy_id
+                    LEFT JOIN policy_document existing_document
+                        ON existing_document.policy_id = p.policy_id
+                       AND existing_document.source_type = 'POLICY_DETAIL'
                     WHERE p.is_active = TRUE
+                      AND existing_document.document_id IS NULL
                     ORDER BY p.policy_id
                     LIMIT %s
                 """,

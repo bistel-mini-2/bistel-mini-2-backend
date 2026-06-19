@@ -1,4 +1,3 @@
-import hashlib
 import logging
 from typing import Annotated, Any
 
@@ -124,7 +123,7 @@ class PolicyRagService:
                 "source_title": target["source_title"],
                 "source_url": target["source_url"],
                 "source_type": target["source_type"],
-                "chunk_hash": self._hash_text(target["chunk_text"]),
+                "chunk_hash": target["chunk_hash"],
             }
         )
         return metadata
@@ -143,9 +142,6 @@ class PolicyRagService:
             chunk_text=document.page_content,
             distance=float(distance),
         )
-
-    def _hash_text(self, text: str) -> str:
-        return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
     def _to_int(self, value: Any) -> int | None:
         if value is None:
