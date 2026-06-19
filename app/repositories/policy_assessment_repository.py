@@ -1,0 +1,176 @@
+import json
+from typing import Any
+
+from app.schemas.ai_contract import AssessmentResult, EvidenceChunk
+
+
+class PolicyAssessmentRepository:
+    @staticmethod
+    async def ensure_policy_assessment_schema(conn) -> None:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                """
+                    CREATE TABLE IF NOT EXISTS policy_assessment (
+                        assessment_id bigint PRIMARY KEY,
+                        request_id bigint,
+                        recommendation_request_id bigint,
+                        eligibility_request_id bigint,
+                        policy_id bigint NOT NULL REFERENCES policy(policy_id) ON DELETE CASCADE,
+                        assessment_type varchar(50) NOT NULL,
+                        assessment_status varchar(50) NOT NULL,
+                        confidence_score numeric(5, 2),
+                        matched_conditions_json jsonb,
+                        missing_conditions_json jsonb,
+                        conflicting_conditions_json jsonb,
+                        manual_check_points_json jsonb,
+                        reason_summary text,
+                        selected_for_result boolean NOT NULL DEFAULT false,
+                        created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    )
+                """
+            )
+            await cur.execute(
+                """
+                    CREATE TABLE IF NOT EXISTS assessment_evidence (
+                        evidence_id bigint PRIMARY KEY,
+                        assessment_id bigint NOT NULL
+                            REFERENCES policy_assessment(assessment_id) ON DELETE CASCADE,
+                        chunk_id bigint NOT NULL
+                            REFERENCES policy_document_chunk(chunk_id) ON DELETE CASCADE,
+                        snippet text,
+                        similarity_score numeric(10, 6),
+                        evidence_role varchar(50),
+                        created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    )
+                """
+            )
+            await cur.execute(
+                "ALTER TABLE policy_assessment ADD COLUMN IF NOT EXISTS recommendation_request_id bigint"
+            )
+            await cur.execute(
+                "ALTER TABLE policy_assessment ADD COLUMN IF NOT EXISTS eligibility_request_id bigint"
+            )
+            await cur.execute(
+                "ALTER TABLE policy_assessment ALTER COLUMN request_id DROP NOT NULL"
+            )
+            await cur.execute(
+                """
+                    CREATE UNIQUE INDEX IF NOT EXISTS
+                    policy_assessment_request_id_policy_id_assessment_type_idx
+                    ON policy_assessment (request_id, policy_id, assessment_type)
+                """
+            )
+
+    @staticmethod
+    async def save_assessment(
+        conn,
+        result: AssessmentResult,
+        assessment_type: str,
+        recommendation_request_id: int | None = None,
+        eligibility_request_id: int | None = None,
+        confidence_score: float | None = None,
+        selected_for_result: bool = False,
+    ) -> int:
+        await PolicyAssessmentRepository.ensure_policy_assessment_schema(conn)
+        request_id = recommendation_request_id
+
+        async with conn.cursor() as cur:
+            assessment_id = await PolicyAssessmentRepository._next_id(
+                cur,
+                table_name="policy_assessment",
+                id_column="assessment_id",
+            )
+            await cur.execute(
+                """
+                    INSERT INTO policy_assessment (
+                        assessment_id,
+                        request_id,
+                        recommendation_request_id,
+                        eligibility_request_id,
+                        policy_id,
+                        assessment_type,
+                        assessment_status,
+                        confidence_score,
+                        matched_conditions_json,
+                        missing_conditions_json,
+                        conflicting_conditions_json,
+                        manual_check_points_json,
+                        reason_summary,
+                        selected_for_result
+                    )
+                    VALUES (
+                        %s, %s, %s, %s, %s, %s, %s, %s,
+                        %s::jsonb, %s::jsonb, %s::jsonb, %s::jsonb, %s, %s
+                    )
+                """,
+                (
+                    assessment_id,
+                    request_id,
+                    recommendation_request_id,
+                    eligibility_request_id,
+                    int(result.policy_id),
+                    assessment_type,
+                    result.assessment_status.value,
+                    confidence_score,
+                    PolicyAssessmentRepository._json(result.matched_conditions),
+                    PolicyAssessmentRepository._json(result.missing_conditions),
+                    PolicyAssessmentRepository._json(result.conflicting_conditions),
+                    PolicyAssessmentRepository._json(result.manual_check_points),
+                    result.reason_summary,
+                    selected_for_result,
+                ),
+            )
+            await PolicyAssessmentRepository.replace_evidences(
+                cur=cur,
+                assessment_id=assessment_id,
+                evidences=result.evidences,
+            )
+        return assessment_id
+
+    @staticmethod
+    async def replace_evidences(
+        cur,
+        assessment_id: int,
+        evidences: list[EvidenceChunk],
+    ) -> None:
+        await cur.execute(
+            "DELETE FROM assessment_evidence WHERE assessment_id = %s",
+            (assessment_id,),
+        )
+        for evidence in evidences:
+            evidence_id = await PolicyAssessmentRepository._next_id(
+                cur,
+                table_name="assessment_evidence",
+                id_column="evidence_id",
+            )
+            await cur.execute(
+                """
+                    INSERT INTO assessment_evidence (
+                        evidence_id,
+                        assessment_id,
+                        chunk_id,
+                        snippet,
+                        similarity_score,
+                        evidence_role
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    evidence_id,
+                    assessment_id,
+                    int(evidence.chunk_id),
+                    evidence.snippet,
+                    evidence.score,
+                    evidence.evidence_role,
+                ),
+            )
+
+    @staticmethod
+    async def _next_id(cur, table_name: str, id_column: str) -> int:
+        await cur.execute(f"SELECT COALESCE(MAX({id_column}), 0) + 1 FROM {table_name}")
+        row = await cur.fetchone()
+        return int(row[0])
+
+    @staticmethod
+    def _json(value: Any) -> str:
+        return json.dumps(value, ensure_ascii=False)
