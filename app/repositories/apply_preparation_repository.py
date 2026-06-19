@@ -34,6 +34,36 @@ class ApplyPreparationRepository:
         return result.scalar_one_or_none()
 
     @staticmethod
+    async def find_progress_by_id(
+        db: AsyncSession, progress_id: int
+    ) -> UserPolicyProgress | None:
+        result = await db.execute(
+            select(UserPolicyProgress).where(
+                UserPolicyProgress.progress_id == progress_id
+            )
+        )
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def find_user_item_with_template(
+        db: AsyncSession, progress_id: int, template_item_id: int
+    ) -> tuple[UserPolicyChecklistItem, PolicyChecklistTemplate] | None:
+        result = await db.execute(
+            select(UserPolicyChecklistItem, PolicyChecklistTemplate)
+            .join(
+                PolicyChecklistTemplate,
+                PolicyChecklistTemplate.template_item_id
+                == UserPolicyChecklistItem.template_item_id,
+            )
+            .where(
+                UserPolicyChecklistItem.progress_id == progress_id,
+                UserPolicyChecklistItem.template_item_id == template_item_id,
+            )
+        )
+        row = result.first()
+        return (row[0], row[1]) if row else None
+
+    @staticmethod
     async def save_progress(
         db: AsyncSession, progress: UserPolicyProgress
     ) -> UserPolicyProgress:
