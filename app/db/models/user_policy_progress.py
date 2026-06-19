@@ -21,7 +21,13 @@ class UserPolicyProgress(Base):
         nullable=False,
     )
     progress_status: Mapped[str] = mapped_column(
-        String(50), nullable=False, default="NOT_STARTED"
+        String(50),
+        nullable=False,
+        default="NOT_STARTED",
+        comment=(
+            "신청 대행 기능 도입 시 활용 예정. 현재 미사용(POST 시 PREPARING 고정). "
+            "가능 값: NOT_STARTED, PREPARING, APPLIED, UNDER_REVIEW, APPROVED, REJECTED, RECEIVED"
+        ),
     )
     progress_percent: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     memo: Mapped[str | None] = mapped_column(Text, nullable=True)

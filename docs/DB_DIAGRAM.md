@@ -267,7 +267,7 @@ progress_id bigint [pk, increment]
 user_id bigint [not null]
 policy_id bigint [not null]
 
-progress_status varchar(50) [not null, default: 'NOT_STARTED', note: 'NOT_STARTED, PREPARING, APPLIED, UNDER_REVIEW, APPROVED, REJECTED, RECEIVED']
+progress_status varchar(50) [not null, default: 'NOT_STARTED', note: '신청 대행 기능 도입 시 활용 예정. 현재 미사용(POST 시 PREPARING 고정). 값: NOT_STARTED, PREPARING, APPLIED, UNDER_REVIEW, APPROVED, REJECTED, RECEIVED']
 progress_percent integer [not null, default: 0, note: '0~100, checklist completion cached value']
 memo text
 
