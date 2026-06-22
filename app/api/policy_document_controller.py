@@ -31,3 +31,15 @@ async def ingest_policy_reference_documents(
     logger.info("Ingest policy reference documents")
     result = await service.ingest_policy_reference_documents(limit=limit)
     return success_response(data=result)
+
+
+@router.post("/references/vision/ingest")
+async def ingest_policy_reference_documents_with_openai_vision(
+    service: PolicyDocumentServiceDep,
+    limit: Annotated[int, Query(ge=1, le=10)] = 5,
+) -> JSONResponse:
+    logger.info("Ingest policy reference documents with OpenAI Vision")
+    result = await service.ingest_policy_reference_documents_with_openai_vision(
+        limit=limit,
+    )
+    return success_response(data=result)
