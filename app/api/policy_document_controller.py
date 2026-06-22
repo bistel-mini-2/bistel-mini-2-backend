@@ -21,3 +21,13 @@ async def ingest_policy_detail_chunks(
     logger.info("Ingest policy detail chunks")
     result = await service.ingest_policy_detail_chunks(limit=limit)
     return success_response(data=result)
+
+
+@router.post("/references/ingest")
+async def ingest_policy_reference_documents(
+    service: PolicyDocumentServiceDep,
+    limit: Annotated[int, Query(ge=1, le=20)] = 5,
+) -> JSONResponse:
+    logger.info("Ingest policy reference documents")
+    result = await service.ingest_policy_reference_documents(limit=limit)
+    return success_response(data=result)
