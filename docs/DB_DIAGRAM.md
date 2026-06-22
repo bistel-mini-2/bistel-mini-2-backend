@@ -242,7 +242,7 @@ assessment_id bigint [not null]
 chunk_id bigint [not null]
 snippet text
 similarity_score decimal(10,4)
-evidence_role varchar(50) [note: 'TARGET, BENEFIT, CONDITION, CAUTION']
+evidence_role varchar(50) [note: 'SUMMARY, TARGET, BENEFIT, APPLICATION, CAUTION. API 응답은 소문자로 직렬화. RAG가 role을 분류한 경우에만 값을 채우며 nullable.']
 created_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
 }
 
@@ -250,7 +250,7 @@ Table chat_message_policy {
 chat_message_policy_id bigint [pk, increment]
 chat_message_id bigint [not null]
 policy_id bigint [not null]
-action_type varchar(30) [not null, note: 'RECOMMENDED, COMPARED, ELIGIBILITY_TARGET, APPLY_TARGET']
+action_type varchar(30) [not null, note: 'RECOMMENDED, COMPARED, ELIGIBILITY_TARGET, APPLY_TARGET. intent별 매핑: recommend→RECOMMENDED, compare→COMPARED, eligibility→ELIGIBILITY_TARGET, apply→APPLY_TARGET. policy_summary intent는 row를 생성하지 않고 거론된 정책은 chat_message_evidence를 통해 역추적한다.']
 }
 
 Table chat_message_evidence {
@@ -258,7 +258,7 @@ chat_message_evidence_id bigint [pk, increment]
 chat_message_id bigint [not null]
 chunk_id bigint [not null]
 snippet text
-evidence_role varchar(30) [note: 'SOURCE, CONDITION, BENEFIT, CAUTION']
+evidence_role varchar(30) [note: 'SUMMARY, TARGET, BENEFIT, APPLICATION, CAUTION. assessment_evidence와 동일 enum. API 응답은 소문자로 직렬화. RAG가 role을 분류한 경우에만 값을 채우며 nullable.']
 }
 
 Table favorite_policy {

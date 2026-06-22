@@ -176,6 +176,7 @@ fix: CORS 설정 오류 수정
 - [백엔드 코드 작성 규칙](docs/CODE_CONVENTION.md)
 - [AI/API 명세서](docs/API_SPEC_AI.md)
 - [필드 매핑 및 AI 상태 규칙](docs/FIELD_MAPPING.md)
+- [데이터베이스 스키마 적용 가이드](docs/DB_SETUP.md)
 
 ## 주의사항
 
