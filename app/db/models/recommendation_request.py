@@ -43,6 +43,10 @@ class RecommendationRequest(Base):
         JSONB,
         nullable=True,
     )
+    result_json: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB,
+        nullable=True,
+    )
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     request_status: Mapped[str] = mapped_column(
         String(50),
