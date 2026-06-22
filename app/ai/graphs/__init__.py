@@ -1,7 +1,7 @@
 from app.ai.graphs.recommendation_graph import (
     RecommendationGraphRunner,
-    RecommendationGraphState,
 )
+from app.ai.states.recommendation_state import RecommendationGraphState
 
 
 __all__ = ["RecommendationGraphRunner", "RecommendationGraphState"]
