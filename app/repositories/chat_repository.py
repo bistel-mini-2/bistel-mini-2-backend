@@ -1,9 +1,11 @@
 from datetime import datetime
 
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.chat_message import ChatMessage
+from app.db.models.chat_message_evidence import ChatMessageEvidence
+from app.db.models.chat_message_policy import ChatMessagePolicy
 from app.db.models.chat_session import ChatSession
 
 
@@ -89,3 +91,95 @@ class ChatRepository:
             .where(ChatSession.chat_session_id == chat_session_id)
             .values(last_message_at=when, updated_at=when)
         )
+
+    @staticmethod
+    async def bulk_save_message_policies(
+        db: AsyncSession, links: list[dict]
+    ) -> None:
+        if not links:
+            return
+        db.add_all([ChatMessagePolicy(**link) for link in links])
+        await db.flush()
+
+    @staticmethod
+    async def bulk_save_message_evidences(
+        db: AsyncSession, evidences: list[dict]
+    ) -> None:
+        if not evidences:
+            return
+        db.add_all([ChatMessageEvidence(**ev) for ev in evidences])
+        await db.flush()
+
+    @staticmethod
+    async def find_policies_by_message_ids(
+        db: AsyncSession, message_ids: list[int]
+    ) -> dict[int, list[dict]]:
+        if not message_ids:
+            return {}
+        result = await db.execute(
+            text(
+                """
+                SELECT
+                    cmp.chat_message_id,
+                    cmp.policy_id,
+                    cmp.action_type,
+                    p.policy_code AS slug,
+                    p.policy_name
+                FROM chat_message_policy cmp
+                JOIN policy p ON p.policy_id = cmp.policy_id
+                WHERE cmp.chat_message_id = ANY(:ids)
+                ORDER BY cmp.chat_message_policy_id
+                """,
+            ),
+            {"ids": message_ids},
+        )
+        by_msg: dict[int, list[dict]] = {}
+        for row in result.all():
+            by_msg.setdefault(row.chat_message_id, []).append(
+                {
+                    "policy_id": str(row.policy_id),
+                    "slug": row.slug,
+                    "policy_name": row.policy_name,
+                    "action_type": row.action_type,
+                }
+            )
+        return by_msg
+
+    @staticmethod
+    async def find_evidences_by_message_ids(
+        db: AsyncSession, message_ids: list[int]
+    ) -> dict[int, list[dict]]:
+        if not message_ids:
+            return {}
+        result = await db.execute(
+            text(
+                """
+                SELECT
+                    cme.chat_message_id,
+                    cme.chunk_id,
+                    cme.snippet,
+                    cme.evidence_role,
+                    p.policy_name AS source_title,
+                    pd.source_url
+                FROM chat_message_evidence cme
+                JOIN policy_document_chunk pdc ON pdc.chunk_id = cme.chunk_id
+                JOIN policy_document pd ON pd.document_id = pdc.document_id
+                JOIN policy p ON p.policy_id = pd.policy_id
+                WHERE cme.chat_message_id = ANY(:ids)
+                ORDER BY cme.chat_message_evidence_id
+                """,
+            ),
+            {"ids": message_ids},
+        )
+        by_msg: dict[int, list[dict]] = {}
+        for row in result.all():
+            by_msg.setdefault(row.chat_message_id, []).append(
+                {
+                    "chunk_id": str(row.chunk_id),
+                    "snippet": row.snippet,
+                    "evidence_role": row.evidence_role,
+                    "source_title": row.source_title,
+                    "source_url": row.source_url,
+                }
+            )
+        return by_msg

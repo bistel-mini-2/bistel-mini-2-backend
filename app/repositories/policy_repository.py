@@ -8,6 +8,26 @@ from app.schemas.policy_schema import PolicySort
 
 class PolicyRepository:
     @classmethod
+    async def find_ids_by_codes(
+        cls,
+        db: AsyncSession,
+        codes: list[str],
+    ) -> dict[str, int]:
+        if not codes:
+            return {}
+        result = await db.execute(
+            text(
+                """
+                SELECT policy_code, policy_id
+                FROM policy
+                WHERE policy_code = ANY(:codes)
+                """,
+            ),
+            {"codes": codes},
+        )
+        return {row.policy_code: row.policy_id for row in result.all()}
+
+    @classmethod
     async def find_policy_list(
         cls,
         db: AsyncSession,
