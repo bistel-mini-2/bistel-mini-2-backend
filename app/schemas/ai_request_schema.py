@@ -46,6 +46,9 @@ class AiRequestSnapshot(BaseModel):
     parsed_query_json: dict[str, Any] = Field(default_factory=dict)
     merged_condition_json: dict[str, Any] = Field(default_factory=dict)
     profile_conflict_json: list[dict[str, Any]] = Field(default_factory=list)
+    result_json: dict[str, Any] = Field(default_factory=dict)
+    results: list[dict[str, Any]] = Field(default_factory=list)
+    recommendations: list[dict[str, Any]] = Field(default_factory=list)
     questions: list[dict[str, Any]] = Field(default_factory=list)
     input_issues: list[dict[str, Any]] = Field(default_factory=list)
     error_message: str | None = None

@@ -483,7 +483,7 @@ type PolicyAiSummaryResponse = {
     meta:
       request_id: "string"
       follow_up_required: false
-  notes: "서버 내부에서 stage, childAge, income, region, special[]을 정규화 모델로 변환 후 recommendation_request 생성"
+  notes: "서버 내부에서 stage, childAge, income, region, special[]을 정규화 모델로 변환 후 recommendation_request 생성. source_ref_id는 FK가 아닌 느슨한 출처 식별자이며 예시는 FORM=recommendation_form, CHAT=chat_message:{id}, POLICY_DETAIL={policy_code}."
 
 - id: recommendation_request_get
   name: "추천 결과 조회"
@@ -518,6 +518,8 @@ type PolicyAiSummaryResponse = {
               source_title: "string"
               source_url: "string"
               evidence_role: "string"
+      results: "recommendations와 동일한 request-scoped 추천 결과 배열"
+      result_json: "추천 결과 저장 원본 JSON"
       questions:
         - follow_up_id: "string"
           field_name: "string"
@@ -527,7 +529,7 @@ type PolicyAiSummaryResponse = {
     meta:
       request_id: "string"
       follow_up_required: "boolean"
-  notes: "FOLLOW_UP_REQUIRED이면 questions를 우선 사용. 결과 화면은 recommendations, summary, slug/policy_id, request_id가 필요."
+  notes: "FOLLOW_UP_REQUIRED이면 questions를 우선 사용. COMPLETED이면 recommendation_request.result_json 기반 recommendations/results를 반환한다. 결과 화면은 recommendations, summary, slug/policy_id, request_id가 필요."
 
 - id: recommendation_save
   name: "추천 결과 저장"
@@ -900,7 +902,7 @@ type PolicyAiSummaryResponse = {
   owner: "추천/회원"
   request: "user_id, raw_query?, selected_conditions?, source_type?, source_ref_id?"
   response: "request_id, status, parsed_query_json, merged_condition_json, questions, recommendations"
-  notes: "외부 추천 요청 생성/조회 API 뒤에서 호출되는 유스케이스 계층. ConditionAnalysis -> profile merge -> CandidateSearch -> assessment/RAG -> result formatting 순서로 호출한다."
+  notes: "외부 추천 요청 생성/조회 API 뒤에서 호출되는 유스케이스 계층. #77 request lifecycle을 재사용하며 ConditionAnalysis -> profile merge -> RecommendationGraphRunner -> CandidateSearch -> RAG evidence -> result_json 저장 순서로 호출한다."
 
 - id: condition_analysis_service_analyze
   type: "service contract"
