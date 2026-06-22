@@ -271,15 +271,44 @@ type PolicyAiSummaryResponse = {
   priority: "high"
   owner: "탐색/상세"
   query_params:
-    - query
-    - category
-    - tags
-    - region_code
-    - sort
-    - page
-    - size
-  response: "policy list, pagination"
-  notes: "정책 탐색 화면 기본 진입점. 기능명세서의 정책 검색, 정책 필터/정렬을 이 목록 API의 query params로 흡수한다."
+    query: "string?; 정책명·카테고리·상세 내용·태그 검색"
+    q: "string?; query의 이슈 #29 호환 별칭. 둘 다 있으면 query 우선"
+    category: "string?; main_category 단일 필터"
+    tags: "string[]?; 반복 파라미터 또는 쉼표 구분, 여러 태그는 AND 조건"
+    region_code: "RegionCode?; national은 전국 정책"
+    region: "RegionCode?; region_code의 이슈 #29 호환 별칭"
+    stage: "LifeStage?; policy_tag의 생애주기 태그 필터"
+    sort: "updated_at | name | category | relevance; 기본값 updated_at"
+    page: "integer >= 1; 기본값 1"
+    size: "integer 1..100; 기본값 20"
+  response_schema:
+    data:
+      - policy_id: "string; 내부 bigint PK의 문자열 표현"
+        slug: "string; 외부 URL/API 식별자인 policy_code"
+        name: "string"
+        category: "string?"
+        sub_category: "string?"
+        tags: "string[]"
+        target_stage: "LifeStage[]"
+        summary: "string?"
+        benefit_summary: "string?"
+        agency: "string?"
+        benefit_type: "string?"
+        application_status: "string?"
+        application_start_date: "date?"
+        application_end_date: "date?"
+        deadline: "date?; application_end_date 호환 필드"
+        application_period_text: "string?"
+        region_scope: "string?"
+        region_code: "string?"
+        region: "string?; national 또는 region_code 호환 필드"
+        official_url: "string?"
+    meta:
+      page: "integer"
+      size: "integer"
+      total: "integer"
+      total_pages: "integer"
+  notes: "검색·카테고리·태그·지역 필터와 정렬을 이 목록 API에 통합한다. 키워드 검색은 PostgreSQL ILIKE를 사용하고 policy.policy_name 및 policy.main_category에는 pg_trgm GIN 인덱스를 적용한다. region_code와 LOWER(policy_tag.tag_name)에도 검색 인덱스를 적용한다. 목록 배열은 전역 ApiResponse 규격에 따라 최상위 items가 아니라 data에 담는다. relevance는 query가 있을 때만 관련도순으로 동작한다. 신청 기간과 신청 상태는 응답 표시용이며 목록 필터에는 사용하지 않는다."
 
 - id: policies_detail
   name: "정책 상세 조회"

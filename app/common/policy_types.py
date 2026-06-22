@@ -29,6 +29,17 @@ LIFE_STAGE_TO_DB: dict[str, str] = {
     "elderly": "노년",
 }
 
+LIFE_STAGE_TO_TAGS: dict[str, tuple[str, ...]] = {
+    "pregnant": ("임신 · 출산", "임신·출산"),
+    "newborn": ("영유아",),
+    "infant": ("영유아",),
+    "child": ("아동",),
+    "teen": ("청소년",),
+    "young_adult": ("청년",),
+    "middle_aged": ("중장년",),
+    "elderly": ("노년",),
+}
+
 
 class SpecialCondition(StrEnum):
     """SelectedConditions.special[] -> policy_raw_import.trgterIndvdlArray 필터"""
