@@ -76,8 +76,9 @@ class PolicyRagService:
         query: str,
         k: int = 5,
         source_type: str | None = None,
+        policy_ids: list[int | str] | None = None,
     ) -> PolicyRagSearchResponse:
-        filter_value = {"source_type": source_type} if source_type else None
+        filter_value = self._search_filter(source_type, policy_ids)
         results = await self._vectorstore().asimilarity_search_with_score(
             query=query,
             k=k,
@@ -93,6 +94,50 @@ class PolicyRagService:
             result_count=len(search_results),
             results=search_results,
         )
+
+    def _search_filter(
+        self,
+        source_type: str | None,
+        policy_ids: list[int | str] | None,
+    ) -> dict[str, Any] | None:
+        conditions: list[dict[str, Any]] = []
+        if source_type:
+            conditions.append({"source_type": source_type})
+
+        policy_id_values: list[int] = []
+        policy_codes: list[str] = []
+        for policy_id in policy_ids or []:
+            if isinstance(policy_id, int):
+                policy_id_values.append(policy_id)
+                continue
+
+            policy_key = str(policy_id).strip()
+            if not policy_key:
+                continue
+            if policy_key.isdecimal():
+                policy_id_values.append(int(policy_key))
+            else:
+                policy_codes.append(policy_key)
+
+        policy_conditions: list[dict[str, Any]] = []
+        if policy_id_values:
+            policy_conditions.append(
+                {"policy_id": {"$in": list(dict.fromkeys(policy_id_values))}}
+            )
+        if policy_codes:
+            policy_conditions.append(
+                {"policy_code": {"$in": list(dict.fromkeys(policy_codes))}}
+            )
+        if len(policy_conditions) == 1:
+            conditions.append(policy_conditions[0])
+        elif policy_conditions:
+            conditions.append({"$or": policy_conditions})
+
+        if not conditions:
+            return None
+        if len(conditions) == 1:
+            return conditions[0]
+        return {"$and": conditions}
 
     def _vectorstore(self) -> PGVector:
         embedding_kwargs = {}
