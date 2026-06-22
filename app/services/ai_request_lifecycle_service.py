@@ -4,6 +4,7 @@ from fastapi import status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ai.graphs.recommendation_graph import RecommendationGraphRunner
 from app.ai.agents.condition_agent import ConditionAgent
 from app.common.exceptions import AppException, ErrorCode
 from app.db.models.policy import Policy
@@ -20,11 +21,14 @@ class AiRequestLifecycleService:
         self,
         repository: AiRequestRepository | None = None,
         condition_agent: ConditionAgent | None = None,
+        recommendation_graph: RecommendationGraphRunner | None = None,
         recommendation_service: RecommendationService | None = None,
     ) -> None:
         self.repository = repository or AiRequestRepository()
         self.condition_agent = condition_agent or ConditionAgent()
-        self.recommendation_service = recommendation_service or RecommendationService()
+        self.recommendation_graph = recommendation_graph or RecommendationGraphRunner(
+            recommendation_service=recommendation_service
+        )
 
     async def create_request(
         self,
@@ -226,7 +230,7 @@ class AiRequestLifecycleService:
                     request_id,
                 )
             if request_type == "recommendation":
-                result_json = await self.recommendation_service.recommend(
+                result_json = await self.recommendation_graph.run(
                     db=db,
                     merged_condition_json=condition_result.merged_condition_json,
                 )

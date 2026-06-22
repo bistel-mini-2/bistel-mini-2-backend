@@ -382,7 +382,7 @@ Rule Filter Node 결과와 Policy Assessment 결과, RAG 근거를 바탕으로 
 
 사용자 조건을 분석하고 정책 후보를 검색한 뒤, Rule Filter Node와 Policy Assessment, RAG 근거를 바탕으로 추천 결과를 생성한다.
 
-현재 첫 구현은 #77의 request lifecycle을 재사용해 Condition Agent 이후 `RecommendationService`가 후보 정책을 조회하고 RAG 근거를 붙여 `recommendation_request.result_json`에 request 단위 결과를 저장한다. 정교한 Policy Assessment 연계와 추천 이력 저장은 후속 Graph/조회 이슈에서 확장한다.
+현재 첫 구현은 #77의 request lifecycle을 재사용해 Condition Agent 이후 `RecommendationGraphRunner`가 `RecommendationService`를 호출하고, 후보 정책과 RAG 근거를 `recommendation_request.result_json`에 request 단위 결과로 저장한다. 정교한 Policy Assessment 연계와 추천 이력 저장은 후속 Graph/조회 이슈에서 확장한다.
 
 Agent 흐름:
 

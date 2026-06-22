@@ -902,7 +902,7 @@ type PolicyAiSummaryResponse = {
   owner: "추천/회원"
   request: "user_id, raw_query?, selected_conditions?, source_type?, source_ref_id?"
   response: "request_id, status, parsed_query_json, merged_condition_json, questions, recommendations"
-  notes: "외부 추천 요청 생성/조회 API 뒤에서 호출되는 유스케이스 계층. #77 request lifecycle을 재사용하며 ConditionAnalysis -> profile merge -> CandidateSearch -> RAG evidence -> result_json 저장 순서로 호출한다."
+  notes: "외부 추천 요청 생성/조회 API 뒤에서 호출되는 유스케이스 계층. #77 request lifecycle을 재사용하며 ConditionAnalysis -> profile merge -> RecommendationGraphRunner -> CandidateSearch -> RAG evidence -> result_json 저장 순서로 호출한다."
 
 - id: condition_analysis_service_analyze
   type: "service contract"
