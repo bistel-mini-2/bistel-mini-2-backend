@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from sqlalchemy import Boolean, Date, DateTime, String, Text, func
+from sqlalchemy import Boolean, Date, DateTime, Index, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.session import Base
@@ -8,6 +8,11 @@ from app.db.session import Base
 
 class Policy(Base):
     __tablename__ = "policy"
+    __table_args__ = (
+        Index("ix_policy_policy_name", "policy_name"),
+        Index("ix_policy_main_category", "main_category"),
+        Index("ix_policy_region_code", "region_code"),
+    )
 
     policy_id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     policy_code: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)

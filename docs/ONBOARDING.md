@@ -103,7 +103,7 @@ DATABASE_URL=your_database_url
 ## 서버 실행 방법
 
 ```bash
-uvicorn app.main:app --reload
+python -m app.main
 ```
 
 브라우저에서 아래 주소를 확인합니다.
