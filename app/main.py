@@ -1,7 +1,5 @@
-import asyncio
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-import sys
 
 import uvicorn
 from dotenv import load_dotenv
@@ -34,19 +32,6 @@ from app.utils.logger import setup_logging
 
 
 setup_logging()
-
-
-def configure_event_loop_policy() -> None:
-    if sys.platform != "win32":
-        return
-
-    selector_policy = getattr(
-        asyncio,
-        "WindowsSelectorEventLoopPolicy",
-        None,
-    )
-    if selector_policy is not None:
-        asyncio.set_event_loop_policy(selector_policy())
 
 
 @asynccontextmanager
@@ -93,7 +78,6 @@ register_exception_handlers(app)
 
 
 if __name__ == "__main__":
-    configure_event_loop_policy()
     uvicorn.run(
         "app.main:app",
         host="localhost",

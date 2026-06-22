@@ -81,7 +81,7 @@ pip install -r requirements.txt
 ### 4. 서버 실행
 
 ```bash
-python -m app.main
+uvicorn app.main:app --reload
 ```
 
 실행 후 아래 주소로 접속합니다.
