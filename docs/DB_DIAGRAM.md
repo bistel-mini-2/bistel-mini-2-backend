@@ -159,6 +159,7 @@ raw_query text
 parsed_query_json jsonb [note: 'input parsing result before profile merge']
 merged_condition_json jsonb [note: 'normalized final condition set after profile merge']
 profile_conflict_json jsonb [note: 'conflicts between stored profile and current input']
+result_json jsonb [note: 'request-scoped recommendation results and evidence summary']
 request_status varchar(50) [not null, default: 'READY']
 error_message text
 created_at timestamp [not null, default: `CURRENT_TIMESTAMP`]

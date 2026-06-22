@@ -4,6 +4,7 @@ from fastapi import status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ai.graphs.recommendation_graph import RecommendationGraphRunner
 from app.ai.agents.condition_agent import ConditionAgent
 from app.common.exceptions import AppException, ErrorCode
 from app.db.models.policy import Policy
@@ -12,6 +13,7 @@ from app.repositories.family_profile_repository import FamilyProfileRepository
 from app.repositories.user_repository import UserRepository
 from app.schemas.ai_contract import ConditionInput, RequestStatus
 from app.schemas.ai_request_schema import AiRequestCreate, AiRequestSnapshot
+from app.services.recommendation_service import RecommendationService
 
 
 class AiRequestLifecycleService:
@@ -19,9 +21,14 @@ class AiRequestLifecycleService:
         self,
         repository: AiRequestRepository | None = None,
         condition_agent: ConditionAgent | None = None,
+        recommendation_graph: RecommendationGraphRunner | None = None,
+        recommendation_service: RecommendationService | None = None,
     ) -> None:
         self.repository = repository or AiRequestRepository()
         self.condition_agent = condition_agent or ConditionAgent()
+        self.recommendation_graph = recommendation_graph or RecommendationGraphRunner(
+            recommendation_service=recommendation_service
+        )
 
     async def create_request(
         self,
@@ -222,6 +229,16 @@ class AiRequestLifecycleService:
                     request_type,
                     request_id,
                 )
+            if request_type == "recommendation":
+                result_json = await self.recommendation_graph.run(
+                    db=db,
+                    merged_condition_json=condition_result.merged_condition_json,
+                )
+                await self.repository.update_result(
+                    db=db,
+                    request=request,
+                    result_json=result_json,
+                )
             return await self.mark_completed(db, request_type, request_id)
         except Exception as exc:
             return await self.mark_failed(
@@ -289,6 +306,13 @@ class AiRequestLifecycleService:
         request: AiRequestModel,
     ) -> AiRequestSnapshot:
         parsed_query_json = request.parsed_query_json or {}
+        result_json = (
+            request.result_json
+            if hasattr(request, "result_json") and request.result_json is not None
+            else {}
+        )
+        results = list(result_json.get("results") or [])
+        recommendations = list(result_json.get("recommendations") or results)
         return AiRequestSnapshot(
             request_id=str(request.request_id),
             request_type=request_type,  # type: ignore[arg-type]
@@ -303,6 +327,9 @@ class AiRequestLifecycleService:
             parsed_query_json=parsed_query_json,
             merged_condition_json=request.merged_condition_json or {},
             profile_conflict_json=request.profile_conflict_json or [],
+            result_json=result_json,
+            results=results,
+            recommendations=recommendations,
             questions=list(parsed_query_json.get("questions") or []),
             input_issues=list(parsed_query_json.get("input_issues") or []),
             error_message=request.error_message,
