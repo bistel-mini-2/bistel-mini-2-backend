@@ -900,19 +900,31 @@ type PolicyAiSummaryResponse = {
           - policy_id: "string"
             slug: "string"
             policy_name: "string"
-            summary: "string"
-            tag: "string"
-            tagTone: "string"
+            summary: "string?"
+            tag: "string?"
+            tagTone: "string?"
+            action_type: "RECOMMENDED | COMPARED | ELIGIBILITY_TARGET | APPLY_TARGET"
         actions: "recommend | eligibility | compare | apply | chat []"
         evidences:
-          - snippet: "string"
-            source_title: "string"
-            source_url: "string"
-            evidence_role: "string"
+          - chunk_id: "string"
+            snippet: "string"
+            source_title: "string?"
+            source_url: "string?"
+            evidence_role: "summary | target | benefit | application | caution?"
         disclaimer: "boolean?"
     meta:
       chat_session_id: "string"
-  notes: "별도 추천 엔진이 아니라 supervisor routing 결과를 리치 답변 카드 구조로 변환해 응답"
+  notes: |
+    supervisor routing 결과를 리치 답변 카드 구조로 변환해 응답. assistant_message 저장은 ChatService가 graph 종료 후 한 트랜잭션에서 chat_message + chat_message_policy + chat_message_evidence + chat_session 갱신을 함께 처리한다.
+    policies[]는 chat_message_policy row로 정규화 저장하며, intent별 action_type 매핑은 다음과 같다:
+      recommend → RECOMMENDED
+      compare → COMPARED
+      eligibility → ELIGIBILITY_TARGET
+      apply → APPLY_TARGET
+      policy_summary → (link 생성하지 않음. 거론된 정책은 evidence chunk → policy 역추적)
+      unclear → (link 생성하지 않음)
+    evidences[]는 chat_message_evidence row로 정규화 저장한다. evidence_role은 RAG가 분류한 경우에만 값이 있으며, DB는 대문자 SUMMARY|TARGET|BENEFIT|APPLICATION|CAUTION을 저장하고 응답에서는 소문자로 직렬화한다. chunk_id가 비어 있는 evidence는 저장하지 않는다.
+    structured_json에는 supervisor_decision(intent, raw) 등 메시지 단위 메타만 남기고, policies/evidences는 정규화 테이블에서만 읽는다.
 
 - id: chat_message_list
   name: "채팅 메시지 목록 조회"
@@ -933,7 +945,28 @@ type PolicyAiSummaryResponse = {
           content: "string?"
           sequence_no: "integer"
           created_at: "string (iso8601)?"
-  notes: "대화 맥락 복원용. 정렬 sequence_no ASC. 본인 세션이 아니거나 존재하지 않는 chat_session_id 접근 시 404 NOT_FOUND. linked_policies / evidences는 #39 메시지 전송 구현 시 함께 추가 예정."
+          user_status: "UserStatus?"
+          sources: "string[]"
+          actions: "recommend | eligibility | compare | apply | chat []"
+          disclaimer: "boolean?"
+          policies:
+            - policy_id: "string"
+              slug: "string"
+              policy_name: "string"
+              summary: "string?"
+              tag: "string?"
+              tagTone: "string?"
+              action_type: "RECOMMENDED | COMPARED | ELIGIBILITY_TARGET | APPLY_TARGET"
+          evidences:
+            - chunk_id: "string"
+              snippet: "string"
+              source_title: "string?"
+              source_url: "string?"
+              evidence_role: "summary | target | benefit | application | caution?"
+  notes: |
+    대화 맥락 복원용. 정렬 sequence_no ASC. 본인 세션이 아니거나 존재하지 않는 chat_session_id 접근 시 404 NOT_FOUND.
+    assistant 메시지의 policies / evidences는 chat_message_policy / chat_message_evidence를 join해 채운다. user/system 메시지에서는 빈 배열로 반환한다.
+    policy_summary intent로 응답된 메시지는 chat_message_policy row가 없으므로 policies[]가 빈 배열이며, 거론된 정책은 evidences[].chunk_id → policy_document_chunk → policy_document → policy 역추적으로 조회한다.
 ```
 
 ## 5. Internal Service and Graph Contracts
