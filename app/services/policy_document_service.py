@@ -1,3 +1,4 @@
+import base64
 import logging
 from collections import defaultdict
 from io import BytesIO
@@ -6,10 +7,12 @@ from typing import Annotated, Any
 from fastapi import Depends
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from openai import AsyncOpenAI
 from pypdf import PdfReader
 import requests
 
 from app.common.psycopg_pool_conf import psycopg_pool
+from app.core.config import settings
 from app.repositories.policy_document_repository import PolicyDocumentRepository
 from app.schemas.policy_document_schema import (
     PolicyDocumentChunkIngestItem,
@@ -19,6 +22,10 @@ from app.schemas.policy_document_schema import (
     PolicyReferenceDocumentIngestResponse,
     PolicyReferenceDocumentSkipItem,
 )
+
+
+POLICY_REFERENCE_VISION_MODEL = "gpt-4o"
+POLICY_REFERENCE_OPENAI_MAX_BYTES = 50 * 1024 * 1024
 
 
 class PolicyDocumentService:
@@ -206,6 +213,153 @@ class PolicyDocumentService:
             failed=failed,
         )
 
+    async def ingest_policy_reference_documents_with_openai_vision(
+        self,
+        limit: int = 10,
+    ) -> PolicyReferenceDocumentIngestResponse:
+        items: list[PolicyReferenceDocumentIngestItem] = []
+        skipped: list[PolicyReferenceDocumentSkipItem] = []
+        failed: list[dict[str, str]] = []
+
+        if not settings.openai_api_key:
+            raise ValueError("OPENAI_API_KEY가 설정되어 있지 않습니다.")
+
+        async with psycopg_pool.connection() as conn:
+            targets = await PolicyDocumentRepository.find_policy_reference_download_targets(
+                conn=conn,
+                limit=limit,
+            )
+            targets_by_url = self._group_by_source_url(targets)
+
+            for source_url, documents in targets_by_url.items():
+                try:
+                    downloaded = self._download_reference_document(source_url)
+                    file_type = self._detect_file_type(
+                        content=downloaded["content"],
+                        source_title=documents[0]["source_title"],
+                        content_type=downloaded.get("content_type"),
+                    )
+                    if file_type != "PDF":
+                        for document in documents:
+                            skipped.append(
+                                self._reference_skip_item(
+                                    document=document,
+                                    reason=(
+                                        "OpenAI Vision 보완 추출은 PDF 문서만 "
+                                        f"지원합니다: {file_type}"
+                                    ),
+                                )
+                            )
+                        continue
+
+                    content = downloaded["content"]
+                    if not self._is_pdf_content(content):
+                        for document in documents:
+                            skipped.append(
+                                self._reference_skip_item(
+                                    document=document,
+                                    reason=(
+                                        "문서명이 PDF이지만 실제 PDF 바이트가 "
+                                        "아니어서 처리하지 않았습니다."
+                                    ),
+                                )
+                            )
+                        continue
+
+                    if len(content) > POLICY_REFERENCE_OPENAI_MAX_BYTES:
+                        for document in documents:
+                            skipped.append(
+                                self._reference_skip_item(
+                                    document=document,
+                                    reason=(
+                                        "OpenAI 파일 입력 제한을 초과해 처리하지 "
+                                        f"않았습니다: {len(content)} bytes"
+                                    ),
+                                )
+                            )
+                        continue
+
+                    raw_text = await self._extract_pdf_text_with_openai_vision(
+                        content=content,
+                        filename=self._safe_pdf_filename(documents[0]["source_title"]),
+                    )
+                    if not raw_text:
+                        for document in documents:
+                            skipped.append(
+                                self._reference_skip_item(
+                                    document=document,
+                                    reason="OpenAI Vision으로 추출된 텍스트가 없습니다.",
+                                )
+                            )
+                        continue
+
+                    for document in documents:
+                        chunk_documents = self.split_reference_documents(
+                            self._build_policy_reference_documents(
+                                source=document,
+                                raw_text=raw_text,
+                                file_type="PDF",
+                            )
+                        )
+                        async with conn.transaction():
+                            await PolicyDocumentRepository.update_document_raw_text(
+                                conn=conn,
+                                document_id=document["document_id"],
+                                raw_text=raw_text,
+                            )
+                            chunk_count = (
+                                await PolicyDocumentRepository.replace_document_chunks(
+                                    conn=conn,
+                                    document_id=document["document_id"],
+                                    chunk_documents=chunk_documents,
+                                )
+                            )
+
+                        items.append(
+                            PolicyReferenceDocumentIngestItem(
+                                document_id=document["document_id"],
+                                policy_id=document["policy_id"],
+                                policy_code=document["policy_code"],
+                                policy_name=document["policy_name"],
+                                source_title=document["source_title"],
+                                source_url=document["source_url"],
+                                file_type="PDF",
+                                raw_text_length=len(raw_text),
+                                chunk_count=chunk_count,
+                            )
+                        )
+                except ValueError as exc:
+                    for document in documents:
+                        skipped.append(
+                            self._reference_skip_item(
+                                document=document,
+                                reason=str(exc),
+                            )
+                        )
+                except Exception as exc:
+                    self.logger.exception(
+                        "Failed to ingest policy reference document with OpenAI Vision"
+                    )
+                    failed.append(
+                        {
+                            "source_url": source_url,
+                            "document_ids": ",".join(
+                                str(document["document_id"]) for document in documents
+                            ),
+                            "error": f"{type(exc).__name__}: {exc}",
+                        }
+                    )
+
+        return PolicyReferenceDocumentIngestResponse(
+            requested_url_count=len(targets_by_url),
+            completed_count=len(items),
+            skipped_count=len(skipped),
+            failed_count=len(failed),
+            items=items,
+            skipped=skipped,
+            failed=failed,
+        )
+
     def split_documents(self, documents: list[Document]) -> list[Document]:
         text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=500,
@@ -274,6 +428,51 @@ class PolicyDocumentService:
             for page in reader.pages
         ]
         return "\n\n".join(page_text for page_text in page_texts if page_text)
+
+    def _is_pdf_content(self, content: bytes) -> bool:
+        return content.startswith(b"%PDF")
+
+    async def _extract_pdf_text_with_openai_vision(
+        self,
+        content: bytes,
+        filename: str,
+    ) -> str:
+        encoded_pdf = base64.b64encode(content).decode("ascii")
+        client = AsyncOpenAI(api_key=settings.openai_api_key)
+        response = await client.responses.create(
+            model=POLICY_REFERENCE_VISION_MODEL,
+            input=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "input_file",
+                            "filename": filename,
+                            "file_data": (
+                                "data:application/pdf;base64,"
+                                f"{encoded_pdf}"
+                            ),
+                        },
+                        {
+                            "type": "input_text",
+                            "text": (
+                                "Extract only the visible text from this PDF. "
+                                "Preserve the original wording as much as possible. "
+                                "For tables, write each row as plain text. "
+                                "Do not summarize or explain."
+                            ),
+                        },
+                    ],
+                }
+            ],
+        )
+        return self._clean_text(response.output_text)
+
+    def _safe_pdf_filename(self, source_title: str) -> str:
+        filename = self._clean_text(source_title) or "policy-reference.pdf"
+        if not filename.lower().endswith(".pdf"):
+            filename = f"{filename}.pdf"
+        return filename
 
     def _build_policy_reference_documents(
         self,
