@@ -27,8 +27,8 @@ AI에게 한 번에 전체 시스템을 만들게 하기보다, 아래 단위로
 | Recommendation Graph | 4.1 | 조건 정리, 후보 검색, 룰 필터, 평가, RAG, 추천 저장까지 연결한다. |
 | Eligibility Graph | 4.2 | 특정 정책 1건에 대해 같은 상태 모델로 정밀 판단한다. |
 | Comparison Graph | 4.3 | 두 정책을 사용자 조건 기준으로 비교하고 상황별 선택 가이드를 만든다. |
-| Application Preparation Graph | 4.4 | 신청 정보, 필요서류, 체크리스트를 사용자 조건에 맞게 생성한다. |
-| Chat Supervisor Graph | 4.6 | intent를 분류하고 기존 기능별 Graph를 재사용한다. |
+| DB-backed Apply Preparation API | 4.4 | 선택한 정책의 신청 정보, 기본 체크리스트, 사용자별 진행 상태를 DB에서 조회/저장한다. |
+| Chat Supervisor Graph | 4.6 | intent를 분류하고 기존 기능별 Graph/API를 재사용한다. |
 
 구현 프롬프트 예시는 다음처럼 쓴다.
 
@@ -52,17 +52,17 @@ Tool은 실제 DB 연결 대신 인터페이스와 mock 구현부터 만들어�
 
 ## 1. 설계 방향
 
-이 프로젝트의 AI 기능은 챗봇 내부 기능이 아니라, 각 화면에서 직접 실행되는 LangGraph 기반 워크플로우로 설계한다.
+이 프로젝트의 AI 기능은 챗봇 내부 기능이 아니라, 각 화면에서 직접 실행되는 워크플로우로 설계한다.
 
-챗봇은 별도의 추천, 비교, 신청 로직을 새로 구현하지 않고 이미 구현된 기능별 Graph를 Supervisor Agent가 라우팅해서 재사용하는 통합 인터페이스 역할을 한다.
+챗봇은 별도의 추천, 비교, 신청 로직을 새로 구현하지 않고 이미 구현된 기능별 흐름을 Supervisor Agent가 라우팅해서 재사용하는 통합 인터페이스 역할을 한다.
 
 ```text
 정책 추천 화면 -> Recommendation Graph
 지원 가능성 화면 -> Eligibility Graph
 정책 비교 화면 -> Comparison Graph
-신청 준비 화면 -> Application Preparation Graph
+신청 준비 화면 -> DB-backed Apply Preparation API
 정책 상세 화면 -> Policy Summary Graph
-챗봇 화면 -> Chat Supervisor Graph -> 기능별 Graph 재사용
+챗봇 화면 -> Chat Supervisor Graph -> 기능별 Graph/API 재사용
 ```
 
 핵심 평가 포인트는 다음과 같다.
@@ -236,7 +236,6 @@ Policy Assessment:
 - Recommendation Graph
 - Eligibility Graph
 - Comparison Graph
-- Application Preparation Graph
 - Chat Supervisor Graph의 intent 결과 보강
 
 주요 역할:
@@ -362,9 +361,9 @@ Rule Filter Node 결과와 Policy Assessment 결과, RAG 근거를 바탕으로 
 
 정책 2개를 비교하고, 사용자 조건을 반영해 공통점, 차이점, 상황별 선택 가이드를 만든다.
 
-### 3.6 Application Preparation Agent
+### 3.6 DB-backed Apply Preparation API
 
-정책 신청을 준비할 수 있도록 신청방법, 필요서류, 주의사항, 사용자 맞춤 체크리스트를 만든다.
+정책 신청을 준비할 수 있도록 신청방법, 필요서류, 주의사항, 기본 체크리스트와 사용자별 진행 상태를 DB에서 조회/저장한다. 별도 Agent나 Graph를 두지 않는다.
 
 ### 3.7 Policy Q&A Agent
 
@@ -372,9 +371,9 @@ Rule Filter Node 결과와 Policy Assessment 결과, RAG 근거를 바탕으로 
 
 ### 3.8 Supervisor Agent
 
-챗봇에서만 사용한다. 사용자 질문의 intent를 분류하고 필요한 기능 Graph를 호출한다.
+챗봇에서만 사용한다. 사용자 질문의 intent를 분류하고 필요한 기능 Graph 또는 API를 호출한다.
 
-## 4. 기능별 Graph
+## 4. 기능별 Graph / API
 
 ### 4.1 Recommendation Graph
 
@@ -602,100 +601,98 @@ Node 역할:
 
 Condition Agent를 추가하는 것이 기능명세에 더 잘 맞다. 비교 기능의 핵심은 단순 정책 비교가 아니라 "사용자 상황에서 무엇을 먼저 볼지"를 알려주는 것이기 때문이다.
 
-### 4.4 Application Preparation Graph
+### 4.4 DB-backed Apply Preparation API
 
 목적:
 
-특정 정책 신청을 준비할 수 있도록 신청방법, 신청기간, 필요서류, 주의사항을 안내하고 사용자 상황에 맞는 체크리스트를 생성한다.
+특정 정책 신청을 준비할 수 있도록 신청방법, 신청기간, 문의처, 공식 URL, 기본 필요서류, 주의사항을 조회하고 사용자별 체크리스트 진행 상태를 저장한다.
 
-기존 문서의 Application Preparation Graph는 신청 정보와 RAG 근거를 모아 체크리스트를 만드는 구조였다. 기능명세의 "사용자 상황별 추가 서류 표시"를 만족시키려면 Condition Agent가 필요하다.
+신청 준비는 독립적인 AI 조건 입력 흐름도 LangGraph도 아니다. 사용자 조건 입력과 조건 분석은 `/recommend` 추천 흐름이 담당하고, 신청 준비 화면은 추천/상세/챗봇에서 특정 정책을 선택한 뒤 실행하는 DB 기반 조회/상태관리 화면이다.
 
-Agent 흐름:
-
-```text
-Condition Agent
--> Application Preparation Agent
-```
-
-Node 흐름:
+체크리스트 기준:
 
 ```text
-START
--> Policy Resolve Node
--> Input Route Node
-   -> 자연어 입력: Condition Extraction Node
-   -> 필드 입력: Validation / Normalization Node
--> Profile Merge Node
--> Condition Route Node
-   -> invalid 있음: Input Correction Node -> END
-   -> missing / ambiguous 있음: Follow-up Question Node -> END
-   -> 충분함: Progress Upsert Node
--> Application Info Node
--> Required Document Node
--> Evidence Search Node
--> Checklist Node
--> Checklist Save Node
--> END
+policy_checklist_template
+= 정책별 공식/기본 준비 항목
+
+user_policy_progress
+= 사용자별 정책 신청 준비 진행 상태
+
+user_policy_checklist_item
+= 사용자별 체크리스트 항목 완료 상태
 ```
 
-Node 역할:
+API 동작:
 
-| Node | 역할 | Agent |
+```text
+GET /api/v1/policies/{slug}/apply
+= 신청 준비 화면 preview 조회
++ policy / policy_detail / policy_checklist_template 조회
++ user_policy_progress 생성 안 함
++ 저장된 progress가 있으면 apply_id와 done 상태 포함
++ 저장된 progress가 없으면 apply_id=null, saved=false, done=false로 반환
+
+POST /api/v1/policies/{slug}/apply
+= 사용자가 체크리스트 담기/저장하기를 누른 경우
++ user_policy_progress 없으면 생성
++ user_policy_checklist_item 없으면 기본 항목 복사
++ 이미 저장된 progress가 있으면 재사용
++ 신청 준비 응답 반환
+
+PATCH /api/v1/apply/{apply_id}/checklist/{item_id}
+= 체크 항목 완료/미완료 저장
++ 진행률 재계산
+```
+
+DB 조회/저장 책임:
+
+| 책임 | 역할 | Agent/Graph |
 | --- | --- | --- |
-| Policy Resolve Node | 신청 준비 대상 정책 확인 | 없음 |
-| Input Route Node | 자연어 입력 / 필드 입력 경로 분기 | 없음 |
-| Condition Route Node | `missing` / `ambiguous` / `invalid` 상태 분기 | 없음 |
-| Progress Upsert Node | 사용자별 정책 진행 상태 생성 또는 조회 | 없음 |
-| Application Info Node | 신청방법, 기간, 문의처 조회 | 없음 |
-| Required Document Node | 기본 필요서류 조회 | 없음 |
-| Evidence Search Node | 신청방법, 필요서류, 주의사항 관련 RAG 근거 검색 | 없음 |
-| Checklist Node | 사용자 맞춤 체크리스트 생성 | Application Preparation Agent |
-| Checklist Save Node | 체크리스트 항목을 사용자별 진행 상태에 저장 | 없음 |
+| 정책 확인 | 신청 준비 대상 정책 조회 | 없음 |
+| 신청 정보 조회 | 신청방법, 기간, 문의처, 공식 URL 조회 | 없음 |
+| 진행 상태 조회 | `GET`에서 저장된 사용자별 `user_policy_progress` 조회 | 없음 |
+| 진행 상태 생성 | `POST`에서 사용자 저장 의도 발생 시 `user_policy_progress` 생성 | 없음 |
+| 체크리스트 템플릿 조회 | `policy_checklist_template` 활성 항목 조회 | 없음 |
+| 체크리스트 상태 생성 | 최초 시작 시 `user_policy_checklist_item`에 기본 항목 복사 | 없음 |
+| 체크리스트 상태 갱신 | 사용자가 체크한 DONE/PENDING 상태 저장 | 없음 |
 
-주요 Tool:
+주요 저장소/테이블:
 
-- `search_policy_by_name`
-- `get_policy_detail`
-- `get_required_documents`
-- `get_user_profile`
-- `get_family_members`
-- `normalize_user_condition`
-- `retrieve_policy_chunks`
-- `generate_application_checklist`
-- `create_or_get_user_policy_progress`
-- `get_policy_checklist_template`
-- `save_user_policy_checklist_items`
-- `update_user_policy_progress`
+- `policy`
+- `policy_detail`
+- `policy_checklist_template`
+- `user_policy_progress`
+- `user_policy_checklist_item`
 
-Condition Agent가 추출해야 하는 신청 준비 조건:
+제외 범위:
 
-- 거주 지역
-- 자녀 수와 자녀 나이
-- 임신/출산/양육 단계
-- 가구 유형
-- 맞벌이 여부
-- 소득 구간
-- 한부모, 다자녀, 장애, 외국인 등 추가 확인 가능성이 있는 조건
-- 사용자가 피하고 싶은 신청 방식 또는 선호 방식
+- 신청 준비 화면에서 별도의 자연어/필드 조건 입력을 받지 않는다.
+- Condition Agent를 호출해 사용자별 체크리스트 항목을 새로 생성하지 않는다.
+- AI가 만든 항목을 `policy_checklist_template` 또는 `user_policy_checklist_item`에 동적으로 저장하지 않는다.
+- 사용자 조건별 추가 서류 가능성은 체크 가능한 항목이 아니라 주의사항/추가 확인 안내로 다룬다.
+- `GET /apply`는 생성 동작을 하지 않는다. 기존 신청 준비 상태가 없어도 404가 아니라 preview 응답을 반환한다.
+
+선택적 보강:
+
+추후 공식 정책 문서 근거가 충분할 때 `search_policy_chunks`로 신청방법/필요서류/주의사항 근거를 조회해 `additional_notices` 같은 응답 전용 안내를 만들 수 있다. 이 경우에도 `/apply`의 기본 동작은 DB 조회/상태관리이며, 체크리스트 원천은 `policy_checklist_template`이다. AI 안내는 공식 필수 서류로 확정해 보여주지 않는다.
 
 기능명세 적합성:
 
 - 신청 정책 선택
 - 신청 정보 조회
 - 필요 서류 확인
-- 신청 체크리스트 생성
+- 기본 체크리스트 preview 조회
+- 사용자 저장 시 체크리스트 진행 상태 생성
 - 신청 전 주의사항
-- 사용자 상황별 추가 서류 표시
-- RAG 근거 기반 안내
 - 마이페이지 체크리스트 진행 상태 저장
 
 판단:
 
-Condition Agent를 추가하는 것이 기능명세에 더 잘 맞다. 신청 준비 기능은 정책의 일반 신청방법만 보여주는 것이 아니라, 사용자 조건에 따라 준비해야 할 항목이 달라질 수 있기 때문이다.
+신청 준비 기능은 #36/#37의 생성/조회/체크상태 관리가 핵심 구현이다. `/recommend`가 사용자 조건 입력과 추천 판단을 담당하므로, 신청 준비에서 별도 Application Preparation Graph를 두면 책임이 중복된다. 현재 `/apply`는 AI 생성 기능이 아니라 DB 기반 신청 준비 API로 보는 것이 맞다.
 
 DB 저장 기준:
 
-현재 DB 초안의 신청 준비 저장 구조는 다음처럼 해석한다.
+현재 DB의 신청 준비 저장 구조는 다음처럼 해석한다.
 
 ```text
 policy_checklist_template
@@ -708,14 +705,14 @@ user_policy_checklist_item
 = 사용자별 체크리스트 항목 상태
 ```
 
-Application Preparation Agent가 만든 체크리스트는 기본적으로 `policy_checklist_template`을 바탕으로 사용자별 `user_policy_checklist_item`에 복사해 저장한다.
+체크리스트는 `policy_checklist_template`을 바탕으로 사용자별 `user_policy_checklist_item`에 복사해 저장한다.
 
 현재 체크리스트 항목 상태는 단순하게 아래 2개만 사용한다.
 
 - `PENDING`
 - `DONE`
 
-사용자 조건 때문에 추가 확인이 필요한 항목은 우선 `user_policy_checklist_item.note`에 남기는 방향을 기본으로 한다. 필요 이상으로 상태 모델을 늘리지는 않는다.
+사용자 조건 때문에 추가 확인이 필요한 문서는 체크리스트 항목으로 저장하지 않는다. 필요한 경우 `caution` 또는 응답 전용 추가 안내 필드로 분리하고, 공식 기관 확인이 필요하다는 문구를 함께 제공한다.
 
 ### 4.5 Policy Summary Graph
 
@@ -766,7 +763,7 @@ Agent 흐름:
 
 ```text
 Supervisor Agent
--> 기능별 Graph 호출
+-> 기능별 Graph/API 호출
 -> 기능별 Agent 실행
 ```
 
@@ -781,7 +778,7 @@ START
    -> recommendation: Recommendation Graph
    -> eligibility: Eligibility Graph
    -> comparison: Comparison Graph
-   -> application_preparation: Application Preparation Graph
+   -> application_preparation: DB-backed Apply Preparation API
    -> policy_summary: Policy Summary Graph
    -> unclear: Clarification Response Node
 -> Assistant Message Save Node
@@ -807,7 +804,7 @@ START
 | 맞춤 추천 | O | O | O | O | O |
 | 지원 가능성 분석 | O | O | O | O | O |
 | 정책 비교 | O | O | O | O | O |
-| 신청 준비 | O | O | O | O | O |
+| 신청 준비 | X | X | O | X | X |
 | 정책 상세 AI 요약 | O | O | O | O | △ |
 | 챗봇 | O | O | O | O | O |
 | RAG 문서 적재 | X | O | O | 배치 | X |
@@ -818,7 +815,7 @@ START
 
 이 프로젝트는 챗봇만 멀티에이전트를 사용하는 구조가 아니다.
 
-추천, 지원 가능성 분석, 정책 비교, 신청 준비 기능은 각각 독립적인 LangGraph 기반 AI 워크플로우로 구현된다.
+추천, 지원 가능성 분석, 정책 비교는 각각 독립적인 LangGraph 기반 AI 워크플로우로 구현된다. 신청 준비는 선택한 정책의 공식 신청 정보와 체크리스트 진행 상태를 DB로 조회/저장하는 후속 API로 둔다.
 
 특히 추천과 지원 가능성 분석은 다음 원칙을 공유한다.
 
@@ -829,15 +826,15 @@ START
 - 내부 상태는 그대로 노출하지 않고 3단계 사용자 상태로 단순화한다.
 - 후속질문은 최대 2개까지만, 결과를 실제로 바꿀 수 있는 정보에 한해 요청한다.
 
-챗봇은 이 기능들을 다시 구현하지 않고 Supervisor Agent가 사용자의 intent를 분류해 기존 Graph를 호출한다. 따라서 챗봇은 멀티에이전트 기능의 유일한 사용처가 아니라, 서비스 전체의 AI Graph를 자연어로 실행하는 통합 입구다.
+챗봇은 이 기능들을 다시 구현하지 않고 Supervisor Agent가 사용자의 intent를 분류해 기존 Graph 또는 API를 호출한다. 따라서 챗봇은 멀티에이전트 기능의 유일한 사용처가 아니라, 서비스 전체 기능을 자연어로 실행하는 통합 입구다.
 
 ## 7. 최종 판단
 
-Comparison Graph와 Application Preparation Graph에 Condition Agent를 추가하는 것은 기능명세에 맞다.
+Comparison Graph에는 Condition Agent를 추가하는 것이 기능명세에 맞다.
 
 비교 기능은 단순히 두 정책의 정보를 나열하는 것이 아니라 사용자 상황에서 어떤 차이가 중요한지 설명해야 하므로 Condition Agent가 필요하다.
 
-신청 준비 기능은 필요서류와 체크리스트가 사용자 조건에 따라 달라질 수 있으므로 Condition Agent가 필요하다.
+신청 준비 기능은 별도 Condition Agent나 Graph 흐름을 두지 않는다. 사용자 조건 입력과 추천 판단은 `/recommend`가 담당하고, 신청 준비는 선택된 정책의 기본 체크리스트와 진행 상태를 DB로 관리한다.
 
 또한 추천과 지원 가능성 분석의 기준 문서는 아래처럼 정리하는 것이 맞다.
 
@@ -855,14 +852,17 @@ Eligibility Graph
 Comparison Graph
 = Condition Agent + Comparison Agent
 
-Application Preparation Graph
-= Condition Agent + Application Preparation Agent
+DB-backed Apply Preparation API
+= GET: policy / policy_detail / policy_checklist_template preview 조회
++ POST: 사용자 저장 의도 발생 시 user_policy_progress 생성 또는 재사용
++ POST: user_policy_checklist_item 기본 항목 복사
++ PATCH: user_policy_checklist_item DONE/PENDING 갱신
 
 Policy Summary Graph
 = Policy Q&A Agent + RAG
 
 Chat Supervisor Graph
-= Supervisor Agent + 기능별 Graph 재사용
+= Supervisor Agent + 기능별 Graph/API 재사용
 ```
 
 핵심 철학은 다음과 같다.

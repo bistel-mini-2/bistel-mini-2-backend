@@ -5,7 +5,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.exceptions import AppException, ErrorCode
 from app.db.models.policy import Policy
-from app.db.models.policy_checklist_template import PolicyChecklistTemplate
 from app.db.models.policy_detail import PolicyDetail
 from app.db.models.user_policy_checklist_item import UserPolicyChecklistItem
 from app.db.models.user_policy_progress import UserPolicyProgress
@@ -41,21 +40,7 @@ class ApplyPreparationService:
                     started_at=datetime.now(),
                 ),
             )
-            templates = await ApplyPreparationRepository.find_active_templates(
-                db, policy.policy_id
-            )
-            if templates:
-                await ApplyPreparationRepository.bulk_create_checklist_items(
-                    db,
-                    [
-                        UserPolicyChecklistItem(
-                            progress_id=progress.progress_id,
-                            template_item_id=template.template_item_id,
-                            item_status="PENDING",
-                        )
-                        for template in templates
-                    ],
-                )
+        await _ensure_checklist_items(db, policy.policy_id, progress.progress_id)
 
         return await _build_response(db, policy, progress)
 
@@ -67,12 +52,6 @@ class ApplyPreparationService:
         progress = await ApplyPreparationRepository.find_progress(
             db, user_id, policy.policy_id
         )
-        if progress is None:
-            raise AppException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                code=ErrorCode.NOT_FOUND,
-                message="Apply preparation not found",
-            )
         return await _build_response(db, policy, progress)
 
     @staticmethod
@@ -114,6 +93,7 @@ class ApplyPreparationService:
         done_count = sum(1 for item in items if item.item_status == "DONE")
         total = len(items)
         progress_percent = round(done_count * 100 / total) if total else 0
+        progress.progress_percent = progress_percent
 
         return ChecklistItemPatchResponse(
             item=ChecklistItem(
@@ -137,13 +117,16 @@ async def _get_policy_or_raise(db: AsyncSession, policy_slug: str) -> Policy:
 
 
 async def _build_response(
-    db: AsyncSession, policy: Policy, progress: UserPolicyProgress
+    db: AsyncSession, policy: Policy, progress: UserPolicyProgress | None
 ) -> ApplyPreparationResponse:
     detail = await ApplyPreparationRepository.find_policy_detail(db, policy.policy_id)
     templates = await ApplyPreparationRepository.find_active_templates(db, policy.policy_id)
-    items = await ApplyPreparationRepository.find_checklist_items(db, progress.progress_id)
+    items = (
+        await ApplyPreparationRepository.find_checklist_items(db, progress.progress_id)
+        if progress
+        else []
+    )
 
-    template_by_id = {template.template_item_id: template for template in templates}
     item_by_template_id = {item.template_item_id: item for item in items}
 
     checklist = [
@@ -162,7 +145,8 @@ async def _build_response(
     progress_percent = round(done_count * 100 / len(checklist)) if checklist else 0
 
     return ApplyPreparationResponse(
-        apply_id=str(progress.progress_id),
+        apply_id=str(progress.progress_id) if progress else None,
+        saved=progress is not None,
         policy_id=policy.policy_code,
         how_to_apply=detail.application_method if detail else None,
         apply_period=_resolve_apply_period(detail, policy),
@@ -172,6 +156,28 @@ async def _build_response(
         caution=detail.caution if detail else None,
         progress_percent=progress_percent,
     )
+
+
+async def _ensure_checklist_items(
+    db: AsyncSession, policy_id: int, progress_id: int
+) -> None:
+    templates = await ApplyPreparationRepository.find_active_templates(db, policy_id)
+    if not templates:
+        return
+
+    items = await ApplyPreparationRepository.find_checklist_items(db, progress_id)
+    existing_template_ids = {item.template_item_id for item in items}
+    missing_items = [
+        UserPolicyChecklistItem(
+            progress_id=progress_id,
+            template_item_id=template.template_item_id,
+            item_status="PENDING",
+        )
+        for template in templates
+        if template.template_item_id not in existing_template_ids
+    ]
+    if missing_items:
+        await ApplyPreparationRepository.bulk_create_checklist_items(db, missing_items)
 
 
 def _resolve_apply_period(detail: PolicyDetail | None, policy: Policy) -> str:
