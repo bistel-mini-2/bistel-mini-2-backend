@@ -1,0 +1,361 @@
+from typing import Any
+
+from fastapi import status
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.ai.agents.condition_agent import ConditionAgent
+from app.common.exceptions import AppException, ErrorCode
+from app.db.models.policy import Policy
+from app.repositories.ai_request_repository import AiRequestModel, AiRequestRepository
+from app.repositories.family_profile_repository import FamilyProfileRepository
+from app.repositories.user_repository import UserRepository
+from app.schemas.ai_contract import ConditionInput, RequestStatus
+from app.schemas.ai_request_schema import AiRequestCreate, AiRequestSnapshot
+
+
+class AiRequestLifecycleService:
+    def __init__(
+        self,
+        repository: AiRequestRepository | None = None,
+        condition_agent: ConditionAgent | None = None,
+    ) -> None:
+        self.repository = repository or AiRequestRepository()
+        self.condition_agent = condition_agent or ConditionAgent()
+
+    async def create_request(
+        self,
+        db: AsyncSession,
+        user_id: int,
+        request_type: str = "recommendation",
+        source_type: str = "FORM",
+        source_ref_id: str | None = None,
+        raw_query: str | None = None,
+        selected_conditions: dict[str, Any] | None = None,
+        policy_id: int | None = None,
+    ) -> AiRequestSnapshot:
+        await self._ensure_user_exists(db, user_id)
+        request = await self.repository.create(
+            db=db,
+            request_type=request_type,
+            user_id=user_id,
+            source_type=source_type,
+            source_ref_id=source_ref_id,
+            raw_query=raw_query,
+            selected_conditions=selected_conditions,
+            policy_id=policy_id,
+        )
+        return self.to_snapshot(request_type, request)
+
+    async def create_from_payload(
+        self,
+        db: AsyncSession,
+        payload: AiRequestCreate,
+    ) -> AiRequestSnapshot:
+        policy_id = None
+        if payload.request_type == "eligibility":
+            if payload.policy_id is None:
+                raise AppException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    code=ErrorCode.VALIDATION_ERROR,
+                    message="policy_id is required for eligibility request",
+                )
+            policy_id = await self.resolve_policy_id(db, payload.policy_id)
+
+        return await self.create_request(
+            db=db,
+            user_id=payload.user_id,
+            request_type=payload.request_type,
+            source_type=payload.source_type,
+            source_ref_id=payload.source_ref_id,
+            raw_query=payload.raw_query,
+            selected_conditions=payload.selected_conditions,
+            policy_id=policy_id,
+        )
+
+    async def create_eligibility_request(
+        self,
+        db: AsyncSession,
+        user_id: int,
+        policy_identifier: int | str,
+        source_type: str = "POLICY_DETAIL",
+        source_ref_id: str | None = None,
+        raw_query: str | None = None,
+        selected_conditions: dict[str, Any] | None = None,
+    ) -> AiRequestSnapshot:
+        return await self.create_request(
+            db=db,
+            user_id=user_id,
+            request_type="eligibility",
+            source_type=source_type,
+            source_ref_id=source_ref_id,
+            raw_query=raw_query,
+            selected_conditions=selected_conditions,
+            policy_id=await self.resolve_policy_id(db, policy_identifier),
+        )
+
+    async def update_payload(
+        self,
+        db: AsyncSession,
+        request_type: str,
+        request_id: int,
+        parsed_query_json: dict[str, Any] | None = None,
+        merged_condition_json: dict[str, Any] | None = None,
+        profile_conflict_json: list[dict[str, Any]] | None = None,
+    ) -> AiRequestSnapshot:
+        request = await self._get_request_or_raise(db, request_type, request_id)
+        request = await self.repository.update_payload(
+            db=db,
+            request=request,
+            parsed_query_json=parsed_query_json,
+            merged_condition_json=merged_condition_json,
+            profile_conflict_json=profile_conflict_json,
+        )
+        return self.to_snapshot(request_type, request)
+
+    async def mark_processing(
+        self,
+        db: AsyncSession,
+        request_type: str,
+        request_id: int,
+    ) -> AiRequestSnapshot:
+        return await self._set_status(
+            db,
+            request_type,
+            request_id,
+            RequestStatus.PROCESSING,
+        )
+
+    async def mark_completed(
+        self,
+        db: AsyncSession,
+        request_type: str,
+        request_id: int,
+    ) -> AiRequestSnapshot:
+        return await self._set_status(
+            db,
+            request_type,
+            request_id,
+            RequestStatus.COMPLETED,
+        )
+
+    async def mark_follow_up_required(
+        self,
+        db: AsyncSession,
+        request_type: str,
+        request_id: int,
+    ) -> AiRequestSnapshot:
+        return await self._set_status(
+            db,
+            request_type,
+            request_id,
+            RequestStatus.FOLLOW_UP_REQUIRED,
+        )
+
+    async def mark_failed(
+        self,
+        db: AsyncSession,
+        request_type: str,
+        request_id: int,
+        error_message: str | None = None,
+    ) -> AiRequestSnapshot:
+        return await self._set_status(
+            db,
+            request_type,
+            request_id,
+            RequestStatus.FAILED,
+            error_message=error_message,
+        )
+
+    async def get_request(
+        self,
+        db: AsyncSession,
+        request_type: str,
+        request_id: int,
+        user_id: int | None = None,
+    ) -> AiRequestSnapshot:
+        request = await self._get_request_or_raise(db, request_type, request_id)
+        if user_id is not None and request.user_id != user_id:
+            raise self._not_found(request_type, request_id)
+        return self.to_snapshot(request_type, request)
+
+    async def process_condition_request(
+        self,
+        db: AsyncSession,
+        request_type: str,
+        request_id: int,
+    ) -> AiRequestSnapshot:
+        request = await self._get_request_or_raise(db, request_type, request_id)
+        try:
+            parsed_query_json = request.parsed_query_json or {}
+            condition_result = await self.condition_agent.analyze(
+                ConditionInput(
+                    raw_query=request.raw_query,
+                    selected_conditions=parsed_query_json.get("selected_conditions"),
+                    profile_snapshot=await self._profile_snapshot(db, request.user_id),
+                )
+            )
+            parsed_result = {
+                **condition_result.parsed_query_json,
+                "input_issues": [
+                    issue.model_dump(mode="json")
+                    for issue in condition_result.input_issues
+                ],
+                "questions": [
+                    candidate.model_dump(mode="json")
+                    for candidate in condition_result.follow_up_candidates
+                ],
+            }
+            await self.repository.update_payload(
+                db=db,
+                request=request,
+                parsed_query_json=parsed_result,
+                merged_condition_json=condition_result.merged_condition_json,
+                profile_conflict_json=[
+                    conflict.model_dump(mode="json")
+                    for conflict in condition_result.profile_conflicts
+                ],
+            )
+            if condition_result.follow_up_candidates:
+                return await self.mark_follow_up_required(
+                    db,
+                    request_type,
+                    request_id,
+                )
+            return await self.mark_completed(db, request_type, request_id)
+        except Exception as exc:
+            return await self.mark_failed(
+                db,
+                request_type,
+                request_id,
+                error_message=str(exc),
+            )
+
+    async def resolve_policy_id(
+        self,
+        db: AsyncSession,
+        policy_identifier: int | str,
+    ) -> int:
+        if isinstance(policy_identifier, int):
+            return await self._get_policy_id_or_raise(db, policy_identifier)
+
+        stripped = policy_identifier.strip()
+        if stripped.isdecimal():
+            return await self._get_policy_id_or_raise(db, int(stripped))
+
+        result = await db.execute(
+            select(Policy.policy_id).where(Policy.policy_code == stripped)
+        )
+        policy_id = result.scalar_one_or_none()
+        if policy_id is None:
+            raise AppException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                code=ErrorCode.POLICY_NOT_FOUND,
+                message=f"Policy not found: {policy_identifier}",
+            )
+        return int(policy_id)
+
+    async def _set_status(
+        self,
+        db: AsyncSession,
+        request_type: str,
+        request_id: int,
+        request_status: RequestStatus,
+        error_message: str | None = None,
+    ) -> AiRequestSnapshot:
+        request = await self._get_request_or_raise(db, request_type, request_id)
+        request = await self.repository.update_status(
+            db=db,
+            request=request,
+            status=request_status,
+            error_message=error_message,
+        )
+        return self.to_snapshot(request_type, request)
+
+    async def _get_request_or_raise(
+        self,
+        db: AsyncSession,
+        request_type: str,
+        request_id: int,
+    ) -> AiRequestModel:
+        request = await self.repository.find_by_id(db, request_type, request_id)
+        if request is None:
+            raise self._not_found(request_type, request_id)
+        return request
+
+    def to_snapshot(
+        self,
+        request_type: str,
+        request: AiRequestModel,
+    ) -> AiRequestSnapshot:
+        parsed_query_json = request.parsed_query_json or {}
+        return AiRequestSnapshot(
+            request_id=str(request.request_id),
+            request_type=request_type,  # type: ignore[arg-type]
+            status=RequestStatus(request.request_status),
+            policy_id=(
+                str(request.policy_id)
+                if hasattr(request, "policy_id") and request.policy_id is not None
+                else None
+            ),
+            source_type=request.source_type,
+            source_ref_id=request.source_ref_id,
+            parsed_query_json=parsed_query_json,
+            merged_condition_json=request.merged_condition_json or {},
+            profile_conflict_json=request.profile_conflict_json or [],
+            questions=list(parsed_query_json.get("questions") or []),
+            input_issues=list(parsed_query_json.get("input_issues") or []),
+            error_message=request.error_message,
+        )
+
+    async def _ensure_user_exists(self, db: AsyncSession, user_id: int) -> None:
+        user = await UserRepository.find_by_id(db, user_id)
+        if user is None:
+            raise AppException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                code=ErrorCode.NOT_FOUND,
+                message=f"User not found: {user_id}",
+            )
+
+    async def _get_policy_id_or_raise(self, db: AsyncSession, policy_id: int) -> int:
+        result = await db.execute(
+            select(Policy.policy_id).where(Policy.policy_id == policy_id)
+        )
+        existing_policy_id = result.scalar_one_or_none()
+        if existing_policy_id is None:
+            raise AppException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                code=ErrorCode.POLICY_NOT_FOUND,
+                message=f"Policy not found: {policy_id}",
+            )
+        return int(existing_policy_id)
+
+    async def _profile_snapshot(
+        self,
+        db: AsyncSession,
+        user_id: int,
+    ) -> dict[str, Any] | None:
+        profile = await FamilyProfileRepository.find_profile_by_user_id(db, user_id)
+        if profile is None:
+            return None
+
+        snapshot = dict(profile.profile_json or {})
+        snapshot.update(
+            {
+                "region_code": profile.region_code,
+                "household_type": profile.household_type,
+                "income_bracket": profile.income_bracket,
+                "employment_status": profile.employment_status,
+                "pregnancy_status": profile.pregnancy_status,
+            }
+        )
+        return {
+            key: value for key, value in snapshot.items() if value not in (None, "", [])
+        }
+
+    def _not_found(self, request_type: str, request_id: int) -> AppException:
+        return AppException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            code=ErrorCode.NOT_FOUND,
+            message=f"AI request not found: {request_type}/{request_id}",
+        )

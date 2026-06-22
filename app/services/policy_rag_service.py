@@ -76,8 +76,9 @@ class PolicyRagService:
         query: str,
         k: int = 5,
         source_type: str | None = None,
+        policy_ids: list[int | str] | None = None,
     ) -> PolicyRagSearchResponse:
-        filter_value = {"source_type": source_type} if source_type else None
+        filter_value = self._search_filter(source_type, policy_ids)
         results = await self._vectorstore().asimilarity_search_with_score(
             query=query,
             k=k,
@@ -93,6 +94,32 @@ class PolicyRagService:
             result_count=len(search_results),
             results=search_results,
         )
+
+    def _search_filter(
+        self,
+        source_type: str | None,
+        policy_ids: list[int | str] | None,
+    ) -> dict[str, Any] | None:
+        conditions: list[dict[str, Any]] = []
+        if source_type:
+            conditions.append({"source_type": source_type})
+
+        policy_keys = [str(policy_id) for policy_id in policy_ids or []]
+        if policy_keys:
+            conditions.append(
+                {
+                    "$or": [
+                        {"policy_id": {"$in": policy_keys}},
+                        {"policy_code": {"$in": policy_keys}},
+                    ]
+                }
+            )
+
+        if not conditions:
+            return None
+        if len(conditions) == 1:
+            return conditions[0]
+        return {"$and": conditions}
 
     def _vectorstore(self) -> PGVector:
         embedding_kwargs = {}

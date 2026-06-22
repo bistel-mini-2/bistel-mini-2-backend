@@ -153,13 +153,13 @@ AI 기능(추천, 지원가능성 분석, 정책 AI 요약)은 상태를 3계층
 
 | 계층 | Enum | 저장 위치 | 외부 노출 |
 |------|------|-----------|-----------|
-| 비동기 요청 생명주기 | `RequestStatus` | `recommendation_request.request_status` | O (API `status` 필드) |
+| 비동기 요청 생명주기 | `RequestStatus` | `recommendation_request.request_status` / `eligibility_request.request_status` | O (API `status` 필드) |
 | 내부 판단 결과 | `AssessmentStatus` | `policy_assessment.assessment_status` | X (내부 전용) |
 | 사용자 노출 결과 | `UserStatus` | — | O (API `user_status` 필드) |
 
 ### RequestStatus — 비동기 요청 생명주기
 
-추천 요청(`recommendation_request`), 지원가능성 요청, 정책 AI 요약 요청의 처리 단계.
+추천 요청(`recommendation_request`), 지원가능성 요청(`eligibility_request`), 정책 AI 요약 요청의 처리 단계.
 API 응답의 `status` 필드는 반드시 아래 `RequestStatus` 값만 사용한다.
 
 | 값 | 의미 |

@@ -7,8 +7,16 @@ from fastapi.responses import JSONResponse
 from app.common.schemas import ApiResponse, PaginationMeta
 
 
-def success_response(data: Any = None, status_code: int = 200) -> JSONResponse:
-    body = ApiResponse(success=True, data=jsonable_encoder(data), meta={})
+def success_response(
+    data: Any = None,
+    status_code: int = 200,
+    meta: dict[str, Any] | None = None,
+) -> JSONResponse:
+    body = ApiResponse(
+        success=True,
+        data=jsonable_encoder(data),
+        meta=jsonable_encoder(meta or {}),
+    )
     return JSONResponse(status_code=status_code, content=body.model_dump())
 
 

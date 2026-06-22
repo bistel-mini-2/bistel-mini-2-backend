@@ -72,6 +72,7 @@ type UserStatus =
 - `AssessmentStatus` is for backend internal judgment only. If it appears in a response, frontend screens still prefer `user_status`.
 - `loading`, `success`, `warning`, and `error` are frontend UI variants, not API status values.
 - Condition Agent, Policy Assessment Agent, and Graph implementations import shared input/output contracts from `app.schemas.ai_contract`; enum values must stay identical to this section.
+- Condition Agent uses `ConditionInput` and `ConditionResult`; request lifecycle rows are stored in `recommendation_request` or `eligibility_request`, and `search_policy_chunks` returns `EvidenceChunk[]`.
 
 ### 3.3 Frontend Condition Input
 
@@ -470,6 +471,8 @@ type PolicyAiSummaryResponse = {
   body:
     raw_query: "string?"
     selected_conditions: "SelectedConditions?"
+    source_type: "FORM | CHAT | POLICY_DETAIL | COMPARE?"
+    source_ref_id: "string?"
   validation:
     - "raw_query 또는 selected_conditions 중 최소 1개 필수"
   response:
@@ -583,6 +586,8 @@ type PolicyAiSummaryResponse = {
     policy_id: "string"
     raw_query: "string?"
     selected_conditions: "SelectedConditions?"
+    source_type: "POLICY_DETAIL | CHAT | FORM?"
+    source_ref_id: "string?"
   validation:
     - "policy_id 필수"
     - "raw_query 또는 selected_conditions 중 최소 1개 권장"
@@ -594,7 +599,7 @@ type PolicyAiSummaryResponse = {
     meta:
       request_id: "string"
       follow_up_required: false
-  notes: "정책 단건 진입이므로 policy_id는 정책 상세 slug와 동일하게 받는 방향이 안전"
+  notes: "정책 단건 진입이므로 policy_id는 정책 상세 slug와 동일하게 받는 방향이 안전. 서버는 eligibility_request를 생성하고 RequestStatus 기반 폴링 상태를 저장한다. source_ref_id는 FK가 아닌 느슨한 출처 식별자다."
 
 - id: eligibility_request_get
   name: "지원가능성 분석 결과 조회"
@@ -893,7 +898,7 @@ type PolicyAiSummaryResponse = {
   name: "RecommendationService.recommend"
   category: "추천"
   owner: "추천/회원"
-  request: "user_id, raw_query?, selected_conditions?, chat_session_id?"
+  request: "user_id, raw_query?, selected_conditions?, source_type?, source_ref_id?"
   response: "request_id, status, parsed_query_json, merged_condition_json, questions, recommendations"
   notes: "외부 추천 요청 생성/조회 API 뒤에서 호출되는 유스케이스 계층. ConditionAnalysis -> profile merge -> CandidateSearch -> assessment/RAG -> result formatting 순서로 호출한다."
 

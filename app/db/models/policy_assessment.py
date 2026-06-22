@@ -12,9 +12,21 @@ class PolicyAssessment(Base):
     __tablename__ = "policy_assessment"
 
     assessment_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
-    request_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
-    recommendation_request_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
-    eligibility_request_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    request_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("recommendation_request.request_id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    recommendation_request_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("recommendation_request.request_id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    eligibility_request_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("eligibility_request.request_id", ondelete="CASCADE"),
+        nullable=True,
+    )
     policy_id: Mapped[int] = mapped_column(
         BigInteger,
         ForeignKey("policy.policy_id", ondelete="CASCADE"),
