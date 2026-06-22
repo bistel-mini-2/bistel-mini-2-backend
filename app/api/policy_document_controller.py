@@ -18,7 +18,7 @@ async def ingest_policy_detail_chunks(
     service: PolicyDocumentServiceDep,
     limit: Annotated[int, Query(ge=1, le=100)] = 10,
 ) -> JSONResponse:
-    logger.info("Ingest policy detail chunks")
+    logger.info("정책 상세 chunk 생성 시작")
     result = await service.ingest_policy_detail_chunks(limit=limit)
     return success_response(data=result)
 
@@ -28,7 +28,7 @@ async def ingest_policy_reference_documents(
     service: PolicyDocumentServiceDep,
     limit: Annotated[int, Query(ge=1, le=20)] = 5,
 ) -> JSONResponse:
-    logger.info("Ingest policy reference documents")
+    logger.info("정책 관련 문서 텍스트 추출 및 chunk 생성 시작")
     result = await service.ingest_policy_reference_documents(limit=limit)
     return success_response(data=result)
 
@@ -38,7 +38,7 @@ async def ingest_policy_reference_documents_with_openai_vision(
     service: PolicyDocumentServiceDep,
     limit: Annotated[int, Query(ge=1, le=10)] = 5,
 ) -> JSONResponse:
-    logger.info("Ingest policy reference documents with OpenAI Vision")
+    logger.info("OpenAI Vision 기반 정책 관련 문서 텍스트 추출 시작")
     result = await service.ingest_policy_reference_documents_with_openai_vision(
         limit=limit,
     )

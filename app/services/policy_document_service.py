@@ -92,7 +92,7 @@ class PolicyDocumentService:
                         )
                     )
                 except Exception as exc:
-                    self.logger.exception("Failed to ingest policy detail chunks")
+                    self.logger.exception("정책 상세 chunk 생성 중 오류 발생")
                     failed.append(
                         {
                             "policy_id": str(source.get("policy_id")),
@@ -192,7 +192,7 @@ class PolicyDocumentService:
                             )
                         )
                 except Exception as exc:
-                    self.logger.exception("Failed to ingest policy reference document")
+                    self.logger.exception("정책 관련 문서 처리 중 오류 발생")
                     failed.append(
                         {
                             "source_url": source_url,
@@ -338,7 +338,7 @@ class PolicyDocumentService:
                         )
                 except Exception as exc:
                     self.logger.exception(
-                        "Failed to ingest policy reference document with OpenAI Vision"
+                        "OpenAI Vision 기반 정책 관련 문서 처리 중 오류 발생"
                     )
                     failed.append(
                         {
@@ -456,10 +456,10 @@ class PolicyDocumentService:
                         {
                             "type": "input_text",
                             "text": (
-                                "Extract only the visible text from this PDF. "
-                                "Preserve the original wording as much as possible. "
-                                "For tables, write each row as plain text. "
-                                "Do not summarize or explain."
+                                "이 PDF에서 보이는 텍스트만 추출하세요. "
+                                "가능한 한 원문 표현을 유지하세요. "
+                                "표는 각 행을 일반 텍스트로 풀어서 작성하세요. "
+                                "요약하거나 설명하지 마세요."
                             ),
                         },
                     ],
