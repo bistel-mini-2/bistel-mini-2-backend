@@ -14,6 +14,7 @@ from app.db.models.profile import FamilyMember, UserProfile
 from app.db.models.recommendation_candidate import RecommendationCandidate
 from app.db.models.recommendation_request import RecommendationRequest
 from app.db.models.user import User
+from app.db.models.user_favorite import UserFavorite
 from app.db.models.user_policy_checklist_item import UserPolicyChecklistItem
 from app.db.models.user_policy_progress import UserPolicyProgress
 
@@ -36,6 +37,7 @@ __all__ = [
     "RecommendationCandidate",
     "RecommendationRequest",
     "User",
+    "UserFavorite",
     "UserPolicyChecklistItem",
     "UserPolicyProgress",
     "UserProfile",
