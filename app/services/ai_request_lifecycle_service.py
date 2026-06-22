@@ -165,65 +165,57 @@ class AiRequestLifecycleService:
         request_id: int,
     ) -> AiRequestSnapshot:
         request = await self._get_request_or_raise(db, request_type, request_id)
-        try:
-            parsed_query_json = request.parsed_query_json or {}
-            condition_result = await self.condition_agent.analyze(
-                ConditionInput(
-                    raw_query=request.raw_query,
-                    selected_conditions=parsed_query_json.get("selected_conditions"),
-                    profile_snapshot=await self._profile_snapshot(db, request.user_id),
-                )
+        parsed_query_json = request.parsed_query_json or {}
+        condition_result = await self.condition_agent.analyze(
+            ConditionInput(
+                raw_query=request.raw_query,
+                selected_conditions=parsed_query_json.get("selected_conditions"),
+                profile_snapshot=await self._profile_snapshot(db, request.user_id),
             )
-            input_issues_json = [
-                issue.model_dump(mode="json")
-                for issue in condition_result.input_issues
-            ]
-            profile_conflict_json = [
-                conflict.model_dump(mode="json")
-                for conflict in condition_result.profile_conflicts
-            ]
-            parsed_result = {
-                **condition_result.parsed_query_json,
-                "input_issues": input_issues_json,
-                "questions": [
-                    candidate.model_dump(mode="json")
-                    for candidate in condition_result.follow_up_candidates
-                ],
-            }
-            await self.repository.update_payload(
-                db=db,
-                request=request,
-                parsed_query_json=parsed_result,
-                merged_condition_json=condition_result.merged_condition_json,
-                profile_conflict_json=profile_conflict_json,
-            )
-            if condition_result.follow_up_candidates:
-                return await self.mark_follow_up_required(
-                    db,
-                    request_type,
-                    request_id,
-                )
-            if request_type == "recommendation":
-                result_json = await self._recommendation_graph().run(
-                    db=db,
-                    request_id=request_id,
-                    merged_condition_json=condition_result.merged_condition_json,
-                    input_issues=input_issues_json,
-                    profile_conflict_json=profile_conflict_json,
-                )
-                await self.repository.update_result(
-                    db=db,
-                    request=request,
-                    result_json=result_json,
-                )
-            return await self.mark_completed(db, request_type, request_id)
-        except Exception as exc:
-            return await self.mark_failed(
+        )
+        input_issues_json = [
+            issue.model_dump(mode="json")
+            for issue in condition_result.input_issues
+        ]
+        profile_conflict_json = [
+            conflict.model_dump(mode="json")
+            for conflict in condition_result.profile_conflicts
+        ]
+        parsed_result = {
+            **condition_result.parsed_query_json,
+            "input_issues": input_issues_json,
+            "questions": [
+                candidate.model_dump(mode="json")
+                for candidate in condition_result.follow_up_candidates
+            ],
+        }
+        await self.repository.update_payload(
+            db=db,
+            request=request,
+            parsed_query_json=parsed_result,
+            merged_condition_json=condition_result.merged_condition_json,
+            profile_conflict_json=profile_conflict_json,
+        )
+        if condition_result.follow_up_candidates:
+            return await self.mark_follow_up_required(
                 db,
                 request_type,
                 request_id,
-                error_message=str(exc),
             )
+        if request_type == "recommendation":
+            result_json = await self._recommendation_graph().run(
+                db=db,
+                request_id=request_id,
+                merged_condition_json=condition_result.merged_condition_json,
+                input_issues=input_issues_json,
+                profile_conflict_json=profile_conflict_json,
+            )
+            await self.repository.update_result(
+                db=db,
+                request=request,
+                result_json=result_json,
+            )
+        return await self.mark_completed(db, request_type, request_id)
 
     async def resolve_policy_id(
         self,

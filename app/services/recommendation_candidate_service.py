@@ -1,4 +1,5 @@
 import logging
+import asyncio
 from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import Any
@@ -51,6 +52,7 @@ class RecommendationCandidateService:
         )
         self.repository = repository or RecommendationCandidateRepository()
         self.rag_service = rag_service or PolicyRagService()
+        self.vector_search_timeout_seconds = 20
 
     async def search_candidates(
         self,
@@ -145,10 +147,13 @@ class RecommendationCandidateService:
         }
         for source_type, source_weight in source_weights.items():
             try:
-                response = await self.rag_service.search(
-                    query=query,
-                    k=max(limit * 2, 30),
-                    source_type=source_type,
+                response = await asyncio.wait_for(
+                    self.rag_service.search(
+                        query=query,
+                        k=max(limit * 2, 30),
+                        source_type=source_type,
+                    ),
+                    timeout=self.vector_search_timeout_seconds,
                 )
             except Exception as exc:
                 self.logger.warning(

@@ -47,34 +47,10 @@ class PolicyAssessmentRepository:
             "ALTER TABLE policy_assessment ADD COLUMN IF NOT EXISTS manual_check_points_json jsonb",
             "ALTER TABLE policy_assessment ADD COLUMN IF NOT EXISTS reason_summary text",
             "ALTER TABLE policy_assessment ADD COLUMN IF NOT EXISTS selected_for_result boolean NOT NULL DEFAULT false",
-            """
-            CREATE SEQUENCE IF NOT EXISTS policy_assessment_assessment_id_seq
-            """,
-            """
-            ALTER TABLE policy_assessment
-            ALTER COLUMN assessment_id
-            SET DEFAULT nextval('policy_assessment_assessment_id_seq')
-            """,
-            """
-            ALTER SEQUENCE policy_assessment_assessment_id_seq
-            OWNED BY policy_assessment.assessment_id
-            """,
-            """
-            SELECT setval(
-                'policy_assessment_assessment_id_seq',
-                GREATEST(
-                    (
-                        SELECT COALESCE(MAX(assessment_id), 0)
-                        FROM policy_assessment
-                    ),
-                    1
-                ),
-                (
-                    SELECT COALESCE(MAX(assessment_id), 0) > 0
-                    FROM policy_assessment
-                )
-            )
-            """,
+        ]:
+            await db.execute(text(statement))
+
+        for statement in [
             """
             CREATE UNIQUE INDEX IF NOT EXISTS
             policy_assessment_recommendation_policy_type_uidx
@@ -172,7 +148,7 @@ class PolicyAssessmentRepository:
             await cur.execute(
                 """
                     CREATE TABLE IF NOT EXISTS policy_assessment (
-                        assessment_id bigint PRIMARY KEY,
+                        assessment_id bigserial PRIMARY KEY,
                         request_id bigint,
                         recommendation_request_id bigint,
                         eligibility_request_id bigint,
@@ -193,7 +169,7 @@ class PolicyAssessmentRepository:
             await cur.execute(
                 """
                     CREATE TABLE IF NOT EXISTS assessment_evidence (
-                        evidence_id bigint PRIMARY KEY,
+                        evidence_id bigserial PRIMARY KEY,
                         assessment_id bigint NOT NULL
                             REFERENCES policy_assessment(assessment_id) ON DELETE CASCADE,
                         chunk_id bigint NOT NULL
@@ -236,15 +212,9 @@ class PolicyAssessmentRepository:
         request_id = recommendation_request_id
 
         async with conn.cursor() as cur:
-            assessment_id = await PolicyAssessmentRepository._next_id(
-                cur,
-                table_name="policy_assessment",
-                id_column="assessment_id",
-            )
             await cur.execute(
                 """
                     INSERT INTO policy_assessment (
-                        assessment_id,
                         request_id,
                         recommendation_request_id,
                         eligibility_request_id,
@@ -260,12 +230,12 @@ class PolicyAssessmentRepository:
                         selected_for_result
                     )
                     VALUES (
-                        %s, %s, %s, %s, %s, %s, %s, %s,
+                        %s, %s, %s, %s, %s, %s, %s,
                         %s::jsonb, %s::jsonb, %s::jsonb, %s::jsonb, %s, %s
                     )
+                    RETURNING assessment_id
                 """,
                 (
-                    assessment_id,
                     request_id,
                     recommendation_request_id,
                     eligibility_request_id,
@@ -281,6 +251,8 @@ class PolicyAssessmentRepository:
                     selected_for_result,
                 ),
             )
+            row = await cur.fetchone()
+            assessment_id = int(row[0])
             await PolicyAssessmentRepository.replace_evidences(
                 cur=cur,
                 assessment_id=assessment_id,
@@ -299,25 +271,18 @@ class PolicyAssessmentRepository:
             (assessment_id,),
         )
         for evidence in evidences:
-            evidence_id = await PolicyAssessmentRepository._next_id(
-                cur,
-                table_name="assessment_evidence",
-                id_column="evidence_id",
-            )
             await cur.execute(
                 """
                     INSERT INTO assessment_evidence (
-                        evidence_id,
                         assessment_id,
                         chunk_id,
                         snippet,
                         similarity_score,
                         evidence_role
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s)
                 """,
                 (
-                    evidence_id,
                     assessment_id,
                     int(evidence.chunk_id),
                     evidence.snippet,
@@ -325,12 +290,6 @@ class PolicyAssessmentRepository:
                     evidence.evidence_role,
                 ),
             )
-
-    @staticmethod
-    async def _next_id(cur, table_name: str, id_column: str) -> int:
-        await cur.execute(f"SELECT COALESCE(MAX({id_column}), 0) + 1 FROM {table_name}")
-        row = await cur.fetchone()
-        return int(row[0])
 
     @staticmethod
     def _json(value: Any) -> str:

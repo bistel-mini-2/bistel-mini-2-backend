@@ -1,3 +1,4 @@
+import asyncio
 from typing import Any, Protocol
 
 from pydantic import BaseModel, Field
@@ -78,8 +79,13 @@ class ConditionExtractor(Protocol):
 
 
 class LangChainConditionExtractor:
-    def __init__(self, model: str = "gpt-4o-mini") -> None:
+    def __init__(
+        self,
+        model: str = "gpt-4o-mini",
+        timeout_seconds: float = 30,
+    ) -> None:
         self.model = model
+        self.timeout_seconds = timeout_seconds
 
     async def extract(self, raw_query: str) -> dict[str, Any]:
         if not raw_query.strip():
@@ -90,11 +96,10 @@ class LangChainConditionExtractor:
         llm = ChatOpenAI(model=self.model, temperature=0)
         structured_llm = llm.with_structured_output(
             NaturalLanguageConditionExtraction)
-        result = await structured_llm.ainvoke(
-            [
-                (
-                    "system",
-                    """
+        messages = [
+            (
+                "system",
+                """
                     너는 한국 복지정책 추천 서비스의 조건 추출기다.
 
                     사용자의 한국어 자연어 입력에서 정책 추천에 필요한 조건을 추출해
@@ -141,10 +146,16 @@ class LangChainConditionExtractor:
                     사용자의 관심사나 원하는 지원 내용은 needs에 한국어 키워드로 담는다.
                     설명 문장을 추가하지 말고 스키마 필드만 채운다.
                     """
-                ),
-                ("user", raw_query),
-            ]
-        )
+            ),
+            ("user", raw_query),
+        ]
+        try:
+            result = await asyncio.wait_for(
+                structured_llm.ainvoke(messages),
+                timeout=self.timeout_seconds,
+            )
+        except asyncio.TimeoutError:
+            return {}
         if isinstance(result, NaturalLanguageConditionExtraction):
             return result.model_dump(exclude_none=True)
         if isinstance(result, dict):

@@ -1,5 +1,9 @@
+import asyncio
+import logging
+
 from fastapi import APIRouter, BackgroundTasks, status
 from fastapi.responses import JSONResponse
+from sqlalchemy import text
 
 from app.common.response import success_response
 from app.core.dependencies import CurrentUserDep, DbSessionDep
@@ -12,6 +16,9 @@ from app.schemas.ai_request_schema import (
 )
 from app.services.ai_request_lifecycle_service import AiRequestLifecycleService
 
+
+AI_BACKGROUND_TIMEOUT_SECONDS = 90
+logger = logging.getLogger(__name__)
 
 recommendation_router = APIRouter(
     prefix="/api/v1/recommendations",
@@ -40,18 +47,76 @@ def _recommendation_polling_meta(
 
 
 async def process_ai_condition_request(request_type: str, request_id: int) -> None:
+    service = AiRequestLifecycleService()
+    try:
+        async with AsyncSessionLocal() as db:
+            try:
+                logger.info(
+                    "AI background task started: request_type=%s request_id=%s",
+                    request_type,
+                    request_id,
+                )
+                await db.execute(text("SET LOCAL lock_timeout = '5s'"))
+                await db.execute(text("SET LOCAL statement_timeout = '60s'"))
+                await asyncio.wait_for(
+                    service.process_condition_request(
+                        db=db,
+                        request_type=request_type,
+                        request_id=request_id,
+                    ),
+                    timeout=AI_BACKGROUND_TIMEOUT_SECONDS,
+                )
+                await db.commit()
+                logger.info(
+                    "AI background task completed: request_type=%s request_id=%s",
+                    request_type,
+                    request_id,
+                )
+            except Exception:
+                await db.rollback()
+                raise
+    except TimeoutError:
+        error_message = (
+            "AI request processing timed out after "
+            f"{AI_BACKGROUND_TIMEOUT_SECONDS} seconds"
+        )
+        logger.exception(
+            "AI background task timed out: request_type=%s request_id=%s",
+            request_type,
+            request_id,
+        )
+        await _mark_ai_request_failed(request_type, request_id, error_message)
+    except Exception as exc:
+        logger.exception(
+            "AI background task failed: request_type=%s request_id=%s",
+            request_type,
+            request_id,
+        )
+        await _mark_ai_request_failed(request_type, request_id, str(exc))
+
+
+async def _mark_ai_request_failed(
+    request_type: str,
+    request_id: int,
+    error_message: str,
+) -> None:
     async with AsyncSessionLocal() as db:
         service = AiRequestLifecycleService()
         try:
-            await service.process_condition_request(
+            await service.mark_failed(
                 db=db,
                 request_type=request_type,
                 request_id=request_id,
+                error_message=error_message,
             )
             await db.commit()
         except Exception:
             await db.rollback()
-            raise
+            logger.exception(
+                "Failed to mark AI request as failed: request_type=%s request_id=%s",
+                request_type,
+                request_id,
+            )
 
 
 @recommendation_router.post("/requests", status_code=status.HTTP_202_ACCEPTED)

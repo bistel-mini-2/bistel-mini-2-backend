@@ -1,3 +1,4 @@
+import asyncio
 from collections import defaultdict
 from collections.abc import Awaitable, Callable
 from typing import Any
@@ -23,9 +24,11 @@ class RecommendationService:
         self,
         chunk_searcher: PolicyChunkSearcher = search_policy_chunks,
         result_limit: int = 5,
+        evidence_timeout_seconds: float = 20,
     ) -> None:
         self.chunk_searcher = chunk_searcher
         self.result_limit = result_limit
+        self.evidence_timeout_seconds = evidence_timeout_seconds
 
     async def build_result(
         self,
@@ -99,18 +102,73 @@ class RecommendationService:
         if not policy_ids:
             return [], None
         query = self._evidence_query(condition)
+        evidence_errors: list[str] = []
         try:
-            return (
-                await self.chunk_searcher(
+            evidences = await asyncio.wait_for(
+                self.chunk_searcher(
                     query=query,
                     policy_ids=policy_ids,
                     top_k=max(len(policy_ids) * 2, 5),
                     evidence_role="recommendation_reason",
                 ),
-                None,
+                timeout=self.evidence_timeout_seconds,
+            )
+        except Exception as exc:
+            evidences = []
+            evidence_errors.append(str(exc))
+
+        evidence_by_policy = self._group_evidences(evidences)
+        missing_policy_ids = [
+            policy_id
+            for policy_id in dict.fromkeys(policy_ids)
+            if not evidence_by_policy.get(str(policy_id))
+        ]
+        if missing_policy_ids:
+            fallback_evidences, fallback_error = await self._search_evidence_fallbacks(
+                query=query,
+                policy_ids=missing_policy_ids,
+            )
+            evidences = self._deduplicate_evidences(
+                [*evidences, *fallback_evidences]
+            )
+            if fallback_error:
+                evidence_errors.append(fallback_error)
+
+        return evidences, "; ".join(evidence_errors) or None
+
+    async def _search_evidence_fallbacks(
+        self,
+        query: str,
+        policy_ids: list[int],
+    ) -> tuple[list[EvidenceChunk], str | None]:
+        async def search_one(policy_id: int) -> list[EvidenceChunk]:
+            return await asyncio.wait_for(
+                self.chunk_searcher(
+                    query=query,
+                    policy_ids=[policy_id],
+                    top_k=2,
+                    evidence_role="recommendation_reason",
+                ),
+                timeout=max(min(self.evidence_timeout_seconds / 2, 10), 5),
+            )
+
+        tasks = [search_one(policy_id) for policy_id in policy_ids]
+        try:
+            results = await asyncio.wait_for(
+                asyncio.gather(*tasks, return_exceptions=True),
+                timeout=self.evidence_timeout_seconds,
             )
         except Exception as exc:
             return [], str(exc)
+
+        evidences: list[EvidenceChunk] = []
+        errors: list[str] = []
+        for result in results:
+            if isinstance(result, Exception):
+                errors.append(str(result))
+                continue
+            evidences.extend(result)
+        return evidences, "; ".join(errors) or None
 
     def _to_result_item(
         self,
@@ -215,6 +273,24 @@ class RecommendationService:
         for evidence in evidences:
             grouped[str(evidence.policy_id)].append(evidence)
         return grouped
+
+    def _deduplicate_evidences(
+        self,
+        evidences: list[EvidenceChunk],
+    ) -> list[EvidenceChunk]:
+        deduplicated: list[EvidenceChunk] = []
+        seen: set[tuple[str, str, str | None]] = set()
+        for evidence in evidences:
+            key = (
+                str(evidence.policy_id),
+                str(evidence.chunk_id),
+                evidence.evidence_role,
+            )
+            if key in seen:
+                continue
+            seen.add(key)
+            deduplicated.append(evidence)
+        return deduplicated
 
     def _first(self, condition: dict[str, Any], *keys: str) -> Any:
         for key in keys:
