@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class ChatSessionCreateRequest(BaseModel):
@@ -34,13 +34,20 @@ class AssistantMessagePolicy(BaseModel):
     summary: str | None = None
     tag: str | None = None
     tagTone: str | None = None
+    action_type: str | None = None
 
 
 class AssistantMessageEvidence(BaseModel):
+    chunk_id: str | None = None
     snippet: str
     source_title: str | None = None
     source_url: str | None = None
     evidence_role: str | None = None
+
+    @field_validator("evidence_role")
+    @classmethod
+    def _lower_evidence_role(cls, v: str | None) -> str | None:
+        return v.lower() if v else v
 
 
 class AssistantMessage(BaseModel):

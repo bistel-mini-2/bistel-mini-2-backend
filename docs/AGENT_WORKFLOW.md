@@ -757,7 +757,7 @@ START
 
 목적:
 
-사용자 질문을 분석하고 필요한 기능 Graph로 라우팅한다.
+사용자 질문을 분석하고 필요한 기능 Graph로 라우팅한다. Graph는 데이터 변환과 라우팅 책임만 가지며, DB 저장(메시지/근거/정책 link/세션 갱신)은 graph 종료 후 ChatService가 한 트랜잭션에 처리한다. 책임 분리는 노드 단위로 표현하되, 저장 트랜잭션 경계는 graph 바깥에 둔다.
 
 Agent 흐름:
 
@@ -770,23 +770,56 @@ Supervisor Agent
 Node 흐름:
 
 ```text
-START
--> Chat Session Load Node
--> User Message Save Node
--> Supervisor Node
--> Graph Router Node
-   -> recommendation: Recommendation Graph
-   -> eligibility: Eligibility Graph
-   -> comparison: Comparison Graph
-   -> application_preparation: DB-backed Apply Preparation API
-   -> policy_summary: Policy Summary Graph
-   -> unclear: Clarification Response Node
--> Assistant Message Save Node
--> Chat Evidence Save Node
--> Chat Policy Link Node
--> Chat Session Update Node
--> END
+[ChatService] Chat Session Load (소유자 검증)
+[ChatService] User Message Save (graph 호출 전)
+-> Graph 진입
+   START
+   -> Supervisor Node
+   -> Graph Router Node
+      -> recommend: Recommendation Branch Node → Recommendation Graph 호출
+      -> eligibility: Eligibility Branch Node → Eligibility Graph 호출
+      -> compare: Comparison Branch Node → Comparison Graph 호출
+      -> apply: Apply Branch Node → DB-backed Apply Preparation API 호출
+      -> policy_summary: Policy Summary Branch Node → Policy Summary Graph 호출
+      -> unclear: Clarification Response Node
+   -> Assistant Payload Build Node
+   -> Evidence Extract Node    # chat_message_evidence에 저장할 데이터 준비
+   -> Policy Link Extract Node # chat_message_policy에 저장할 데이터 준비 (policy_summary intent는 빈 배열)
+   -> END
+[ChatService] 한 트랜잭션에서:
+   - Assistant Message Save (chat_message + structured_json은 supervisor_decision 등 메타만 보존)
+   - Chat Evidence Save (chat_message_evidence)
+   - Chat Policy Link Save (chat_message_policy)
+   - Chat Session Update (last_message_at, latest_request_id)
 ```
+
+Graph 출력 state:
+
+```text
+{
+    "assistant_payload": {...},        # content, user_status, sources, actions, disclaimer
+    "evidences_to_save": [...],        # chunk_id, snippet, evidence_role
+    "policy_links_to_save": [...],     # policy_id, action_type
+    "supervisor_decision": {...}       # intent, raw (structured_json에 보존)
+}
+```
+
+`action_type` 매핑 규칙 (intent → DB `action_type`):
+
+| Intent | API `actions[]` | DB `action_type` |
+| --- | --- | --- |
+| recommend | recommend | RECOMMENDED |
+| compare | compare | COMPARED |
+| eligibility | eligibility | ELIGIBILITY_TARGET |
+| apply | apply | APPLY_TARGET |
+| policy_summary | chat | (생성하지 않음) |
+| unclear | — | (생성하지 않음) |
+
+`policy_summary` intent는 사용자가 정책 정보를 묻는 흐름으로, 거론된 정책은 "행동 대상"이 아니라 "정보 출처"이므로 `chat_message_policy` row를 만들지 않는다. 거론된 정책은 `chat_message_evidence.chunk_id → policy_document_chunk → policy_document → policy` 역추적으로 조회 가능하다.
+
+`evidence_role`은 RAG가 가져온 chunk가 정책 문서의 어떤 섹션에서 왔는지를 표시하는 5종 enum이다. DB는 대문자(`SUMMARY|TARGET|BENEFIT|APPLICATION|CAUTION`), API 응답은 소문자(`summary|target|benefit|application|caution`)로 통일하며 `chat_message_evidence`와 `assessment_evidence` 양쪽에 동일 enum을 적용한다. 현재 RAG가 role 분류 정보를 항상 채우지 못하므로 컬럼은 nullable로 둔다.
+
+기존 `chat_message.structured_json`에 박혀 있던 `policies` / `evidences`는 정규화 테이블 도입 시점부터 신규 메시지에 한해 정규화 테이블로 저장한다. 기존 데이터는 폐기한다(첫 정규화 작업의 결정).
 
 기능명세 적합성:
 
