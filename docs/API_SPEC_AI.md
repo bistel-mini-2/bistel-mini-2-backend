@@ -72,6 +72,7 @@ type UserStatus =
 - `AssessmentStatus` is for backend internal judgment only. If it appears in a response, frontend screens still prefer `user_status`.
 - `loading`, `success`, `warning`, and `error` are frontend UI variants, not API status values.
 - Condition Agent, Policy Assessment Agent, and Graph implementations import shared input/output contracts from `app.schemas.ai_contract`; enum values must stay identical to this section.
+- Condition Agent uses `ConditionInput` and `ConditionResult`; request lifecycle rows are stored in `recommendation_request` or `eligibility_request`, and `search_policy_chunks` returns `EvidenceChunk[]`.
 
 ### 3.3 Frontend Condition Input
 
@@ -499,6 +500,8 @@ type PolicyAiSummaryResponse = {
   body:
     raw_query: "string?"
     selected_conditions: "SelectedConditions?"
+    source_type: "FORM | CHAT | POLICY_DETAIL | COMPARE?"
+    source_ref_id: "string?"
   validation:
     - "raw_query 또는 selected_conditions 중 최소 1개 필수"
   response:
@@ -612,6 +615,8 @@ type PolicyAiSummaryResponse = {
     policy_id: "string"
     raw_query: "string?"
     selected_conditions: "SelectedConditions?"
+    source_type: "POLICY_DETAIL | CHAT | FORM?"
+    source_ref_id: "string?"
   validation:
     - "policy_id 필수"
     - "raw_query 또는 selected_conditions 중 최소 1개 권장"
@@ -623,7 +628,7 @@ type PolicyAiSummaryResponse = {
     meta:
       request_id: "string"
       follow_up_required: false
-  notes: "정책 단건 진입이므로 policy_id는 정책 상세 slug와 동일하게 받는 방향이 안전"
+  notes: "정책 단건 진입이므로 policy_id는 정책 상세 slug와 동일하게 받는 방향이 안전. 서버는 eligibility_request를 생성하고 RequestStatus 기반 폴링 상태를 저장한다. source_ref_id는 FK가 아닌 느슨한 출처 식별자다."
 
 - id: eligibility_request_get
   name: "지원가능성 분석 결과 조회"
@@ -829,9 +834,12 @@ type PolicyAiSummaryResponse = {
   priority: "medium"
   owner: "챗봇/신청"
   body:
-    title: "string?"
-  response: "chat_session_id, session_status"
-  notes: "새 상담 세션 시작"
+    title: "string? (max 255)"
+  response_schema:
+    data:
+      chat_session_id: "string"
+      session_status: "string"
+  notes: "새 상담 세션 시작. session_status는 default ACTIVE. title은 옵셔널이며 최대 255자."
 
 - id: chat_session_list
   name: "채팅 세션 목록 조회"
@@ -840,11 +848,16 @@ type PolicyAiSummaryResponse = {
   auth: "required"
   priority: "medium"
   owner: "챗봇/신청"
-  query_params:
-    - page
-    - size
-  response: "chat session list"
-  notes: "최근 상담 이력 목록"
+  response_schema:
+    data:
+      sessions:
+        - chat_session_id: "string"
+          title: "string?"
+          session_status: "string"
+          last_message_at: "string (iso8601)?"
+          created_at: "string (iso8601)?"
+          updated_at: "string (iso8601)?"
+  notes: "본인 세션 목록. 정렬 last_message_at DESC NULLS LAST, created_at DESC. 페이지네이션 미사용(전체 반환)."
 
 - id: chat_message_send
   name: "채팅 메시지 전송"
@@ -893,8 +906,17 @@ type PolicyAiSummaryResponse = {
   owner: "챗봇/신청"
   path_params:
     - chat_session_id
-  response: "messages, linked_policies, evidences"
-  notes: "대화 맥락 복원용"
+  response_schema:
+    data:
+      chat_session_id: "string"
+      messages:
+        - chat_message_id: "string"
+          role: "string"
+          message_type: "string"
+          content: "string?"
+          sequence_no: "integer"
+          created_at: "string (iso8601)?"
+  notes: "대화 맥락 복원용. 정렬 sequence_no ASC. 본인 세션이 아니거나 존재하지 않는 chat_session_id 접근 시 404 NOT_FOUND. linked_policies / evidences는 #39 메시지 전송 구현 시 함께 추가 예정."
 ```
 
 ## 5. Internal Service and Graph Contracts
@@ -905,7 +927,7 @@ type PolicyAiSummaryResponse = {
   name: "RecommendationService.recommend"
   category: "추천"
   owner: "추천/회원"
-  request: "user_id, raw_query?, selected_conditions?, chat_session_id?"
+  request: "user_id, raw_query?, selected_conditions?, source_type?, source_ref_id?"
   response: "request_id, status, parsed_query_json, merged_condition_json, questions, recommendations"
   notes: "외부 추천 요청 생성/조회 API 뒤에서 호출되는 유스케이스 계층. ConditionAnalysis -> profile merge -> CandidateSearch -> assessment/RAG -> result formatting 순서로 호출한다."
 

@@ -9,12 +9,13 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 
-load_dotenv()
+load_dotenv(override=True)
 
 from app.api.apply_controller import (
     checklist_router as apply_checklist_router,
     router as apply_router,
 )
+from app.api.ai_request_controller import eligibility_router, recommendation_router
 from app.api.auth_controller import auth_router, users_router
 from app.api.chat_controller import router as chat_router
 from app.api.family_profile_controller import router as family_profile_router
@@ -83,6 +84,8 @@ app.include_router(policy_import_router)
 app.include_router(policy_document_router)
 app.include_router(policy_rag_router)
 app.include_router(policy_judgement_router)
+app.include_router(recommendation_router)
+app.include_router(eligibility_router)
 app.include_router(apply_router)
 app.include_router(apply_checklist_router)
 app.include_router(chat_router)

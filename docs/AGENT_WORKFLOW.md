@@ -228,6 +228,8 @@ Policy Assessment:
 ### 3.1 Condition Agent
 
 사용자 조건을 모든 AI 기능에서 재사용 가능한 표준 조건으로 정리하는 Agent다.
+구현 입출력은 `app.schemas.ai_contract.ConditionInput`, `ConditionResult`를 기준으로 하며, request lifecycle은 `RequestStatus`만 사용한다.
+`search_policy_chunks`는 `EvidenceChunk[]`를 반환하는 `app.ai.tools.policy_chunk_search_tool` 공통 wrapper를 사용한다.
 
 사용 위치:
 
@@ -246,6 +248,8 @@ Policy Assessment:
 - 정책 검색과 판단에 사용할 condition tag 추출
 - 추천 결과를 바꿀 가능성이 큰 경우에만 후속질문 후보 생성
 - 프로필 충돌 기록 생성
+
+`income` 누락처럼 추천 후보를 바로 막지 않는 정보는 `input_issues`에 남기되, 기본적으로 후속질문으로 lifecycle을 멈추지 않는다. `FOLLOW_UP_REQUIRED`는 region, stage/childAge 등 priority 3 이상의 핵심 조건 누락 또는 모호함에 사용한다.
 
 입력 예시:
 
@@ -519,7 +523,9 @@ recommendation_assessment
 eligibility_detail
 ```
 
-`recommendation_request.source_type`도 함께 사용하면 어떤 화면 또는 챗봇 요청에서 실행된 분석인지 추적할 수 있다.
+요청 생명주기는 추천 흐름의 `recommendation_request`, 지원 가능성 단건 분석의 `eligibility_request`에 각각 저장한다.
+`policy_assessment`는 두 request의 최종 정책 판단 결과를 저장하며, `recommendation_request.source_type` 또는 `eligibility_request.source_type`을 함께 사용하면 어떤 화면 또는 챗봇 요청에서 실행된 분석인지 추적할 수 있다.
+챗봇/정책상세/폼과의 연결은 FK 대신 `source_type`, `source_ref_id`를 사용한다. 이 값은 상태가 아니라 출처 추적 메타데이터이며, 처리 상태는 `request_status`만 사용한다.
 
 ### 4.3 Comparison Graph
 

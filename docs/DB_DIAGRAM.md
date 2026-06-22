@@ -153,14 +153,30 @@ indexes {
 Table recommendation_request {
 request_id bigint [pk, increment]
 user_id bigint [not null]
-chat_session_id bigint
-trigger_message_id bigint
-source_type varchar(30) [not null, default: 'CHAT', note: 'CHAT, FORM, POLICY_DETAIL, COMPARE']
-raw_query text [not null]
+source_type varchar(30) [not null, default: 'FORM', note: 'FORM, CHAT, POLICY_DETAIL, COMPARE']
+source_ref_id varchar(100) [note: 'loose source reference such as chat_message:123 or WLF00004611']
+raw_query text
 parsed_query_json jsonb [note: 'input parsing result before profile merge']
 merged_condition_json jsonb [note: 'normalized final condition set after profile merge']
 profile_conflict_json jsonb [note: 'conflicts between stored profile and current input']
 request_status varchar(50) [not null, default: 'READY']
+error_message text
+created_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+updated_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+}
+
+Table eligibility_request {
+request_id bigint [pk, increment]
+user_id bigint [not null]
+policy_id bigint [not null]
+source_type varchar(30) [not null, default: 'POLICY_DETAIL', note: 'POLICY_DETAIL, CHAT, FORM']
+source_ref_id varchar(100) [note: 'loose source reference such as chat_message:123 or WLF00004611']
+raw_query text
+parsed_query_json jsonb [note: 'input parsing result before profile merge']
+merged_condition_json jsonb [note: 'normalized final condition set after profile merge']
+profile_conflict_json jsonb [note: 'conflicts between stored profile and current input']
+request_status varchar(50) [not null, default: 'READY']
+error_message text
 created_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
 updated_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
 }
@@ -194,7 +210,9 @@ indexes {
 
 Table policy_assessment {
 assessment_id bigint [pk, increment]
-request_id bigint [not null]
+request_id bigint [note: 'legacy recommendation_request id, nullable for eligibility_detail']
+recommendation_request_id bigint
+eligibility_request_id bigint
 policy_id bigint [not null]
 
 assessment_type varchar(50) [not null, note: 'recommendation_assessment, eligibility_detail']
@@ -213,6 +231,8 @@ created_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
 
 indexes {
 (request_id, policy_id, assessment_type) [unique]
+(recommendation_request_id, policy_id, assessment_type)
+(eligibility_request_id, policy_id, assessment_type)
 }
 }
 Table assessment_evidence {
@@ -361,8 +381,9 @@ Ref: chat_message.chat_session_id > chat_session.chat_session_id [delete: cascad
 Ref: chat_message.parent_message_id > chat_message.chat_message_id [delete: set null]
 
 Ref: recommendation_request.user_id > users.user_id [delete: cascade]
-Ref: recommendation_request.chat_session_id > chat_session.chat_session_id [delete: set null]
-Ref: recommendation_request.trigger_message_id > chat_message.chat_message_id [delete: set null]
+
+Ref: eligibility_request.user_id > users.user_id [delete: cascade]
+Ref: eligibility_request.policy_id > policy.policy_id [delete: cascade]
 
 Ref: follow_up_question.request_id > recommendation_request.request_id [delete: cascade]
 Ref: follow_up_question.answer_message_id > chat_message.chat_message_id [delete: set null]
@@ -371,6 +392,8 @@ Ref: recommendation_candidate.request_id > recommendation_request.request_id [de
 Ref: recommendation_candidate.policy_id > policy.policy_id [delete: cascade]
 
 Ref: policy_assessment.request_id > recommendation_request.request_id [delete: cascade]
+Ref: policy_assessment.recommendation_request_id > recommendation_request.request_id [delete: cascade]
+Ref: policy_assessment.eligibility_request_id > eligibility_request.request_id [delete: cascade]
 Ref: policy_assessment.policy_id > policy.policy_id [delete: cascade]
 
 Ref: assessment_evidence.assessment_id > policy_assessment.assessment_id [delete: cascade]
