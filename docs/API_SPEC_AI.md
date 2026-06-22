@@ -939,14 +939,14 @@ type PolicyAiSummaryResponse = {
 ## 5. Internal Service and Graph Contracts
 
 ```yaml
-- id: recommendation_service_recommend
-  type: "service contract"
-  name: "RecommendationService.recommend"
+- id: recommendation_graph_run
+  type: "graph contract"
+  name: "RecommendationGraphRunner.run"
   category: "추천"
   owner: "추천/회원"
-  request: "user_id, raw_query?, selected_conditions?, source_type?, source_ref_id?"
-  response: "request_id, status, parsed_query_json, merged_condition_json, questions, recommendations"
-  notes: "외부 추천 요청 생성/조회 API 뒤에서 호출되는 유스케이스 계층. #77 request lifecycle을 재사용하며 ConditionAnalysis -> profile merge -> RecommendationGraphRunner -> CandidateSearch -> RAG evidence -> result_json 저장 순서로 호출한다."
+  request: "request_id, merged_condition_json"
+  response: "result_json"
+  notes: "외부 추천 요청 생성/조회 API 뒤에서 호출되는 유스케이스 계층. #77 request lifecycle을 재사용하며 ConditionAnalysis -> profile merge -> RecommendationGraphRunner(CandidateSearch -> RuleFilter -> CandidateSave -> ResultBuild) -> RAG evidence -> result_json 저장 순서로 호출한다."
 
 - id: condition_analysis_service_analyze
   type: "service contract"
@@ -993,20 +993,23 @@ type PolicyAiSummaryResponse = {
 
 - id: recommendation_candidate_service_search
   type: "service contract"
-  name: "RecommendationCandidateService.search"
+  name: "RecommendationCandidateService.search_candidates / rule_filter_candidates / save_candidates"
   category: "추천"
   owner: "추천/회원"
-  request: "merged_condition_json, policy_rules, policy_basic_info"
+  request: "request_id, merged_condition_json, limit"
   response_schema:
     candidates:
       - policy_id: "string"
         slug: "string"
         survived_reasons: "string[]"
+        candidate_status: "CANDIDATE | UNCERTAIN | EXCLUDED"
+        retrieval_score: "number"
+        rerank_score: "null"
         filter_match_json: "object"
     excluded:
       - policy_id: "string"
         reason: "string"
-  notes: "기능명세서의 정책 후보 검색. LLM이 모든 정책을 직접 읽지 않고, Rule Filter Node가 명확히 아닌 정책을 제외한다. 결과는 recommendation_candidate에 저장한다."
+  notes: "기능명세서의 정책 후보 검색. Candidate Search가 DB/RAG 기반 후보를 찾고 Rule Filter Node가 명확히 아닌 정책을 EXCLUDED로 분리한다. 애매한 조건은 UNCERTAIN으로 유지하며, 결과는 recommendation_candidate에 저장한다. LLM rerank 전까지 rerank_score는 null이다."
 
 - id: eligibility_service_analyze
   type: "service contract"

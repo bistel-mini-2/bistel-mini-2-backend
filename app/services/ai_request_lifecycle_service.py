@@ -13,7 +13,6 @@ from app.repositories.family_profile_repository import FamilyProfileRepository
 from app.repositories.user_repository import UserRepository
 from app.schemas.ai_contract import ConditionInput, RequestStatus
 from app.schemas.ai_request_schema import (
-    AiRequestCreate,
     AiRequestSnapshot,
     FollowUpQuestionItem,
     RecommendationEvidenceItem,
@@ -61,32 +60,6 @@ class AiRequestLifecycleService:
         )
         return self.to_snapshot(request_type, request)
 
-    async def create_from_payload(
-        self,
-        db: AsyncSession,
-        payload: AiRequestCreate,
-    ) -> AiRequestSnapshot:
-        policy_id = None
-        if payload.request_type == "eligibility":
-            if payload.policy_id is None:
-                raise AppException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                    code=ErrorCode.VALIDATION_ERROR,
-                    message="policy_id is required for eligibility request",
-                )
-            policy_id = await self.resolve_policy_id(db, payload.policy_id)
-
-        return await self.create_request(
-            db=db,
-            user_id=payload.user_id,
-            request_type=payload.request_type,
-            source_type=payload.source_type,
-            source_ref_id=payload.source_ref_id,
-            raw_query=payload.raw_query,
-            selected_conditions=payload.selected_conditions,
-            policy_id=policy_id,
-        )
-
     async def create_eligibility_request(
         self,
         db: AsyncSession,
@@ -107,25 +80,6 @@ class AiRequestLifecycleService:
             selected_conditions=selected_conditions,
             policy_id=await self.resolve_policy_id(db, policy_identifier),
         )
-
-    async def update_payload(
-        self,
-        db: AsyncSession,
-        request_type: str,
-        request_id: int,
-        parsed_query_json: dict[str, Any] | None = None,
-        merged_condition_json: dict[str, Any] | None = None,
-        profile_conflict_json: list[dict[str, Any]] | None = None,
-    ) -> AiRequestSnapshot:
-        request = await self._get_request_or_raise(db, request_type, request_id)
-        request = await self.repository.update_payload(
-            db=db,
-            request=request,
-            parsed_query_json=parsed_query_json,
-            merged_condition_json=merged_condition_json,
-            profile_conflict_json=profile_conflict_json,
-        )
-        return self.to_snapshot(request_type, request)
 
     async def mark_processing(
         self,
@@ -250,6 +204,7 @@ class AiRequestLifecycleService:
             if request_type == "recommendation":
                 result_json = await self._recommendation_graph().run(
                     db=db,
+                    request_id=request_id,
                     merged_condition_json=condition_result.merged_condition_json,
                 )
                 await self.repository.update_result(

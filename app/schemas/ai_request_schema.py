@@ -5,16 +5,6 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from app.schemas.ai_contract import RequestStatus
 
 
-class AiRequestCreate(BaseModel):
-    request_type: Literal["recommendation", "eligibility"] = "recommendation"
-    user_id: int
-    source_type: str = "FORM"
-    source_ref_id: str | None = None
-    raw_query: str | None = None
-    selected_conditions: dict[str, Any] | None = None
-    policy_id: int | str | None = None
-
-
 class RecommendationRequestCreate(BaseModel):
     source_type: str = "FORM"
     source_ref_id: str | None = None
