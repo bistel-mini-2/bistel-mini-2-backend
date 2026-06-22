@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 
-load_dotenv()
+load_dotenv(override=True)
 
 from app.api.apply_controller import (
     checklist_router as apply_checklist_router,
