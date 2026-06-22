@@ -5,6 +5,9 @@ from typing import Any
 from app.ai.tools.policy_chunk_search_tool import search_policy_chunks
 from app.common.policy_types import LIFE_STAGE_TO_DB
 from app.schemas.ai_contract import EvidenceChunk
+from app.services.recommendation_assessment_service import (
+    RecommendationPolicyAssessment,
+)
 from app.services.recommendation_candidate_service import (
     CANDIDATE_STATUS_EXCLUDED,
     CANDIDATE_STATUS_UNCERTAIN,
@@ -29,13 +32,15 @@ class RecommendationService:
         merged_condition_json: dict[str, Any],
         candidates: list[PolicyCandidate],
         selected_candidates: list[PolicyCandidate] | None = None,
+        assessments: list[RecommendationPolicyAssessment] | None = None,
     ) -> dict[str, Any]:
+        assessments = assessments or []
+        assessment_by_policy = self._assessment_by_policy(assessments)
         if selected_candidates is None:
-            selected_candidates = [
-                candidate
-                for candidate in candidates
-                if candidate.candidate_status != CANDIDATE_STATUS_EXCLUDED
-            ][: self.result_limit]
+            selected_candidates = self._select_candidates(
+                candidates=candidates,
+                assessment_by_policy=assessment_by_policy,
+            )
         evidences, evidence_error = await self._search_evidences(
             condition=merged_condition_json,
             policy_ids=[
@@ -48,10 +53,11 @@ class RecommendationService:
             self._to_result_item(
                 candidate,
                 evidence_by_policy.get(str(candidate.policy.policy_id), []),
+                assessment_by_policy.get(str(candidate.policy.policy_id)),
             )
             for candidate in selected_candidates
         ]
-        results.sort(key=lambda item: item["match_score"], reverse=True)
+        results.sort(key=self._result_item_sort_key)
         return {
             "results": results,
             "recommendations": results,
@@ -68,6 +74,19 @@ class RecommendationService:
                 "uncertain_candidate_count": self._candidate_count(
                     candidates,
                     CANDIDATE_STATUS_UNCERTAIN,
+                ),
+                "assessment_count": len(assessments),
+                "recommendable_count": self._assessment_count(
+                    assessments,
+                    "RECOMMENDABLE",
+                ),
+                "needs_confirmation_count": self._assessment_count(
+                    assessments,
+                    "NEEDS_CONFIRMATION",
+                ),
+                "difficult_to_recommend_count": self._assessment_count(
+                    assessments,
+                    "DIFFICULT_TO_RECOMMEND",
                 ),
             },
         }
@@ -97,14 +116,19 @@ class RecommendationService:
         self,
         candidate: PolicyCandidate,
         evidences: list[EvidenceChunk],
+        assessment: RecommendationPolicyAssessment | None = None,
     ) -> dict[str, Any]:
         evidence_items = [evidence.model_dump(mode="json") for evidence in evidences]
         match_score = min(
             round(candidate.match_score + (0.05 if evidence_items else 0), 4),
             1.0,
         )
-        reason = self._reason(candidate.matched_rules, bool(evidence_items))
-        return {
+        reason = (
+            assessment.reason_summary
+            if assessment is not None
+            else self._reason(candidate.matched_rules, bool(evidence_items))
+        )
+        item = {
             "policy_id": str(candidate.policy.policy_id),
             "policy_code": candidate.policy.policy_code,
             "slug": candidate.policy.policy_code,
@@ -122,6 +146,21 @@ class RecommendationService:
             "evidence": evidence_items,
             "evidences": evidence_items,
         }
+        if assessment is not None:
+            item.update(
+                {
+                    "user_status": assessment.user_status.value,
+                    "assessment_status": assessment.assessment_status.value,
+                    "confidence_score": assessment.confidence_score,
+                    "matched_conditions": assessment.matched_conditions_json,
+                    "missing_conditions": assessment.missing_conditions_json,
+                    "conflicting_conditions": (
+                        assessment.conflicting_conditions_json
+                    ),
+                    "manual_check_points": assessment.manual_check_points_json,
+                }
+            )
+        return item
 
     def _evidence_query(self, condition: dict[str, Any]) -> str:
         needs = " ".join(self._string_list(condition.get("needs")))
@@ -213,4 +252,78 @@ class RecommendationService:
             1
             for candidate in candidates
             if candidate.candidate_status == candidate_status
+        )
+
+    def _assessment_by_policy(
+        self,
+        assessments: list[RecommendationPolicyAssessment],
+    ) -> dict[str, RecommendationPolicyAssessment]:
+        return {
+            str(assessment.policy_id): assessment
+            for assessment in assessments
+        }
+
+    def _select_candidates(
+        self,
+        candidates: list[PolicyCandidate],
+        assessment_by_policy: dict[str, RecommendationPolicyAssessment],
+    ) -> list[PolicyCandidate]:
+        if not assessment_by_policy:
+            return [
+                candidate
+                for candidate in candidates
+                if candidate.candidate_status != CANDIDATE_STATUS_EXCLUDED
+            ][: self.result_limit]
+
+        selected = [
+            candidate
+            for candidate in candidates
+            if (
+                assessment_by_policy.get(str(candidate.policy.policy_id))
+                and assessment_by_policy[str(candidate.policy.policy_id)].selected_for_result
+            )
+        ]
+        selected.sort(
+            key=lambda candidate: self._result_sort_key(
+                candidate,
+                assessment_by_policy[str(candidate.policy.policy_id)],
+            )
+        )
+        return selected[: self.result_limit]
+
+    def _result_sort_key(
+        self,
+        candidate: PolicyCandidate,
+        assessment: RecommendationPolicyAssessment,
+    ) -> tuple[int, float]:
+        priority_by_user_status = {
+            "RECOMMENDABLE": 0,
+            "NEEDS_CONFIRMATION": 1,
+            "DIFFICULT_TO_RECOMMEND": 2,
+        }
+        return (
+            priority_by_user_status[assessment.user_status.value],
+            -candidate.retrieval_score,
+        )
+
+    def _result_item_sort_key(self, item: dict[str, Any]) -> tuple[int, float]:
+        priority_by_user_status = {
+            "RECOMMENDABLE": 0,
+            "NEEDS_CONFIRMATION": 1,
+            "DIFFICULT_TO_RECOMMEND": 2,
+        }
+        return (
+            priority_by_user_status.get(str(item.get("user_status") or ""), 1),
+            -float(item.get("retrieval_score") or item.get("match_score") or 0),
+        )
+
+    def _assessment_count(
+        self,
+        assessments: list[RecommendationPolicyAssessment],
+        user_status: str,
+    ) -> int:
+        return sum(
+            1
+            for assessment in assessments
+            if assessment.user_status.value == user_status
         )

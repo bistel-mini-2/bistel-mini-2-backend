@@ -174,12 +174,17 @@ class AiRequestLifecycleService:
                     profile_snapshot=await self._profile_snapshot(db, request.user_id),
                 )
             )
+            input_issues_json = [
+                issue.model_dump(mode="json")
+                for issue in condition_result.input_issues
+            ]
+            profile_conflict_json = [
+                conflict.model_dump(mode="json")
+                for conflict in condition_result.profile_conflicts
+            ]
             parsed_result = {
                 **condition_result.parsed_query_json,
-                "input_issues": [
-                    issue.model_dump(mode="json")
-                    for issue in condition_result.input_issues
-                ],
+                "input_issues": input_issues_json,
                 "questions": [
                     candidate.model_dump(mode="json")
                     for candidate in condition_result.follow_up_candidates
@@ -190,10 +195,7 @@ class AiRequestLifecycleService:
                 request=request,
                 parsed_query_json=parsed_result,
                 merged_condition_json=condition_result.merged_condition_json,
-                profile_conflict_json=[
-                    conflict.model_dump(mode="json")
-                    for conflict in condition_result.profile_conflicts
-                ],
+                profile_conflict_json=profile_conflict_json,
             )
             if condition_result.follow_up_candidates:
                 return await self.mark_follow_up_required(
@@ -206,6 +208,8 @@ class AiRequestLifecycleService:
                     db=db,
                     request_id=request_id,
                     merged_condition_json=condition_result.merged_condition_json,
+                    input_issues=input_issues_json,
+                    profile_conflict_json=profile_conflict_json,
                 )
                 await self.repository.update_result(
                     db=db,
