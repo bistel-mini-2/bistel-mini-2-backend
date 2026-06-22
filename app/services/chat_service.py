@@ -19,7 +19,7 @@ from app.schemas.chat_schema import (
     ChatSessionListItem,
     ChatSessionListResponse,
 )
-from app.services.chat_supervisor_graph import (
+from app.ai.graphs.chat_supervisor_graph import (
     HISTORY_LIMIT,
     chat_supervisor_graph,
 )
