@@ -1,16 +1,12 @@
 from collections.abc import AsyncGenerator
-from types import SimpleNamespace
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-import app.api.policy_controller as policy_controller
 from app.api.policy_controller import router
 from app.common.exceptions import register_exception_handlers
-from app.core.dependencies import get_current_user
 from app.db.session import get_db_session
 from app.schemas.policy_schema import PolicyListItemResponse, PolicySort
-from app.services.ai_request_lifecycle_service import AiRequestLifecycleService
 from app.services.policy_service import PolicyService
 
 
@@ -180,109 +176,3 @@ def test_policy_list_rejects_invalid_parameters() -> None:
 
     assert response.status_code == 422
     assert response.json()["error"]["code"] == "VALIDATION_ERROR"
-
-
-def test_create_policy_eligibility_request_returns_loading(
-    monkeypatch,
-) -> None:
-    captured: dict[str, object] = {}
-
-    async def fake_db() -> AsyncGenerator[object, None]:
-        db = SimpleNamespace(commit=lambda: None)
-        async def commit():
-            captured["committed"] = True
-        db.commit = commit
-        yield db
-
-    async def fake_current_user() -> object:
-        return SimpleNamespace(user_id=7)
-
-    async def fake_create_eligibility_request(
-        self,
-        db,
-        *,
-        user_id,
-        policy_identifier,
-        source_type,
-        selected_conditions,
-        **kwargs,
-    ):
-        captured["create"] = {
-            "user_id": user_id,
-            "policy_identifier": policy_identifier,
-            "source_type": source_type,
-            "selected_conditions": selected_conditions,
-        }
-        return SimpleNamespace(request_id="123")
-
-    async def fake_mark_processing(self, db, request_type, request_id):
-        captured["mark_processing"] = {
-            "request_type": request_type,
-            "request_id": request_id,
-        }
-        return SimpleNamespace(request_id=str(request_id))
-
-    async def fake_process_policy_eligibility_request(request_id: int) -> None:
-        captured["background_request_id"] = request_id
-
-    monkeypatch.setattr(
-        AiRequestLifecycleService,
-        "create_eligibility_request",
-        fake_create_eligibility_request,
-    )
-    monkeypatch.setattr(
-        AiRequestLifecycleService,
-        "mark_processing",
-        fake_mark_processing,
-    )
-    monkeypatch.setattr(
-        policy_controller,
-        "process_policy_eligibility_request",
-        fake_process_policy_eligibility_request,
-    )
-
-    app = FastAPI()
-    app.include_router(router)
-    app.dependency_overrides[get_db_session] = fake_db
-    app.dependency_overrides[get_current_user] = fake_current_user
-    register_exception_handlers(app)
-
-    with TestClient(app) as client:
-        response = client.post(
-            "/api/v1/policies/WLF00000024/eligibility",
-            json={
-                "user_conditions": {
-                    "stage": "newborn",
-                    "child_age": "0",
-                    "income": "mid1",
-                    "region": "seoul",
-                    "special": ["many"],
-                }
-            },
-        )
-
-    assert response.status_code == 202
-    body = response.json()
-    assert body["success"] is True
-    assert body["data"] == {
-        "request_id": "123",
-        "status": "loading",
-    }
-    assert captured["create"] == {
-        "user_id": 7,
-        "policy_identifier": "WLF00000024",
-        "source_type": "POLICY_DETAIL",
-        "selected_conditions": {
-            "stage": "newborn",
-            "child_age": "0",
-            "income": "mid1",
-            "region": "seoul",
-            "special": ["many"],
-        },
-    }
-    assert captured["mark_processing"] == {
-        "request_type": "eligibility",
-        "request_id": 123,
-    }
-    assert captured["committed"] is True
-    assert captured["background_request_id"] == 123

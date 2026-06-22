@@ -24,6 +24,13 @@ class EligibilityRequestCreate(BaseModel):
     source_ref_id: str | None = None
     raw_query: str | None = None
     selected_conditions: dict[str, Any] | None = None
+    user_conditions: dict[str, Any] | None = None
+
+    @model_validator(mode="after")
+    def normalize_condition_input(self) -> "EligibilityRequestCreate":
+        if self.selected_conditions is None and self.user_conditions is not None:
+            self.selected_conditions = self.user_conditions
+        return self
 
 
 class AiRequestSnapshot(BaseModel):
