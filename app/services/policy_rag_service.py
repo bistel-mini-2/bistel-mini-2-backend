@@ -104,16 +104,34 @@ class PolicyRagService:
         if source_type:
             conditions.append({"source_type": source_type})
 
-        policy_keys = [str(policy_id) for policy_id in policy_ids or []]
-        if policy_keys:
-            conditions.append(
-                {
-                    "$or": [
-                        {"policy_id": {"$in": policy_keys}},
-                        {"policy_code": {"$in": policy_keys}},
-                    ]
-                }
+        policy_id_values: list[int] = []
+        policy_codes: list[str] = []
+        for policy_id in policy_ids or []:
+            if isinstance(policy_id, int):
+                policy_id_values.append(policy_id)
+                continue
+
+            policy_key = str(policy_id).strip()
+            if not policy_key:
+                continue
+            if policy_key.isdecimal():
+                policy_id_values.append(int(policy_key))
+            else:
+                policy_codes.append(policy_key)
+
+        policy_conditions: list[dict[str, Any]] = []
+        if policy_id_values:
+            policy_conditions.append(
+                {"policy_id": {"$in": list(dict.fromkeys(policy_id_values))}}
             )
+        if policy_codes:
+            policy_conditions.append(
+                {"policy_code": {"$in": list(dict.fromkeys(policy_codes))}}
+            )
+        if len(policy_conditions) == 1:
+            conditions.append(policy_conditions[0])
+        elif policy_conditions:
+            conditions.append({"$or": policy_conditions})
 
         if not conditions:
             return None

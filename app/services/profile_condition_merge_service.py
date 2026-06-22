@@ -98,6 +98,7 @@ class ProfileConditionMergeService:
             "child_age": "childAge",
             "child_age_range": "childAge",
             "income_level": "income",
+            "income_bracket": "income",
             "region_code": "region",
             "special_conditions": "special",
             "special_flags": "special",
