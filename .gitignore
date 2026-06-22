@@ -92,3 +92,8 @@ dist/
 *.egg-info/
 
 .claude
+
+# =========================
+# Resume / Personal (비공개)
+# =========================
+resume/
