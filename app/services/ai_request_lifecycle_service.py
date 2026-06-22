@@ -12,7 +12,15 @@ from app.repositories.ai_request_repository import AiRequestModel, AiRequestRepo
 from app.repositories.family_profile_repository import FamilyProfileRepository
 from app.repositories.user_repository import UserRepository
 from app.schemas.ai_contract import ConditionInput, RequestStatus
-from app.schemas.ai_request_schema import AiRequestCreate, AiRequestSnapshot
+from app.schemas.ai_request_schema import (
+    AiRequestCreate,
+    AiRequestSnapshot,
+    FollowUpQuestionItem,
+    RecommendationEvidenceItem,
+    RecommendationPollingResponse,
+    RecommendationPollingStatus,
+    RecommendationResultItem,
+)
 from app.services.recommendation_service import RecommendationService
 
 
@@ -26,9 +34,8 @@ class AiRequestLifecycleService:
     ) -> None:
         self.repository = repository or AiRequestRepository()
         self.condition_agent = condition_agent or ConditionAgent()
-        self.recommendation_graph = recommendation_graph or RecommendationGraphRunner(
-            recommendation_service=recommendation_service
-        )
+        self.recommendation_graph = recommendation_graph
+        self.recommendation_service = recommendation_service
 
     async def create_request(
         self,
@@ -186,6 +193,17 @@ class AiRequestLifecycleService:
             raise self._not_found(request_type, request_id)
         return self.to_snapshot(request_type, request)
 
+    async def get_recommendation_polling_result(
+        self,
+        db: AsyncSession,
+        request_id: int,
+        user_id: int,
+    ) -> RecommendationPollingResponse:
+        request = await self._get_request_or_raise(db, "recommendation", request_id)
+        if request.user_id != user_id:
+            raise self._not_found("recommendation", request_id)
+        return self.to_recommendation_polling_response(request)
+
     async def process_condition_request(
         self,
         db: AsyncSession,
@@ -230,7 +248,7 @@ class AiRequestLifecycleService:
                     request_id,
                 )
             if request_type == "recommendation":
-                result_json = await self.recommendation_graph.run(
+                result_json = await self._recommendation_graph().run(
                     db=db,
                     merged_condition_json=condition_result.merged_condition_json,
                 )
@@ -334,6 +352,140 @@ class AiRequestLifecycleService:
             input_issues=list(parsed_query_json.get("input_issues") or []),
             error_message=request.error_message,
         )
+
+    def to_recommendation_polling_response(
+        self,
+        request: AiRequestModel,
+    ) -> RecommendationPollingResponse:
+        request_status = RequestStatus(request.request_status)
+        polling_status = self._polling_status(request_status)
+        follow_up_questions = (
+            self._follow_up_questions(request.parsed_query_json or {})
+            if request_status == RequestStatus.FOLLOW_UP_REQUIRED
+            else []
+        )
+        results = (
+            self._recommendation_results(
+                request.result_json
+                if hasattr(request, "result_json") and request.result_json is not None
+                else {}
+            )
+            if request_status == RequestStatus.COMPLETED
+            else []
+        )
+        return RecommendationPollingResponse(
+            request_id=str(request.request_id),
+            status=polling_status,
+            results=results,
+            recommendations=results,
+            follow_up_questions=follow_up_questions,
+            error_message=(
+                request.error_message if request_status == RequestStatus.FAILED else None
+            ),
+        )
+
+    def _polling_status(
+        self,
+        request_status: RequestStatus,
+    ) -> RecommendationPollingStatus:
+        if request_status in {RequestStatus.READY, RequestStatus.PROCESSING}:
+            return "loading"
+        if request_status in {
+            RequestStatus.COMPLETED,
+            RequestStatus.FOLLOW_UP_REQUIRED,
+        }:
+            return "done"
+        return "error"
+
+    def _recommendation_results(
+        self,
+        result_json: dict[str, Any],
+    ) -> list[RecommendationResultItem]:
+        raw_results = result_json.get("results") or result_json.get("recommendations")
+        if not isinstance(raw_results, list):
+            return []
+        return [
+            self._recommendation_result_item(item)
+            for item in raw_results
+            if isinstance(item, dict)
+        ]
+
+    def _recommendation_result_item(
+        self,
+        item: dict[str, Any],
+    ) -> RecommendationResultItem:
+        raw_evidences = item.get("evidence") or item.get("evidences") or []
+        evidences = [
+            self._recommendation_evidence_item(evidence, item.get("policy_id"))
+            for evidence in raw_evidences
+            if isinstance(evidence, dict)
+        ]
+        normalized_item = {
+            key: value
+            for key, value in item.items()
+            if key not in {"evidence", "evidences", "follow_up_questions"}
+        }
+        normalized_item.update(
+            {
+                "policy_id": str(item.get("policy_id") or ""),
+                "policy_name": str(item.get("policy_name") or ""),
+                "summary": str(
+                    item.get("summary") or item.get("benefit_summary") or ""
+                ),
+                "match_score": self._to_float_or_none(item.get("match_score")),
+                "evidence": evidences,
+                "follow_up_questions": [],
+            }
+        )
+        return RecommendationResultItem.model_validate(normalized_item)
+
+    def _recommendation_evidence_item(
+        self,
+        item: dict[str, Any],
+        fallback_policy_id: Any,
+    ) -> RecommendationEvidenceItem:
+        return RecommendationEvidenceItem(
+            chunk_id=item.get("chunk_id") or "",
+            policy_id=item.get("policy_id") or fallback_policy_id or "",
+            snippet=str(item.get("snippet") or ""),
+            source_title=str(item.get("source_title") or ""),
+            source_url=str(item.get("source_url") or ""),
+            score=self._to_float_or_none(item.get("score")),
+            evidence_role=item.get("evidence_role"),
+        )
+
+    def _follow_up_questions(
+        self,
+        parsed_query_json: dict[str, Any],
+    ) -> list[FollowUpQuestionItem]:
+        questions = parsed_query_json.get("questions") or []
+        if not isinstance(questions, list):
+            return []
+        return [
+            FollowUpQuestionItem(
+                field_name=str(question.get("field_name") or ""),
+                question_text=str(question.get("question_text") or ""),
+                reason=question.get("reason"),
+                priority=int(question.get("priority") or 0),
+            )
+            for question in questions
+            if isinstance(question, dict)
+        ][:2]
+
+    def _to_float_or_none(self, value: Any) -> float | None:
+        if value is None:
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    def _recommendation_graph(self) -> RecommendationGraphRunner:
+        if self.recommendation_graph is None:
+            self.recommendation_graph = RecommendationGraphRunner(
+                recommendation_service=self.recommendation_service
+            )
+        return self.recommendation_graph
 
     async def _ensure_user_exists(self, db: AsyncSession, user_id: int) -> None:
         user = await UserRepository.find_by_id(db, user_id)

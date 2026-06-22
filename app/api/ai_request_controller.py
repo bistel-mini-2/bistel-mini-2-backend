@@ -7,6 +7,7 @@ from app.db.session import AsyncSessionLocal
 from app.schemas.ai_request_schema import (
     AiRequestSnapshot,
     EligibilityRequestCreate,
+    RecommendationPollingResponse,
     RecommendationRequestCreate,
 )
 from app.services.ai_request_lifecycle_service import AiRequestLifecycleService
@@ -26,6 +27,15 @@ def _request_meta(snapshot: AiRequestSnapshot) -> dict[str, object]:
     return {
         "request_id": snapshot.request_id,
         "follow_up_required": snapshot.status.value == "FOLLOW_UP_REQUIRED",
+    }
+
+
+def _recommendation_polling_meta(
+    response: RecommendationPollingResponse,
+) -> dict[str, object]:
+    return {
+        "request_id": response.request_id,
+        "follow_up_required": bool(response.follow_up_questions),
     }
 
 
@@ -86,13 +96,12 @@ async def get_recommendation_request(
     current_user: CurrentUserDep,
 ) -> JSONResponse:
     service = AiRequestLifecycleService()
-    snapshot = await service.get_request(
+    response = await service.get_recommendation_polling_result(
         db=db,
-        request_type="recommendation",
         request_id=request_id,
         user_id=current_user.user_id,
     )
-    return success_response(data=snapshot, meta=_request_meta(snapshot))
+    return success_response(data=response, meta=_recommendation_polling_meta(response))
 
 
 @eligibility_router.post("/requests", status_code=status.HTTP_202_ACCEPTED)

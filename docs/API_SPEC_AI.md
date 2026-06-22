@@ -70,7 +70,7 @@ type UserStatus =
 - `status` is a `RequestStatus` and controls request lifecycle UI.
 - `user_status` is a `UserStatus` and controls user-facing recommendation/eligibility judgment UI.
 - `AssessmentStatus` is for backend internal judgment only. If it appears in a response, frontend screens still prefer `user_status`.
-- `loading`, `success`, `warning`, and `error` are frontend UI variants, not API status values.
+- `loading`, `success`, `warning`, and `error` are frontend UI variants, not API status values. Exception: recommendation polling `GET /api/v1/recommendations/requests/{request_id}` returns `loading | done | error` as its frontend-facing polling status while DB `request_status` remains `RequestStatus`.
 - Condition Agent, Policy Assessment Agent, and Graph implementations import shared input/output contracts from `app.schemas.ai_contract`; enum values must stay identical to this section.
 - Condition Agent uses `ConditionInput` and `ConditionResult`; request lifecycle rows are stored in `recommendation_request` or `eligibility_request`, and `search_policy_chunks` returns `EvidenceChunk[]`.
 
@@ -530,35 +530,35 @@ type PolicyAiSummaryResponse = {
     success: true
     data:
       request_id: "string"
-      status: "READY | PROCESSING | COMPLETED | FOLLOW_UP_REQUIRED | FAILED"
-      user_status: "RECOMMENDABLE | NEEDS_CONFIRMATION | DIFFICULT_TO_RECOMMEND?"
-      reason_summary: "string?"
-      recommendations:
+      status: "loading | done | error"
+      results:
         - policy_id: "string"
           slug: "string"
           policy_name: "string"
           summary: "string"
           benefit_summary: "string"
-          user_status: "UserStatus"
           reason_summary: "string"
           match_score: "number?"
-          evidences:
-            - snippet: "string"
+          evidence:
+            - chunk_id: "string | number"
+              policy_id: "string | number"
+              snippet: "string"
               source_title: "string"
               source_url: "string"
-              evidence_role: "string"
-      results: "recommendations와 동일한 request-scoped 추천 결과 배열"
-      result_json: "추천 결과 저장 원본 JSON"
-      questions:
-        - follow_up_id: "string"
-          field_name: "string"
+              score: "number?"
+              evidence_role: "string?"
+          follow_up_questions: []
+      recommendations: "results와 동일한 호환 필드"
+      follow_up_questions:
+        - field_name: "string"
           question_text: "string"
-          reason: "string"
-      input_summary: "SelectedConditions?"
+          reason: "string?"
+          priority: "number"
+      error_message: "string?"
     meta:
       request_id: "string"
       follow_up_required: "boolean"
-  notes: "FOLLOW_UP_REQUIRED이면 questions를 우선 사용. COMPLETED이면 recommendation_request.result_json 기반 recommendations/results를 반환한다. 결과 화면은 recommendations, summary, slug/policy_id, request_id가 필요."
+  notes: "GET은 ConditionAgent, RecommendationGraphRunner, LLM, PolicyAssessment, RAG 검색을 실행하지 않고 저장된 request_status/result_json만 읽는다. READY/PROCESSING은 loading, COMPLETED/FOLLOW_UP_REQUIRED는 done, FAILED는 error로 변환한다. COMPLETED이면 result_json.results -> result_json.recommendations 순서로 fallback하고, FOLLOW_UP_REQUIRED이면 parsed_query_json.questions를 최대 2개 반환한다."
 
 - id: recommendation_save
   name: "추천 결과 저장"

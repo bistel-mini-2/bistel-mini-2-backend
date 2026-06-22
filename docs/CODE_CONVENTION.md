@@ -88,9 +88,10 @@ app/db/models/policy.py
 
 ## AI 상태 작성 규칙
 
-- API 응답의 `status` 필드는 `app/common/ai_status.py`의 `RequestStatus` 값을 사용합니다.
+- API 응답의 `status` 필드는 기본적으로 `app/common/ai_status.py`의 `RequestStatus` 값을 사용합니다.
 - `status`에는 `READY`, `PROCESSING`, `COMPLETED`, `FOLLOW_UP_REQUIRED`, `FAILED`만 내려줍니다.
 - `loading`, `done`, `error`, `success`, `warning`은 프론트 UI variant이며 API 값으로 내려주지 않습니다.
+- 예외: 추천 폴링 조회(`GET /api/v1/recommendations/requests/{request_id}`)는 저장된 `RequestStatus`를 `loading | done | error`로 변환해 내려줍니다.
 - 내부 판단 상태는 `AssessmentStatus`를 사용하고, 사용자 노출 판단은 `map_assessment_to_user_status()`로 `UserStatus`에 매핑합니다.
 - 상세 규칙은 `docs/API_SPEC_AI.md`와 `docs/FIELD_MAPPING.md`를 기준으로 합니다.
 

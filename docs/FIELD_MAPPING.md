@@ -161,7 +161,8 @@ AI 기능(추천, 지원가능성 분석, 정책 AI 요약)은 상태를 3계층
 ### RequestStatus — 비동기 요청 생명주기
 
 추천 요청(`recommendation_request`), 지원가능성 요청(`eligibility_request`), 정책 AI 요약 요청의 처리 단계.
-API 응답의 `status` 필드는 반드시 아래 `RequestStatus` 값만 사용한다.
+API 응답의 `status` 필드는 기본적으로 아래 `RequestStatus` 값만 사용한다.
+예외적으로 추천 폴링 조회(`GET /api/v1/recommendations/requests/{request_id}`)는 프론트 폴링 편의를 위해 저장된 `RequestStatus`를 `loading | done | error`로 변환해 내려준다.
 
 | 값 | 의미 |
 |----|------|
@@ -171,8 +172,8 @@ API 응답의 `status` 필드는 반드시 아래 `RequestStatus` 값만 사용�
 | `FOLLOW_UP_REQUIRED` | 후속 질문 필요 (결과 확정 전) |
 | `FAILED` | 처리 실패 |
 
-`loading`, `success`, `warning`, `error`는 프론트 UI variant이며 API status 값이 아니다.
-API `status` 값으로 `loading`, `done`, `error`, `PENDING`, `PARTIAL`을 내려주지 않는다.
+`loading`, `success`, `warning`, `error`는 기본적으로 프론트 UI variant이며 API status 값이 아니다.
+추천 폴링 조회 외의 API `status` 값으로 `loading`, `done`, `error`, `PENDING`, `PARTIAL`을 내려주지 않는다.
 
 프론트 UI variant 매핑은 다음 기준을 따른다.
 
