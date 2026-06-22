@@ -3,7 +3,7 @@ from fastapi.responses import JSONResponse
 
 from app.common.response import success_response
 from app.core.dependencies import CurrentUserDep, DbSessionDep
-from app.schemas.chat_schema import ChatSessionCreateRequest
+from app.schemas.chat_schema import ChatMessageSendRequest, ChatSessionCreateRequest
 from app.services.chat_service import ChatService
 
 
@@ -41,3 +41,22 @@ async def list_chat_messages(
         db, user_id=current_user.user_id, chat_session_id=chat_session_id
     )
     return success_response(data=response)
+
+
+@router.post(
+    "/sessions/{chat_session_id}/messages",
+    status_code=status.HTTP_201_CREATED,
+)
+async def send_chat_message(
+    chat_session_id: int,
+    payload: ChatMessageSendRequest,
+    db: DbSessionDep,
+    current_user: CurrentUserDep,
+) -> JSONResponse:
+    response = await ChatService.send_message(
+        db,
+        user_id=current_user.user_id,
+        chat_session_id=chat_session_id,
+        content=payload.content,
+    )
+    return success_response(data=response, status_code=status.HTTP_201_CREATED)
