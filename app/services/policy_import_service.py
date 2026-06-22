@@ -13,7 +13,7 @@ class PolicyImportService:
         self.logger = logging.getLogger(f"{__name__}.PolicyImportService")
 
     async def import_raw_policies(self) -> PolicyImportResponse:
-        self.logger.info("Import raw policy rows")
+        self.logger.info("원천 정책 데이터 import 시작")
         async with psycopg_pool.connection() as conn:
             async with conn.transaction():
                 return await self._import_raw_policies_with_connection(conn)

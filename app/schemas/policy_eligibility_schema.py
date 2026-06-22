@@ -9,7 +9,7 @@ class PolicyEligibilityRequestCreate(BaseModel):
     @model_validator(mode="after")
     def validate_user_conditions(self) -> "PolicyEligibilityRequestCreate":
         if not self.user_conditions:
-            raise ValueError("user_conditions is required")
+            raise ValueError("user_conditions는 필수입니다.")
         return self
 
 

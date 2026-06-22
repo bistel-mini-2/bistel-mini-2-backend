@@ -28,7 +28,7 @@ async def policy_raw_import_page() -> FileResponse:
 @router.get("/init-db")
 async def init_db(db: DbSessionDep) -> dict[str, str]:
     await PolicyDataService.create_raw_import_table(db)
-    return {"message": "policy_raw_import table is ready"}
+    return {"message": "policy_raw_import 테이블 준비 완료"}
 
 
 @router.get("/list")
@@ -51,7 +51,7 @@ async def welfare_list(
     onap_psblt_yn: Annotated[str | None, Query(alias="onapPsbltYn")] = None,
     order_by: Annotated[str | None, Query(alias="orderBy")] = None,
 ) -> Response:
-    logger.info("Fetch welfare policy list XML")
+    logger.info("복지 정책 목록 XML 조회")
     xml_text = PolicyDataService.get_welfare_list_xml(
         call_tp=call_tp,
         page_no=page_no,
@@ -89,7 +89,7 @@ async def welfare_list_save(
     onap_psblt_yn: Annotated[str | None, Query(alias="onapPsbltYn")] = None,
     order_by: Annotated[str | None, Query(alias="orderBy")] = None,
 ) -> PolicyRawListSaveResponse:
-    logger.info("Fetch and save welfare policy list")
+    logger.info("복지 정책 목록 조회 및 저장")
     await PolicyDataService.create_raw_import_table(db)
     xml_text = PolicyDataService.get_welfare_list_xml(
         call_tp=call_tp,
@@ -113,7 +113,7 @@ async def welfare_detail(
     call_tp: Annotated[str, Query(alias="callTp")] = "D",
     serv_id: Annotated[str, Query(alias="servId")] = "",
 ) -> Response:
-    logger.info("Fetch welfare policy detail XML")
+    logger.info("복지 정책 상세 XML 조회")
     xml_text = PolicyDataService.get_welfare_detail_xml(
         call_tp=call_tp,
         serv_id=serv_id,
@@ -127,7 +127,7 @@ async def welfare_detail_save(
     call_tp: Annotated[str, Query(alias="callTp")] = "D",
     serv_id: Annotated[str, Query(alias="servId")] = "",
 ) -> PolicyRawDetailSaveResponse:
-    logger.info("Fetch and save welfare policy detail")
+    logger.info("복지 정책 상세 조회 및 저장")
     await PolicyDataService.create_raw_import_table(db)
     xml_text = PolicyDataService.get_welfare_detail_xml(
         call_tp=call_tp,
@@ -143,7 +143,7 @@ async def welfare_detail_save_pending(
     call_tp: Annotated[str, Query(alias="callTp")] = "D",
     limit: Annotated[int, Query(ge=1, le=100)] = 10,
 ) -> PolicyRawPendingSaveResponse:
-    logger.info("Fetch and save pending welfare policy details")
+    logger.info("미저장 복지 정책 상세 조회 및 저장")
     await PolicyDataService.create_raw_import_table(db)
     serv_ids = await PolicyDataService.get_pending_serv_ids(db, limit)
 

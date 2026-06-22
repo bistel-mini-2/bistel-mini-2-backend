@@ -18,6 +18,6 @@ async def judge_policy(
     request: PolicyJudgementRequest,
     service: PolicyJudgementServiceDep,
 ) -> JSONResponse:
-    logger.info("Judge policy with RAG evidence")
+    logger.info("RAG 근거 기반 정책 판단 시작")
     result = await service.judge(request)
     return success_response(data=result)

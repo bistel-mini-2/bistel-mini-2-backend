@@ -245,7 +245,7 @@ class PolicyAssessmentService:
             ASSESSMENT_TYPE_RECOMMENDATION,
             ASSESSMENT_TYPE_ELIGIBILITY,
         }:
-            raise ValueError(f"Unsupported assessment_type: {assessment_type}")
+            raise ValueError(f"지원하지 않는 assessment_type입니다: {assessment_type}")
 
     def _string_list(self, condition: dict[str, Any], *keys: str) -> list[str]:
         values: list[str] = []

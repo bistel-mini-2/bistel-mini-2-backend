@@ -19,7 +19,7 @@ async def ingest_policy_rag_embeddings(
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     source_type: str | None = None,
 ) -> JSONResponse:
-    logger.info("Ingest policy RAG embeddings")
+    logger.info("정책 RAG embedding 저장 시작")
     result = await service.ingest_embeddings(limit=limit, source_type=source_type)
     return success_response(data=result)
 
