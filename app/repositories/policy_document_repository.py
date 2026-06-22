@@ -58,6 +58,71 @@ class PolicyDocumentRepository:
         return [dict(zip(columns, row, strict=True)) for row in rows]
 
     @staticmethod
+    async def find_policy_reference_download_targets(
+        conn,
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                """
+                    WITH target_urls AS (
+                        SELECT d.source_url, MIN(d.document_id) AS first_document_id
+                        FROM policy_document d
+                        WHERE d.source_type = 'POLICY_REFERENCE'
+                          AND d.source_url IS NOT NULL
+                          AND btrim(d.source_url) <> ''
+                          AND lower(d.source_title) LIKE '%%.pdf%%'
+                          AND (d.raw_text IS NULL OR btrim(d.raw_text) = '')
+                        GROUP BY d.source_url
+                        ORDER BY MIN(d.document_id)
+                        LIMIT %s
+                    )
+                    SELECT
+                        d.document_id,
+                        d.policy_id,
+                        p.policy_code,
+                        p.policy_name,
+                        d.source_title,
+                        d.source_url
+                    FROM target_urls u
+                    JOIN policy_document d ON d.source_url = u.source_url
+                    JOIN policy p ON p.policy_id = d.policy_id
+                    WHERE d.source_type = 'POLICY_REFERENCE'
+                      AND (d.raw_text IS NULL OR btrim(d.raw_text) = '')
+                    ORDER BY u.first_document_id, d.document_id
+                """,
+                (limit,),
+            )
+            rows = await cur.fetchall()
+
+        columns = [
+            "document_id",
+            "policy_id",
+            "policy_code",
+            "policy_name",
+            "source_title",
+            "source_url",
+        ]
+        return [dict(zip(columns, row, strict=True)) for row in rows]
+
+    @staticmethod
+    async def update_document_raw_text(
+        conn,
+        document_id: int,
+        raw_text: str,
+    ) -> None:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                """
+                    UPDATE policy_document
+                    SET raw_text = %s,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE document_id = %s
+                """,
+                (raw_text, document_id),
+            )
+
+    @staticmethod
     async def upsert_policy_detail_document(
         conn,
         policy_id: int,

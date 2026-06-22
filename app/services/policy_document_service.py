@@ -1,9 +1,13 @@
 import logging
+from collections import defaultdict
+from io import BytesIO
 from typing import Annotated, Any
 
 from fastapi import Depends
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from pypdf import PdfReader
+import requests
 
 from app.common.psycopg_pool_conf import psycopg_pool
 from app.repositories.policy_document_repository import PolicyDocumentRepository
@@ -11,6 +15,9 @@ from app.schemas.policy_document_schema import (
     PolicyDocumentChunkIngestItem,
     PolicyDocumentChunkIngestResponse,
     PolicyDocumentChunkSkipItem,
+    PolicyReferenceDocumentIngestItem,
+    PolicyReferenceDocumentIngestResponse,
+    PolicyReferenceDocumentSkipItem,
 )
 
 
@@ -97,6 +104,108 @@ class PolicyDocumentService:
             failed=failed,
         )
 
+    async def ingest_policy_reference_documents(
+        self,
+        limit: int = 10,
+    ) -> PolicyReferenceDocumentIngestResponse:
+        items: list[PolicyReferenceDocumentIngestItem] = []
+        skipped: list[PolicyReferenceDocumentSkipItem] = []
+        failed: list[dict[str, str]] = []
+
+        async with psycopg_pool.connection() as conn:
+            targets = await PolicyDocumentRepository.find_policy_reference_download_targets(
+                conn=conn,
+                limit=limit,
+            )
+            targets_by_url = self._group_by_source_url(targets)
+
+            for source_url, documents in targets_by_url.items():
+                try:
+                    downloaded = self._download_reference_document(source_url)
+                    file_type = self._detect_file_type(
+                        content=downloaded["content"],
+                        source_title=documents[0]["source_title"],
+                        content_type=downloaded.get("content_type"),
+                    )
+                    raw_text = self._extract_text(
+                        content=downloaded["content"],
+                        file_type=file_type,
+                    )
+                    if not raw_text:
+                        for document in documents:
+                            skipped.append(
+                                self._reference_skip_item(
+                                    document=document,
+                                    reason="추출된 텍스트가 없습니다.",
+                                )
+                            )
+                        continue
+
+                    for document in documents:
+                        chunk_documents = self.split_reference_documents(
+                            self._build_policy_reference_documents(
+                                source=document,
+                                raw_text=raw_text,
+                                file_type=file_type,
+                            )
+                        )
+                        async with conn.transaction():
+                            await PolicyDocumentRepository.update_document_raw_text(
+                                conn=conn,
+                                document_id=document["document_id"],
+                                raw_text=raw_text,
+                            )
+                            chunk_count = (
+                                await PolicyDocumentRepository.replace_document_chunks(
+                                    conn=conn,
+                                    document_id=document["document_id"],
+                                    chunk_documents=chunk_documents,
+                                )
+                            )
+
+                        items.append(
+                            PolicyReferenceDocumentIngestItem(
+                                document_id=document["document_id"],
+                                policy_id=document["policy_id"],
+                                policy_code=document["policy_code"],
+                                policy_name=document["policy_name"],
+                                source_title=document["source_title"],
+                                source_url=document["source_url"],
+                                file_type=file_type,
+                                raw_text_length=len(raw_text),
+                                chunk_count=chunk_count,
+                            )
+                        )
+                except ValueError as exc:
+                    for document in documents:
+                        skipped.append(
+                            self._reference_skip_item(
+                                document=document,
+                                reason=str(exc),
+                            )
+                        )
+                except Exception as exc:
+                    self.logger.exception("Failed to ingest policy reference document")
+                    failed.append(
+                        {
+                            "source_url": source_url,
+                            "document_ids": ",".join(
+                                str(document["document_id"]) for document in documents
+                            ),
+                            "error": f"{type(exc).__name__}: {exc}",
+                        }
+                    )
+
+        return PolicyReferenceDocumentIngestResponse(
+            requested_url_count=len(targets_by_url),
+            completed_count=len(items),
+            skipped_count=len(skipped),
+            failed_count=len(failed),
+            items=items,
+            skipped=skipped,
+            failed=failed,
+        )
+
     def split_documents(self, documents: list[Document]) -> list[Document]:
         text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=500,
@@ -104,6 +213,108 @@ class PolicyDocumentService:
             length_function=len,
         )
         return text_splitter.split_documents(documents)
+
+    def split_reference_documents(self, documents: list[Document]) -> list[Document]:
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=2000,
+            chunk_overlap=200,
+            length_function=len,
+        )
+        return text_splitter.split_documents(documents)
+
+    def _group_by_source_url(
+        self,
+        targets: list[dict[str, Any]],
+    ) -> dict[str, list[dict[str, Any]]]:
+        grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        for target in targets:
+            grouped[target["source_url"]].append(target)
+        return dict(grouped)
+
+    def _download_reference_document(self, source_url: str) -> dict[str, Any]:
+        response = requests.get(source_url, timeout=60)
+        response.raise_for_status()
+        return {
+            "content": response.content,
+            "content_type": response.headers.get("content-type"),
+        }
+
+    def _detect_file_type(
+        self,
+        content: bytes,
+        source_title: str,
+        content_type: str | None,
+    ) -> str:
+        lowered_title = source_title.lower()
+        lowered_content_type = (content_type or "").lower()
+        if content.startswith(b"%PDF") or ".pdf" in lowered_title:
+            return "PDF"
+        if (
+            content.startswith(bytes.fromhex("d0cf11e0a1b11ae1"))
+            or ".hwp" in lowered_title
+        ):
+            return "HWP"
+        if content.startswith(b"PK\x03\x04") and ".hwpx" in lowered_title:
+            return "HWPX"
+        if "html" in lowered_content_type:
+            return "HTML"
+        return "UNKNOWN"
+
+    def _extract_text(self, content: bytes, file_type: str) -> str:
+        if file_type == "PDF":
+            return self._extract_pdf_text(content)
+        if file_type in {"HWP", "HWPX"}:
+            raise ValueError(f"{file_type} 문서 텍스트 추출은 아직 지원하지 않습니다.")
+        raise ValueError(f"지원하지 않는 문서 형식입니다: {file_type}")
+
+    def _extract_pdf_text(self, content: bytes) -> str:
+        reader = PdfReader(BytesIO(content))
+        page_texts = [
+            self._clean_text(page.extract_text())
+            for page in reader.pages
+        ]
+        return "\n\n".join(page_text for page_text in page_texts if page_text)
+
+    def _build_policy_reference_documents(
+        self,
+        source: dict[str, Any],
+        raw_text: str,
+        file_type: str,
+    ) -> list[Document]:
+        return [
+            Document(
+                page_content=self._format_section_text(
+                    policy_name=source["policy_name"],
+                    section="관련 문서",
+                    content=raw_text,
+                ),
+                metadata={
+                    "policy_id": source["policy_id"],
+                    "policy_code": source["policy_code"],
+                    "source_type": "POLICY_REFERENCE",
+                    "source_title": source["source_title"],
+                    "source_url": source["source_url"],
+                    "section": "관련 문서",
+                    "evidence_role": "reference",
+                    "file_type": file_type,
+                },
+            )
+        ]
+
+    def _reference_skip_item(
+        self,
+        document: dict[str, Any],
+        reason: str,
+    ) -> PolicyReferenceDocumentSkipItem:
+        return PolicyReferenceDocumentSkipItem(
+            document_id=document["document_id"],
+            policy_id=document["policy_id"],
+            policy_code=document["policy_code"],
+            policy_name=document["policy_name"],
+            source_title=document["source_title"],
+            source_url=document.get("source_url"),
+            reason=reason,
+        )
 
     def _build_policy_detail_documents(
         self,

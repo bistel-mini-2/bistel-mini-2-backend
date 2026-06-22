@@ -33,6 +33,7 @@ class AiRequestRepository:
                     parsed_query_json jsonb,
                     merged_condition_json jsonb,
                     profile_conflict_json jsonb,
+                    result_json jsonb,
                     error_message text,
                     request_status varchar(50) NOT NULL DEFAULT 'READY',
                     created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -67,6 +68,7 @@ class AiRequestRepository:
             "CREATE INDEX IF NOT EXISTS eligibility_request_user_id_idx ON eligibility_request (user_id)",
             "CREATE INDEX IF NOT EXISTS eligibility_request_policy_id_idx ON eligibility_request (policy_id)",
             "ALTER TABLE recommendation_request ADD COLUMN IF NOT EXISTS error_message text",
+            "ALTER TABLE recommendation_request ADD COLUMN IF NOT EXISTS result_json jsonb",
             "ALTER TABLE eligibility_request ADD COLUMN IF NOT EXISTS error_message text",
             "ALTER TABLE recommendation_request ADD COLUMN IF NOT EXISTS source_ref_id varchar(100)",
             "ALTER TABLE eligibility_request ADD COLUMN IF NOT EXISTS source_ref_id varchar(100)",
@@ -150,6 +152,18 @@ class AiRequestRepository:
             request.merged_condition_json = merged_condition_json
         if profile_conflict_json is not None:
             request.profile_conflict_json = profile_conflict_json
+        await db.flush()
+        await db.refresh(request)
+        return request
+
+    async def update_result(
+        self,
+        db: AsyncSession,
+        request: AiRequestModel,
+        result_json: dict[str, Any],
+    ) -> AiRequestModel:
+        if isinstance(request, RecommendationRequest):
+            request.result_json = result_json
         await db.flush()
         await db.refresh(request)
         return request
