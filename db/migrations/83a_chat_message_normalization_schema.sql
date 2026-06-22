@@ -1,41 +1,32 @@
--- Issue #83: chat_message_policy / chat_message_evidence 테이블 + Supervisor 8노드 정규화
+-- Issue #83 (a): chat_message 정규화 스키마 적용 (운영 안전)
 --
 -- 적용 범위:
---   1) 기존 chat_message rows 폐기 (structured_json에 박혀 있던 비정규화 데이터)
---   2) chat_message_policy 신규 생성 또는 누락 제약·인덱스 보강
---   3) chat_message_evidence 신규 생성 또는 누락 제약·인덱스 보강
---   4) assessment_evidence.evidence_role enum 일치화 (chat_message_evidence와 동일 5종)
+--   1) chat_message_policy 신규 생성 또는 누락 제약·인덱스 보강
+--   2) chat_message_evidence 신규 생성 또는 누락 제약·인덱스 보강
+--   3) assessment_evidence.evidence_role enum 일치화 (chat_message_evidence와 동일 5종)
+--
+-- 운영 안전성:
+--   - CREATE TABLE IF NOT EXISTS / DROP CONSTRAINT IF EXISTS / ADD CONSTRAINT 패턴으로 idempotent
+--   - 기존 데이터 폐기 동작은 본 파일에 없음. 운영/staging 환경에도 적용 가능
+--   - 주의: assessment_evidence에 데이터가 있고 evidence_role이 새 enum 5종
+--           (SUMMARY|TARGET|BENEFIT|APPLICATION|CAUTION) 밖이면 CHECK 위반.
+--           본 PR 시점 dev DB는 0건이라 안전. 운영 적용 전 다음 쿼리로 점검:
+--             SELECT evidence_role, COUNT(*) FROM assessment_evidence GROUP BY evidence_role;
 --
 -- 결정사항:
---   - chat_session row는 폐기하지 않고 last_message_at/latest_request_id만 NULL 초기화한다.
---     세션 폐기까지 원하면 아래 OPTIONAL 블록을 활성화한다.
 --   - evidence_role enum은 DB 대문자(SUMMARY|TARGET|BENEFIT|APPLICATION|CAUTION),
 --     API 응답은 소문자(summary|target|benefit|application|caution).
---   - policy_summary intent는 chat_message_policy row를 생성하지 않는다.
---     거론된 정책은 chat_message_evidence.chunk_id 역추적으로 조회한다.
---
--- 적용 메모:
+--   - chat_message_evidence/policy 모두 chat_message에 ON DELETE CASCADE.
 --   - chat_message_policy / chat_message_evidence는 SQLAlchemy autocreate로
---     이미 생성된 상태일 수 있어 IF NOT EXISTS 및 DROP/ADD 패턴으로 idempotent하게 처리한다.
+--     이미 생성된 상태일 수 있어 IF NOT EXISTS로 처리.
+--
+-- 후속:
+--   - 기존 chat_message 데이터 폐기가 필요하면 별도 파일 `83b_chat_message_legacy_purge.sql`을 사용.
+--     해당 파일은 데이터 폐기 동반이므로 dev/staging 전용.
 
 BEGIN;
 
--- 1) chat_message 폐기
---    parent_message_id 자기참조와 follow_up_question.answer_message_id는
---    ON DELETE SET NULL이므로 DELETE를 사용한다 (TRUNCATE CASCADE는 참조 테이블까지 비움).
-DELETE FROM chat_message;
-ALTER SEQUENCE chat_message_chat_message_id_seq RESTART WITH 1;
-
--- 2) chat_session 메타 NULL 초기화 (메시지가 없는 상태와 정합성 유지)
-UPDATE chat_session
-   SET last_message_at = NULL,
-       latest_request_id = NULL;
-
--- OPTIONAL: 세션 자체를 폐기하려면 아래 두 줄의 주석을 해제한다.
--- DELETE FROM chat_session;
--- ALTER SEQUENCE chat_session_chat_session_id_seq RESTART WITH 1;
-
--- 3) chat_message_policy 생성·보강
+-- 1) chat_message_policy 생성·보강
 CREATE TABLE IF NOT EXISTS chat_message_policy (
     chat_message_policy_id BIGSERIAL PRIMARY KEY,
     chat_message_id BIGINT NOT NULL
@@ -56,7 +47,7 @@ CREATE INDEX IF NOT EXISTS idx_chat_message_policy_message
 CREATE INDEX IF NOT EXISTS idx_chat_message_policy_policy_action
     ON chat_message_policy(policy_id, action_type);
 
--- 4) chat_message_evidence 생성·보강
+-- 2) chat_message_evidence 생성·보강
 CREATE TABLE IF NOT EXISTS chat_message_evidence (
     chat_message_evidence_id BIGSERIAL PRIMARY KEY,
     chat_message_id BIGINT NOT NULL
@@ -78,8 +69,9 @@ CREATE INDEX IF NOT EXISTS idx_chat_message_evidence_message
 CREATE INDEX IF NOT EXISTS idx_chat_message_evidence_chunk
     ON chat_message_evidence(chunk_id);
 
--- 5) assessment_evidence.evidence_role enum 일치화
---    현재 데이터 0건이라 백필 불필요. chat_message_evidence와 동일 5종으로 통일.
+-- 3) assessment_evidence.evidence_role enum 일치화
+--    데이터 존재 여부와 무관하게 CHECK는 새 enum으로 통일.
+--    운영 적용 전 위 주의사항대로 기존 데이터 점검 필요.
 ALTER TABLE assessment_evidence
     DROP CONSTRAINT IF EXISTS assessment_evidence_evidence_role_check;
 ALTER TABLE assessment_evidence

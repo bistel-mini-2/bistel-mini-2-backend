@@ -45,3 +45,50 @@ psql "$PSYCOPG_DATABASE_URL" -f db/migrations/83_chat_message_normalization.sql
 ## 5. 적용 이력
 
 DDL 적용 여부는 GitHub PR 본문에 기록한다. 별도 적용 이력 테이블은 두지 않으며, 새 환경 구축 시 `db/migrations/` 디렉토리의 SQL 파일을 파일명 오름차순으로 모두 실행한다.
+
+## 6. 데이터 폐기 동반 SQL의 적용 절차
+
+`*_purge.sql` 또는 `DELETE`/`TRUNCATE`/`DROP TABLE`을 포함하는 SQL은 **dev / staging 전용으로 간주하고 운영 DB에는 적용하지 않는다.** 파일 헤더의 경고 문구를 우선 확인한다.
+
+적용이 정말 필요한 경우 다음 절차를 따른다.
+
+### 1) 환경 확인
+
+```bash
+psql "$PSYCOPG_DATABASE_URL" -c "SELECT current_database(), inet_server_addr();"
+```
+
+운영 DB host/database 이름이 출력되면 즉시 중단한다.
+
+### 2) 백업
+
+영향을 받는 테이블만 dump:
+
+```bash
+pg_dump "$PSYCOPG_DATABASE_URL" -t chat_message -t chat_session > backups/$(date +%Y%m%d_%H%M%S)_pre_purge.sql
+```
+
+### 3) 적용
+
+```bash
+psql "$PSYCOPG_DATABASE_URL" -v ON_ERROR_STOP=1 -f db/migrations/83b_chat_message_legacy_purge.sql
+```
+
+### 4) PR 본문에 적용 환경 / 백업 위치 / 적용 시각 기록
+
+```text
+- 적용 환경: dev (kosa165.iptime.org:50001 / postgres)
+- 백업 파일: backups/20260622_130000_pre_purge.sql
+- 적용 시각: 2026-06-22 10:46
+- 영향: chat_message 40 rows 삭제, chat_session 3 rows 메타 NULL
+```
+
+## 7. 명명 규칙
+
+| suffix | 의미 | 운영 안전성 |
+| --- | --- | --- |
+| `*_schema.sql` | 테이블 / 제약 / 인덱스 (idempotent) | 안전 |
+| `*_purge.sql` | 데이터 폐기 | **dev/staging 전용** |
+| `*_backfill.sql` | 기존 데이터 보존하며 새 컬럼 / 테이블 채움 | 운영 적용 가능 (백업 권장) |
+
+같은 이슈의 SQL이 여러 파일로 나뉘는 경우 `83a_*.sql`, `83b_*.sql` 형태로 접미문자(a/b/c)를 붙여 적용 순서를 명시한다.
