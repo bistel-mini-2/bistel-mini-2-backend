@@ -751,7 +751,7 @@ type PolicyAiSummaryResponse = {
 
 ```yaml
 - id: application_preparation_create
-  name: "신청 준비 생성"
+  name: "신청 준비 저장"
   method: POST
   path: "/api/v1/policies/{slug}/apply"
   auth: "required"
@@ -762,6 +762,7 @@ type PolicyAiSummaryResponse = {
   response_schema:
     data:
       apply_id: "string"
+      saved: true
       policy_id: "string (slug)"
       how_to_apply: "string?"
       apply_period: "string?"
@@ -773,7 +774,7 @@ type PolicyAiSummaryResponse = {
           done: "boolean"
       caution: "string?"
       progress_percent: "integer"
-  notes: "POST는 idempotent — 기존 진행 상태 있으면 재사용, 없으면 user_policy_progress + user_policy_checklist_item 생성. progress_percent는 동적 계산(캐시 미사용)."
+  notes: "DB 기반 신청 준비 저장 API. 사용자가 체크리스트 담기/저장하기를 누를 때 호출한다. POST는 idempotent — 기존 진행 상태 있으면 재사용, 없으면 user_policy_progress + user_policy_checklist_item 생성. checklist는 policy_checklist_template 기반 공식/기본 항목만 포함한다. AI가 사용자별 체크리스트 항목을 동적으로 생성하지 않는다. progress_percent는 동적 계산(캐시 미사용)."
 
 - id: application_preparation_get
   name: "신청 준비 조회"
@@ -784,8 +785,22 @@ type PolicyAiSummaryResponse = {
   owner: "챗봇/신청"
   path_params:
     - slug
-  response: "application_preparation_create와 동일 스키마"
-  notes: "이미 생성된 신청 준비 상태 재조회. 없으면 404 NOT_FOUND."
+  response_schema:
+    data:
+      apply_id: "string | null"
+      saved: "boolean"
+      policy_id: "string (slug)"
+      how_to_apply: "string?"
+      apply_period: "string?"
+      contact: "string?"
+      official_url: "string?"
+      checklist:
+        - id: "string (template_item_id)"
+          label: "string"
+          done: "boolean"
+      caution: "string?"
+      progress_percent: "integer"
+  notes: "신청 준비 화면 preview 조회 API. GET은 user_policy_progress 생성/upsert를 수행하지 않는다. 저장된 진행 상태가 없으면 apply_id=null, saved=false, 기본 체크리스트 done=false, progress_percent=0으로 반환한다. 저장된 진행 상태가 있으면 apply_id와 체크 상태를 함께 반환한다."
 
 - id: mypage_progress_list
   name: "신청 진행 목록 조회"
@@ -1029,14 +1044,14 @@ type PolicyAiSummaryResponse = {
   response: "assistant_message, linked_policies, evidences, user_status"
   notes: "채팅 메시지 저장 후 Supervisor Graph 실행"
 
-- id: application_preparation_service_prepare
+- id: apply_preparation_service_create
   type: "service contract"
-  name: "ApplicationPreparationService.prepare"
+  name: "ApplyPreparationService.create"
   category: "신청"
   owner: "챗봇/신청"
-  request: "user_id, policy_id, raw_query?, selected_conditions?"
-  response: "progress_id, required_documents, checklist_items, evidences"
-  notes: "신청 준비 생성/조회 API 뒤에서 호출되는 유스케이스 계층"
+  request: "user_id, policy_slug"
+  response: "apply_id, saved, policy_id, how_to_apply, apply_period, contact, official_url, checklist, caution, progress_percent"
+  notes: "신청 준비 저장 API 뒤에서 호출되는 DB 기반 유스케이스 계층. 추천 조건 입력은 /recommend 흐름이 담당하며, 신청 준비는 선택된 정책의 기본 체크리스트와 진행 상태를 조회/저장한다. GET preview는 progress를 생성하지 않고, POST 저장 시에만 user_policy_progress를 생성 또는 재사용한다. AI Graph를 실행하지 않는다."
 
 - id: policy_summary_service_summarize
   type: "service contract"

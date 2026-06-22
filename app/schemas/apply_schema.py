@@ -8,7 +8,8 @@ class ChecklistItem(BaseModel):
 
 
 class ApplyPreparationResponse(BaseModel):
-    apply_id: str
+    apply_id: str | None
+    saved: bool
     policy_id: str
     how_to_apply: str | None
     apply_period: str | None
