@@ -17,7 +17,7 @@ from app.schemas.ai_request_schema import (
 from app.services.ai_request_lifecycle_service import AiRequestLifecycleService
 
 
-AI_BACKGROUND_TIMEOUT_SECONDS = 90
+AI_BACKGROUND_TIMEOUT_SECONDS = 180
 logger = logging.getLogger(__name__)
 
 recommendation_router = APIRouter(

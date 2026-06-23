@@ -211,6 +211,40 @@ class RecommendationCandidateRepository:
                 },
             )
 
+    async def update_rerank_scores(
+        self,
+        db: AsyncSession,
+        request_id: int,
+        rerank_scores: dict[int, float],
+    ) -> None:
+        await self.ensure_candidate_schema(db)
+        await db.execute(
+            text(
+                """
+                UPDATE recommendation_candidate
+                SET rerank_score = NULL
+                WHERE request_id = :request_id
+                """
+            ),
+            {"request_id": request_id},
+        )
+        for policy_id, rerank_score in rerank_scores.items():
+            await db.execute(
+                text(
+                    """
+                    UPDATE recommendation_candidate
+                    SET rerank_score = :rerank_score
+                    WHERE request_id = :request_id
+                      AND policy_id = :policy_id
+                    """
+                ),
+                {
+                    "request_id": request_id,
+                    "policy_id": policy_id,
+                    "rerank_score": rerank_score,
+                },
+            )
+
     async def policy_rule_table_exists(self, db: AsyncSession) -> bool:
         result = await db.execute(
             text("SELECT to_regclass('public.policy_rule') IS NOT NULL")
