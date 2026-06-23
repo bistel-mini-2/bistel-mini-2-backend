@@ -308,6 +308,11 @@ SELECT
   request_id,
   request_status,
   error_message,
+  result_json->'summary'->>'llm_rerank_used' AS llm_rerank_used,
+  result_json->'summary'->>'llm_fallback_used' AS llm_fallback_used,
+  result_json->'summary'->>'llm_candidate_pool_count' AS llm_candidate_pool_count,
+  result_json->'summary'->>'llm_selected_count' AS llm_selected_count,
+  result_json->'summary'->>'llm_backfilled_count' AS llm_backfilled_count,
   jsonb_pretty(parsed_query_json) AS parsed_query_json,
   jsonb_pretty(merged_condition_json) AS merged_condition_json,
   jsonb_pretty(result_json->'summary') AS result_summary

@@ -257,6 +257,7 @@ class RecommendationRerankService:
                 "LLM rerank result became empty after applying recommendations",
             )
 
+        llm_selected_count = len(final_results)
         for base_item in base_results:
             if len(final_results) >= result_limit:
                 break
@@ -267,6 +268,7 @@ class RecommendationRerankService:
             backfilled_item["llm_backfilled"] = True
             final_results.append(backfilled_item)
             selected_policy_ids.add(policy_id)
+        llm_backfilled_count = len(final_results) - llm_selected_count
 
         summary = dict(result_json.get("summary") or {})
         summary.update(
@@ -278,6 +280,8 @@ class RecommendationRerankService:
                 "llm_error": None,
                 "llm_summary_message": llm_result.summary_message,
                 "llm_result_count": len(final_results),
+                "llm_selected_count": llm_selected_count,
+                "llm_backfilled_count": llm_backfilled_count,
                 "llm_candidate_pool_count": len(base_results),
             }
         )
@@ -306,6 +310,9 @@ class RecommendationRerankService:
                 "candidate_count": len(fallback_results),
                 "result_count": len(fallback_results),
                 "llm_candidate_pool_count": len(base_results),
+                "llm_result_count": 0,
+                "llm_selected_count": 0,
+                "llm_backfilled_count": 0,
                 "llm_rerank_used": False,
                 "llm_fallback_used": True,
                 "llm_error": error,
