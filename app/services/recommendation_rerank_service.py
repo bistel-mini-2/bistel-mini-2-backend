@@ -1,6 +1,7 @@
 import asyncio
 import copy
 import json
+import logging
 from dataclasses import dataclass
 from typing import Any
 
@@ -19,9 +20,15 @@ from app.services.recommendation_candidate_service import (
     PolicyCandidate,
 )
 from app.services.recommendation_result_normalizer import (
+    _strip_chunk_meta,
     normalize_card_text,
     normalize_recommendation_result_json,
 )
+
+
+# LLM rerank 입력 토큰을 제한해 타임아웃을 방지하기 위한 상한값.
+LLM_EVIDENCE_MAX_ITEMS = 2
+LLM_EVIDENCE_SNIPPET_LIMIT = 280
 
 
 @dataclass
@@ -36,10 +43,13 @@ class RecommendationRerankService:
     def __init__(
         self,
         model: str = "gpt-4o-mini",
-        timeout_seconds: float = 30,
+        timeout_seconds: float = 75,
     ) -> None:
         self.model = model
         self.timeout_seconds = timeout_seconds
+        self.logger = logging.getLogger(
+            f"{__name__}.RecommendationRerankService"
+        )
 
     def select_candidate_pool(
         self,
@@ -48,7 +58,8 @@ class RecommendationRerankService:
         result_limit: int,
     ) -> list[PolicyCandidate]:
         assessment_by_policy = self._assessment_by_policy(assessments)
-        max_candidates = min(result_limit * 3, 15)
+        # 후보 풀이 크면 LLM 입력 토큰이 커져 타임아웃 위험이 있으므로 제한한다.
+        max_candidates = min(result_limit + 2, 8)
         eligible = [
             candidate
             for candidate in candidates
@@ -69,7 +80,13 @@ class RecommendationRerankService:
         assessments: list[RecommendationPolicyAssessment],
         base_result_json: dict[str, Any],
         result_limit: int,
+        raw_query: str | None = None,
+        selected_conditions: dict[str, Any] | None = None,
+        input_issues: list[dict[str, Any]] | None = None,
+        profile_conflict_json: list[dict[str, Any]] | None = None,
     ) -> RecommendationRerankOutput:
+        # candidate_items는 candidates/assessments로 만들어진 base_result_json에서
+        # 추출한다(둘의 정보가 result item에 이미 반영돼 있음).
         _ = candidates, assessments
         candidate_items = self._candidate_items(base_result_json)
         if not candidate_items:
@@ -79,11 +96,19 @@ class RecommendationRerankService:
                 "LLM rerank candidate pool is empty",
             )
 
+        user_context = self._user_context(
+            merged_condition_json=merged_condition_json,
+            raw_query=raw_query,
+            selected_conditions=selected_conditions or {},
+            input_issues=input_issues or [],
+            profile_conflict_json=profile_conflict_json or [],
+        )
         try:
             llm_result = await self._call_llm(
                 merged_condition_json=merged_condition_json,
                 candidate_items=candidate_items,
                 result_limit=result_limit,
+                user_context=user_context,
             )
             sanitized = self._sanitize_llm_result(
                 llm_result,
@@ -102,6 +127,12 @@ class RecommendationRerankService:
                 result_limit=result_limit,
             )
         except Exception as exc:
+            self.logger.warning(
+                "LLM rerank failed, using fallback: %s: %s",
+                type(exc).__name__,
+                exc,
+                exc_info=True,
+            )
             return self._fallback(base_result_json, result_limit, str(exc))
 
     async def _call_llm(
@@ -109,12 +140,15 @@ class RecommendationRerankService:
         merged_condition_json: dict[str, Any],
         candidate_items: list[dict[str, Any]],
         result_limit: int,
+        user_context: dict[str, Any] | None = None,
     ) -> LlmRecommendationRerankResult:
         from langchain_openai import ChatOpenAI
 
         llm_kwargs: dict[str, Any] = {
             "model": self.model,
             "temperature": 0,
+            "max_tokens": 2000,
+            "timeout": self.timeout_seconds,
         }
         if settings.openai_api_key:
             llm_kwargs["api_key"] = settings.openai_api_key
@@ -150,11 +184,23 @@ class RecommendationRerankService:
                 11. evidences는 카드 UI에 보여줄 짧은 근거 문장이다.
                    각 evidence는 입력 evidence chunk 내용 안에서만 요약하고,
                    source_chunk_id는 반드시 입력 evidence에 존재하는 chunk_id를 사용한다.
-                   가능한 경우 정책마다 1~3개를 작성하고, snippet은 80~160자 안팎으로 작성한다.
+                   정책마다 1개(많아도 2개)만 작성하고, snippet은 60~120자로 짧게 쓴다.
                 12. used_evidence_chunk_ids는 입력 evidence에 존재하는 chunk_id만 사용한다.
                 13. 출력은 지정된 JSON schema만 따른다.
                 14. 입력 후보가 충분하면 recommendations는 가능하면 result_limit개를 반환한다.
                    단, 추천할 수 없는 후보를 억지로 포함하지는 않는다.
+                15. user_context(raw_query, selected_conditions, merged_condition_json,
+                   input_issues, profile_conflicts)를 참고해 사용자가 방금 입력한 조건을
+                   우선 반영한다.
+                16. 각 후보의 target_description, benefit_description, application_method,
+                   matched_rules, check_rules, conflicting_conditions를 근거로
+                   why_recommended와 check_before_apply를 구체적으로 쓴다.
+                   check_rules(추가 확인/미입력 항목)가 있으면 check_before_apply에 반영한다.
+                17. check_before_apply는 정책마다 다르게 쓴다. 모든 카드에 같은
+                   "신청 기간은 정책 상세에서 확인해주세요." 같은 일반 문구를
+                   반복하지 말고, 그 정책의 지원 대상/신청 방법/추가 확인 항목에
+                   맞춰 구체적인 확인사항(예: 출생신고·주민등록 여부, 어린이집
+                   이용/보육 자격 신청 상태, 보호자 신청 가능 여부)을 쓴다.
                 """,
             ),
             (
@@ -163,6 +209,7 @@ class RecommendationRerankService:
                     {
                         "result_limit": result_limit,
                         "merged_condition_json": merged_condition_json,
+                        "user_context": user_context or {},
                         "candidate_policies": candidate_items,
                     },
                     ensure_ascii=False,
@@ -494,11 +541,7 @@ class RecommendationRerankService:
                     max_sentences=1,
                 )
             if not item.get("check_before_apply"):
-                item["check_before_apply"] = normalize_card_text(
-                    item.get("manual_check_summary"),
-                    limit=180,
-                    max_sentences=1,
-                )
+                item["check_before_apply"] = self._default_check_before_apply(item)
             previous_score = priority_score
 
     def _rank_adjusted_score(
@@ -527,6 +570,76 @@ class RecommendationRerankService:
         if rank_index <= 2:
             return "우선 확인"
         return "조건 잘 맞음"
+
+    _FIELD_LABELS = {
+        "stage": "생애주기",
+        "childAge": "자녀 연령",
+        "child_age": "자녀 연령",
+        "region": "거주 지역",
+        "income": "소득/수급 자격",
+        "special": "가구 특성",
+        "needs": "관심 지원",
+    }
+
+    def _default_check_before_apply(self, item: dict[str, Any]) -> str:
+        # LLM이 check_before_apply를 주지 않은 경우, 정책별 정보로 구체적 확인사항 생성.
+        summary = normalize_card_text(
+            item.get("manual_check_summary"),
+            limit=180,
+            max_sentences=1,
+        )
+        if summary:
+            return summary
+
+        reasons = self._check_reasons(item.get("manual_check_points"))
+        if not reasons:
+            reasons = self._check_reasons(item.get("missing_conditions"))
+        if reasons:
+            return normalize_card_text(reasons[0], limit=180, max_sentences=1)
+
+        labels = self._check_field_labels(
+            item.get("manual_check_points") or item.get("missing_conditions") or []
+        )
+        if labels:
+            return f"{', '.join(labels)} 조건 해당 여부를 확인해 주세요."
+
+        # target_description 원문은 문장이 잘려 어색하므로 직접 삽입하지 않는다.
+        application = normalize_card_text(
+            item.get("application_method"), limit=60, max_sentences=1
+        )
+        if application:
+            return f"신청 방법({application})과 제출 서류를 신청 전 확인해 주세요."
+
+        policy_name = str(item.get("policy_name") or "").strip()
+        if policy_name:
+            return f"{policy_name}의 지원 대상 조건 해당 여부와 제출 서류를 확인해 주세요."
+        return "지원 대상 조건 해당 여부와 제출 서류를 신청 전 확인해 주세요."
+
+    def _check_reasons(self, rows: Any) -> list[str]:
+        if not isinstance(rows, list):
+            return []
+        reasons: list[str] = []
+        for row in rows:
+            if isinstance(row, dict) and row.get("reason"):
+                reasons.append(str(row["reason"]))
+        return reasons
+
+    def _check_field_labels(self, rows: Any) -> list[str]:
+        if not isinstance(rows, list):
+            return []
+        labels: list[str] = []
+        for row in rows:
+            field_name = (
+                str(row.get("field") or row.get("field_name") or "")
+                if isinstance(row, dict)
+                else ""
+            )
+            label = self._FIELD_LABELS.get(field_name)
+            if label and label not in labels:
+                labels.append(label)
+            if len(labels) >= 3:
+                break
+        return labels
 
     def _to_float_or_none(self, value: Any) -> float | None:
         if value in (None, ""):
@@ -581,22 +694,36 @@ class RecommendationRerankService:
                 continue
             if item.get("assessment_status") == AssessmentStatus.NOT_MATCH.value:
                 continue
+            filter_match_json = item.get("filter_match_json") or {}
             items.append(
                 {
                     "policy_id": str(item.get("policy_id")),
-                    "policy_code": item.get("policy_code"),
                     "policy_name": item.get("policy_name"),
-                    "summary": item.get("summary"),
-                    "benefit_summary": item.get("benefit_summary"),
+                    "summary": self._short(item.get("summary"), 120),
+                    "target_description": self._short(
+                        item.get("target_description"), 140
+                    ),
+                    "benefit_description": self._short(
+                        item.get("benefit_description"), 140
+                    ),
+                    "application_method": self._short(
+                        item.get("application_method"), 80
+                    ),
                     "retrieval_score": item.get("retrieval_score"),
-                    "candidate_status": item.get("candidate_status"),
                     "user_status": item.get("user_status"),
-                    "assessment_status": item.get("assessment_status"),
                     "confidence_score": item.get("confidence_score"),
-                    "matched_conditions": item.get("matched_conditions") or [],
-                    "missing_conditions": item.get("missing_conditions") or [],
-                    "manual_check_points": item.get("manual_check_points") or [],
-                    "reason_summary": item.get("reason_summary") or item.get("reason"),
+                    "matched_rules": self._compact_rules(
+                        filter_match_json.get("matched_rules"),
+                        drop_fields=("candidate_search",),
+                    ),
+                    "check_rules": self._compact_rules(
+                        (filter_match_json.get("uncertain_rules") or [])
+                        + (item.get("manual_check_points") or [])
+                        + (item.get("missing_conditions") or [])
+                    ),
+                    "conflicting_conditions": self._compact_rules(
+                        item.get("conflicting_conditions")
+                    ),
                     "evidence": self._compact_evidences(
                         item.get("raw_evidences")
                         or item.get("evidence")
@@ -607,34 +734,80 @@ class RecommendationRerankService:
             )
         return items
 
+    def _short(self, value: Any, limit: int) -> str:
+        return normalize_card_text(value, limit=limit)
+
+    def _compact_rules(
+        self,
+        rules: Any,
+        limit: int = 5,
+        drop_fields: tuple[str, ...] = (),
+    ) -> list[dict[str, str]]:
+        # 룰 dict를 field+reason 으로만 축약해 LLM 입력 토큰을 줄인다.
+        if not isinstance(rules, list):
+            return []
+        compact: list[dict[str, str]] = []
+        seen: set[tuple[str, str]] = set()
+        for rule in rules:
+            if not isinstance(rule, dict):
+                continue
+            field_name = str(rule.get("field") or rule.get("field_name") or "")
+            if field_name in drop_fields:
+                continue
+            reason = self._short(rule.get("reason"), 80)
+            key = (field_name, reason)
+            if key in seen:
+                continue
+            seen.add(key)
+            compact.append({"field": field_name, "reason": reason})
+            if len(compact) >= limit:
+                break
+        return compact
+
+    def _user_context(
+        self,
+        merged_condition_json: dict[str, Any],
+        raw_query: str | None,
+        selected_conditions: dict[str, Any],
+        input_issues: list[dict[str, Any]],
+        profile_conflict_json: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        return {
+            "raw_query": raw_query or "",
+            "selected_conditions": selected_conditions or {},
+            "merged_condition_json": merged_condition_json or {},
+            "input_issues": input_issues or [],
+            "profile_conflicts": profile_conflict_json or [],
+        }
+
     def _compact_evidences(
         self,
         evidences: list[Any],
     ) -> list[dict[str, Any]]:
+        # LLM 입력 토큰을 줄이기 위해 개수/길이를 제한하고 인용에 필요한
+        # chunk_id + snippet(+role)만 전달한다. source_title/url 은 카드 단계에서
+        # raw_evidences 로 다시 채워지므로 LLM 입력에서는 생략한다.
         compacted: list[dict[str, Any]] = []
-        for evidence in evidences[:3]:
+        for evidence in evidences[:LLM_EVIDENCE_MAX_ITEMS]:
             if isinstance(evidence, str):
-                snippet = normalize_card_text(evidence, limit=800)
+                snippet = normalize_card_text(
+                    _strip_chunk_meta(evidence), limit=LLM_EVIDENCE_SNIPPET_LIMIT
+                )
                 if not snippet:
                     continue
-                compacted.append(
-                    {
-                        "chunk_id": "",
-                        "snippet": snippet,
-                        "source_title": "",
-                        "source_url": "",
-                    }
-                )
+                compacted.append({"chunk_id": "", "snippet": snippet})
                 continue
             if not isinstance(evidence, dict):
                 continue
             snippet = normalize_card_text(
-                evidence.get("snippet")
-                or evidence.get("content")
-                or evidence.get("text")
-                or evidence.get("quote")
-                or "",
-                limit=800,
+                _strip_chunk_meta(
+                    evidence.get("snippet")
+                    or evidence.get("content")
+                    or evidence.get("text")
+                    or evidence.get("quote")
+                    or ""
+                ),
+                limit=LLM_EVIDENCE_SNIPPET_LIMIT,
             )
             if not snippet:
                 continue
@@ -642,9 +815,6 @@ class RecommendationRerankService:
                 {
                     "chunk_id": str(evidence.get("chunk_id")),
                     "snippet": snippet,
-                    "source_title": evidence.get("source_title"),
-                    "source_url": evidence.get("source_url"),
-                    "score": evidence.get("score") or evidence.get("similarity_score"),
                     "evidence_role": evidence.get("evidence_role"),
                 }
             )

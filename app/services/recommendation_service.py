@@ -48,11 +48,9 @@ class RecommendationService:
                 candidates=candidates,
                 assessment_by_policy=assessment_by_policy,
             )
-        evidences, evidence_error = await self._search_evidences(
+        evidences, evidence_error, evidence_debug = await self._search_evidences(
             condition=merged_condition_json,
-            policy_ids=[
-                candidate.policy.policy_id for candidate in selected_candidates
-            ],
+            candidates=selected_candidates,
         )
         evidence_by_policy = self._group_evidences(evidences)
 
@@ -73,6 +71,8 @@ class RecommendationService:
                 "result_count": len(results),
                 "evidence_count": len(evidences),
                 "evidence_error": evidence_error,
+                "evidence_count_by_policy": evidence_debug.get("count_by_policy", {}),
+                "evidence_query_by_policy": evidence_debug.get("query_by_policy", {}),
                 "stored_candidate_count": len(candidates),
                 "excluded_candidate_count": self._candidate_count(
                     candidates,
@@ -101,69 +101,47 @@ class RecommendationService:
     async def _search_evidences(
         self,
         condition: dict[str, Any],
-        policy_ids: list[int],
-    ) -> tuple[list[EvidenceChunk], str | None]:
-        if not policy_ids:
-            return [], None
-        query = self._evidence_query(condition)
-        evidence_errors: list[str] = []
-        try:
-            evidences = await asyncio.wait_for(
-                self.chunk_searcher(
-                    query=query,
-                    policy_ids=policy_ids,
-                    top_k=max(len(policy_ids) * 2, 5),
-                    evidence_role="recommendation_reason",
-                ),
-                timeout=self.evidence_timeout_seconds,
+        candidates: list[PolicyCandidate],
+    ) -> tuple[list[EvidenceChunk], str | None, dict[str, Any]]:
+        # 정책마다 정책명/지원대상/혜택 + 사용자 조건을 반영한 전용 쿼리를 만들어
+        # 공통 일반 쿼리보다 정책별 근거 품질을 높인다.
+        query_by_policy = {
+            str(candidate.policy.policy_id): self._policy_evidence_query(
+                condition, candidate
             )
-        except Exception as exc:
-            evidences = []
-            evidence_errors.append(str(exc))
+            for candidate in candidates
+        }
+        debug: dict[str, Any] = {
+            "query_by_policy": query_by_policy,
+            "count_by_policy": {},
+        }
+        if not candidates:
+            return [], None, debug
 
-        evidence_by_policy = self._group_evidences(evidences)
-        missing_policy_ids = [
-            policy_id
-            for policy_id in dict.fromkeys(policy_ids)
-            if not evidence_by_policy.get(str(policy_id))
-        ]
-        if missing_policy_ids:
-            fallback_evidences, fallback_error = await self._search_evidence_fallbacks(
-                query=query,
-                policy_ids=missing_policy_ids,
-            )
-            evidences = self._deduplicate_evidences(
-                [*evidences, *fallback_evidences]
-            )
-            if fallback_error:
-                evidence_errors.append(fallback_error)
-
-        return evidences, "; ".join(evidence_errors) or None
-
-    async def _search_evidence_fallbacks(
-        self,
-        query: str,
-        policy_ids: list[int],
-    ) -> tuple[list[EvidenceChunk], str | None]:
-        async def search_one(policy_id: int) -> list[EvidenceChunk]:
+        async def search_one(policy_id: int, query: str) -> list[EvidenceChunk]:
             return await asyncio.wait_for(
                 self.chunk_searcher(
                     query=query,
                     policy_ids=[policy_id],
-                    top_k=2,
+                    top_k=3,
                     evidence_role="recommendation_reason",
                 ),
                 timeout=max(min(self.evidence_timeout_seconds / 2, 10), 5),
             )
 
-        tasks = [search_one(policy_id) for policy_id in policy_ids]
+        tasks = [
+            search_one(int(candidate.policy.policy_id), query_by_policy[
+                str(candidate.policy.policy_id)
+            ])
+            for candidate in candidates
+        ]
         try:
             results = await asyncio.wait_for(
                 asyncio.gather(*tasks, return_exceptions=True),
                 timeout=self.evidence_timeout_seconds,
             )
         except Exception as exc:
-            return [], str(exc)
+            return [], str(exc), debug
 
         evidences: list[EvidenceChunk] = []
         errors: list[str] = []
@@ -172,7 +150,13 @@ class RecommendationService:
                 errors.append(str(result))
                 continue
             evidences.extend(result)
-        return evidences, "; ".join(errors) or None
+
+        evidences = self._deduplicate_evidences(evidences)
+        debug["count_by_policy"] = {
+            policy_id: len(chunks)
+            for policy_id, chunks in self._group_evidences(evidences).items()
+        }
+        return evidences, "; ".join(errors) or None, debug
 
     def _to_result_item(
         self,
@@ -206,6 +190,15 @@ class RecommendationService:
             "benefit_summary": self._short_text(
                 candidate.detail.benefit_description if candidate.detail else None
             ),
+            "target_description": self._short_text(
+                candidate.detail.target_description if candidate.detail else None
+            ),
+            "benefit_description": self._short_text(
+                candidate.detail.benefit_description if candidate.detail else None
+            ),
+            "application_method": self._short_text(
+                candidate.detail.application_method if candidate.detail else None
+            ),
             "match_score": match_score,
             "retrieval_score": candidate.retrieval_score,
             "candidate_status": candidate.candidate_status,
@@ -232,19 +225,30 @@ class RecommendationService:
             )
         return item
 
-    def _evidence_query(self, condition: dict[str, Any]) -> str:
-        needs = " ".join(self._string_list(condition.get("needs")))
+    def _policy_evidence_query(
+        self,
+        condition: dict[str, Any],
+        candidate: PolicyCandidate,
+    ) -> str:
+        policy = candidate.policy
+        detail = candidate.detail
         stage = self._first(condition, "stage", "life_stage", "target_stage")
         stage_label = LIFE_STAGE_TO_DB.get(str(stage)) if stage else ""
-        return " ".join(
-            item
-            for item in [
-                needs,
-                stage_label,
-                "지원대상 선정기준 신청조건",
-            ]
-            if item
-        )
+        income = self._first(condition, "income", "income_level", "income_bracket")
+        income_hint = "소득 중위소득" if income and income != "unknown" else ""
+
+        parts = [
+            policy.policy_name or "",
+            self._short_text(
+                detail.target_description if detail else None, limit=60
+            ),
+            *self._string_list(condition.get("needs")),
+            stage_label,
+            *self._string_list(condition.get("special")),
+            income_hint,
+            "지원대상 선정기준 신청조건",
+        ]
+        return " ".join(self._deduplicate([part for part in parts if part]))
 
     def _reason(self, matched_rules: list[str], has_evidence: bool) -> str:
         rules = self._deduplicate(matched_rules)

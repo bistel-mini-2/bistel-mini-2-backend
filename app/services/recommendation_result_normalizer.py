@@ -18,6 +18,28 @@ _EVIDENCE_TEXT_KEYS = (
     "summary",
 )
 
+# 카드에 노출하기에 너무 짧고 의미 없는 스니펫만 걸러낸다.
+# 80자 하한 같은 hard rule은 적용하지 않고,
+# "출생아 1인당 지급", "국민행복카드로 지원", "만 0~5세 영유아 대상"처럼
+# 짧아도 의미 있는 근거는 유지한다.
+_MEANINGFUL_SHORT_LIMIT = 20
+_MEANINGLESS_SHORT_SUFFIXES = ("란", "안내", "정보", "목록", "구분")
+
+
+def _is_meaningful_snippet(snippet: str) -> bool:
+    text = snippet.strip()
+    if not text:
+        return False
+    if len(text) >= _MEANINGFUL_SHORT_LIMIT:
+        return True
+    # 다토큰(공백 포함)이거나 숫자를 포함하면 짧아도 의미 있는 근거로 본다.
+    # "출생아 1인당 지급", "국민행복카드로 지원", "만 0~5세 영유아 대상" 등.
+    if " " in text or any(char.isdigit() for char in text):
+        return True
+    # 공백/숫자가 없는 짧은 조각은 "안내", "지원대상", "정보"처럼 제목/단어일
+    # 가능성이 높으므로, 충분히 길고 제목성 접미사가 아닐 때만 유지한다.
+    return len(text) >= 12 and not text.endswith(_MEANINGLESS_SHORT_SUFFIXES)
+
 
 def normalize_recommendation_result_json(
     result_json: dict[str, Any],
@@ -112,13 +134,47 @@ def _normalize_item_list(value: Any) -> list[dict[str, Any]]:
     ]
 
 
+def _strip_chunk_meta(text: str) -> str:
+    """RAG chunk 원문의 메타 prefix(정책명:/섹션:/내용:)를 카드 노출 전에 제거한다.
+
+    chunk 원문은 "정책명: ...\n섹션: ...\n내용:\n{본문}" 형태로 저장되므로,
+    사용자 카드에는 본문만 보이도록 라벨을 떼어낸다. source_title/url/chunk_id는
+    호출부에서 별도로 유지된다.
+    """
+    if not text:
+        return ""
+    # "내용:" 헤더가 메타 블록의 일부일 때만 그 뒤 본문만 취한다.
+    head, sep, tail = text.partition("내용:")
+    if sep and ("정책명" in head or "섹션" in head):
+        text = tail
+    # chunk 원문은 본문 뒤에 "· 출처: {정책명} - {섹션} 대분류: ... 급여유형: ..."
+    # 형태의 메타 꼬리가 붙는다. 첫 "출처:" 부터 끝까지(=메타 꼬리)를 제거한다.
+    text = re.split(r"·?\s*출처\s*:", text, maxsplit=1)[0]
+    # 라벨 줄(정책명:/섹션:) 또는 남은 'OO 내용:' 라벨 제거
+    text = re.sub(r"(?m)^\s*(?:정책명|섹션)\s*:[^\n]*$", "", text)
+    text = re.sub(
+        r"(?:지원\s*대상|지원\s*내용|기본\s*정보|유의\s*사항|신청\s*방법|신청\s*기간)?"
+        r"\s*내용\s*:\s*",
+        "",
+        text,
+    )
+    # 분류/기관/유형 등 메타 라벨 구간 제거(라벨: 값 형태, 다음 라벨/구분점 전까지)
+    text = re.sub(
+        r"(?:대분류|소분류|제공기관|급여유형|지원유형|담당기관|문의처|소관기관)"
+        r"\s*:\s*[^·\n]*",
+        "",
+        text,
+    )
+    return text.strip(" ·-:;,\n\t")
+
+
 def _normalize_evidence(
     evidence: Any,
     snippet_limit: int,
 ) -> dict[str, Any] | None:
     if isinstance(evidence, str):
-        snippet = normalize_card_text(evidence, limit=snippet_limit)
-        if not snippet:
+        snippet = normalize_card_text(_strip_chunk_meta(evidence), limit=snippet_limit)
+        if not snippet or not _is_meaningful_snippet(snippet):
             return None
         return {
             "chunk_id": "",
@@ -134,10 +190,10 @@ def _normalize_evidence(
         return None
 
     snippet = normalize_card_text(
-        _first_text(evidence, _EVIDENCE_TEXT_KEYS),
+        _strip_chunk_meta(_first_text(evidence, _EVIDENCE_TEXT_KEYS)),
         limit=snippet_limit,
     )
-    if not snippet:
+    if not snippet or not _is_meaningful_snippet(snippet):
         return None
 
     role = evidence.get("evidence_role")

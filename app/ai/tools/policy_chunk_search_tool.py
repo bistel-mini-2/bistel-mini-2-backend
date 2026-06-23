@@ -2,6 +2,17 @@ from app.schemas.ai_contract import EvidenceChunk
 from app.services.policy_rag_service import PolicyRagService
 
 
+ROLE_BY_SECTION = {
+    "기본 정보": "SUMMARY",
+    "요약": "SUMMARY",
+    "지원 대상": "TARGET",
+    "지원 내용": "BENEFIT",
+    "신청 방법": "APPLICATION",
+    "신청 기간": "APPLICATION",
+    "유의 사항": "CAUTION",
+}
+
+
 async def search_policy_chunks(
     query: str,
     policy_ids: list[int | str] | None = None,
@@ -32,7 +43,7 @@ async def search_policy_chunks(
                 source_title=_source_title(result.policy_name, result.section),
                 source_url=result.source_url or "",
                 score=_distance_to_score(result.distance),
-                evidence_role=evidence_role,
+                evidence_role=_evidence_role(result.section) or evidence_role,
             )
         )
     return chunks
@@ -42,6 +53,12 @@ def _source_title(policy_name: str | None, section: str | None) -> str:
     if policy_name and section:
         return f"{policy_name} - {section}"
     return policy_name or section or "정책 근거"
+
+
+def _evidence_role(section: str | None) -> str | None:
+    if section is None:
+        return None
+    return ROLE_BY_SECTION.get(section)
 
 
 def _distance_to_score(distance: float | None) -> float | None:

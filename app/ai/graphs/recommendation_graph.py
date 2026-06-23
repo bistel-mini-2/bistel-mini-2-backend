@@ -60,6 +60,8 @@ class RecommendationGraphRunner:
         merged_condition_json: dict[str, Any],
         input_issues: list[dict[str, Any]] | None = None,
         profile_conflict_json: list[dict[str, Any]] | None = None,
+        raw_query: str | None = None,
+        selected_conditions: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         final_state = await self.graph.ainvoke(
             {
@@ -68,6 +70,8 @@ class RecommendationGraphRunner:
                 "merged_condition_json": merged_condition_json,
                 "input_issues": input_issues or [],
                 "profile_conflict_json": profile_conflict_json or [],
+                "raw_query": raw_query,
+                "selected_conditions": selected_conditions or {},
             }
         )
         return final_state.get(

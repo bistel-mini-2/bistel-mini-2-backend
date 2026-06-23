@@ -51,6 +51,39 @@ INCOME_LIMIT_PATTERNS = (
     re.compile(r"중위소득\s*(\d{2,3})\s*%?\s*(?:이하|미만|이내|내)"),
 )
 
+# 정책 텍스트에 저소득 관련 키워드만 있고 구체적인 중위소득 % 기준이
+# 명시되지 않은 경우 차상위 계층 기준(중위소득 100%)을 잠정 상한으로 적용한다.
+DEFAULT_LOW_INCOME_LIMIT_PERCENT = 100.0
+
+# 사용자 소득 구간이 이 값을 초과하면 "저소득층 중심" 정책과는
+# 명확히 맞지 않는다고 판단해 제외한다.
+LOW_INCOME_POLICY_EXCLUSION_THRESHOLD_PERCENT = 150.0
+
+# 특정 가구 특성(special) 전용 정책을 식별하는 키워드.
+# 정책명에 강하게 나타나면 제외(EXCLUDED), 지원대상 본문에만 나타나면
+# 추가 확인(NEEDS_CONFIRMATION)으로 처리한다.
+SPECIAL_TARGET_NAME_KEYWORDS = {
+    "single": ("한부모", "조손"),
+    "multi": ("다문화", "탈북", "북한이탈"),
+    "disabled": ("장애",),
+}
+# 소득/수급 자격 기반 특수대상(의료급여·기초생활 등) 식별 키워드.
+MEDICAL_LOW_INCOME_TARGET_KEYWORDS = (
+    "의료급여",
+    "기초생활",
+    "차상위",
+    "생계급여",
+    "주거급여",
+    "교육급여",
+    "수급권자",
+)
+SPECIAL_TARGET_LABELS = {
+    "single": "한부모/조손 가구",
+    "multi": "다문화/탈북 가구",
+    "disabled": "장애 가구",
+    "low_income": "저소득/수급 자격",
+}
+
 
 @dataclass
 class PolicyCandidate:
@@ -238,7 +271,7 @@ class RecommendationCandidateService:
                 source["weighted_score"]
                 for source in policy_match["sources"].values()
             )
-            policy_match["score"] = min(round(weighted_score, 4), 0.35)
+            policy_match["score"] = min(round(weighted_score, 4), 0.27)
         return matches
 
     def _merge_candidate_rows(
@@ -327,6 +360,13 @@ class RecommendationCandidateService:
             uncertain_rules=uncertain_rules,
             excluded_rules=excluded_rules,
         )
+        self._apply_special_target_rule(
+            policy=policy,
+            target_description=row.get("target_description"),
+            condition=condition,
+            uncertain_rules=uncertain_rules,
+            excluded_rules=excluded_rules,
+        )
 
         candidate_status = self._candidate_status(uncertain_rules, excluded_rules)
         filter_match_json = {
@@ -392,7 +432,7 @@ class RecommendationCandidateService:
         if not query_terms:
             return {
                 "matched": True,
-                "score": 0.05,
+                "score": 0.02,
                 "matched_terms": [],
             }
 
@@ -402,10 +442,10 @@ class RecommendationCandidateService:
             for term in query_terms
             if term and term.lower() in text_value.lower()
         ]
-        score = 0.08 + min(len(matched_terms), 4) * 0.025
+        score = 0.04 + min(len(matched_terms), 4) * 0.01
         return {
             "matched": True,
-            "score": round(min(score, 0.18), 4),
+            "score": round(min(score, 0.08), 4),
             "matched_terms": matched_terms,
         }
 
@@ -588,7 +628,7 @@ class RecommendationCandidateService:
 
         if (
             user_income_percent is not None
-            and user_income_percent > 150
+            and user_income_percent > LOW_INCOME_POLICY_EXCLUSION_THRESHOLD_PERCENT
             and self._has_low_income_keyword(text_value)
         ):
             excluded_rules.append(
@@ -658,6 +698,111 @@ class RecommendationCandidateService:
                 )
                 score += 0.08
         return min(score, 0.16)
+
+    def _apply_special_target_rule(
+        self,
+        policy: Any,
+        target_description: Any,
+        condition: dict[str, Any],
+        uncertain_rules: list[dict[str, Any]],
+        excluded_rules: list[dict[str, Any]],
+    ) -> None:
+        # 가구 특성 전용 정책인데 사용자 특성이 해당하지 않으면 제외/추가확인 처리.
+        # 정책명에 강하게 드러나면 제외, 지원대상 본문에만 있으면 추가확인.
+        policy_name = str(self._none_if_null(policy.policy_name) or "")
+        target_text = str(self._none_if_null(target_description) or "")
+        user_special = set(self._string_list(condition.get("special")))
+
+        for flag, keywords in SPECIAL_TARGET_NAME_KEYWORDS.items():
+            if flag in user_special:
+                continue
+            name_hit = any(keyword in policy_name for keyword in keywords)
+            target_hit = name_hit or any(keyword in target_text for keyword in keywords)
+            if not target_hit:
+                continue
+            label = SPECIAL_TARGET_LABELS.get(flag, flag)
+            if name_hit:
+                excluded_rules.append(
+                    {
+                        "field": "special",
+                        "condition_value": sorted(user_special),
+                        "policy_value": label,
+                        "result": "special_target_mismatch",
+                        "reason": (
+                            f"{label} 대상 전용 정책으로 보이지만 "
+                            "해당 가구 특성이 입력되지 않았습니다."
+                        ),
+                    }
+                )
+            else:
+                uncertain_rules.append(
+                    {
+                        "field": "special",
+                        "condition_value": sorted(user_special),
+                        "policy_value": label,
+                        "reason": (
+                            f"지원 대상에 {label} 조건이 있어 해당 여부 확인이 필요합니다."
+                        ),
+                    }
+                )
+
+        self._apply_low_income_target_rule(
+            policy_name=policy_name,
+            target_text=target_text,
+            condition=condition,
+            user_special=user_special,
+            uncertain_rules=uncertain_rules,
+            excluded_rules=excluded_rules,
+        )
+
+    def _apply_low_income_target_rule(
+        self,
+        policy_name: str,
+        target_text: str,
+        condition: dict[str, Any],
+        user_special: set[str],
+        uncertain_rules: list[dict[str, Any]],
+        excluded_rules: list[dict[str, Any]],
+    ) -> None:
+        income = self._first(condition, "income", "income_level", "income_bracket")
+        if "low_income" in user_special or income == "low":
+            return  # 저소득/수급 자격이 있으면 강등하지 않는다.
+
+        name_hit = any(
+            keyword in policy_name for keyword in MEDICAL_LOW_INCOME_TARGET_KEYWORDS
+        )
+        target_hit = name_hit or any(
+            keyword in target_text for keyword in MEDICAL_LOW_INCOME_TARGET_KEYWORDS
+        )
+        if not target_hit:
+            return
+
+        label = SPECIAL_TARGET_LABELS["low_income"]
+        income_known = income not in (None, "", "unknown")
+        if name_hit and income_known:
+            excluded_rules.append(
+                {
+                    "field": "income",
+                    "condition_value": income,
+                    "policy_value": label,
+                    "result": "special_target_mismatch",
+                    "reason": (
+                        f"{label} 대상 정책으로 보이며 사용자 소득/수급 자격이 "
+                        "해당하지 않습니다."
+                    ),
+                }
+            )
+        else:
+            uncertain_rules.append(
+                {
+                    "field": "income",
+                    "condition_value": income,
+                    "policy_value": label,
+                    "reason": (
+                        f"{label} 관련 정책으로 보여 수급 자격 확인이 필요합니다."
+                    ),
+                }
+            )
 
     def _apply_needs_rule(
         self,
@@ -810,7 +955,7 @@ class RecommendationCandidateService:
         if limits:
             return max(limits)
         if self._has_low_income_keyword(text_value):
-            return 100.0
+            return DEFAULT_LOW_INCOME_LIMIT_PERCENT
         return None
 
     def _has_low_income_keyword(self, text_value: str) -> bool:

@@ -7,6 +7,8 @@ class RecommendationGraphState(TypedDict):
     db: AsyncSession
     request_id: int
     merged_condition_json: dict[str, Any]
+    raw_query: NotRequired[str | None]
+    selected_conditions: NotRequired[dict[str, Any] | None]
     input_issues: NotRequired[list[dict[str, Any]]]
     profile_conflict_json: NotRequired[list[dict[str, Any]]]
     candidate_rows: NotRequired[list[dict[str, Any]]]
