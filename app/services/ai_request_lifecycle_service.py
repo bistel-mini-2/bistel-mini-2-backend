@@ -41,6 +41,9 @@ from app.services.recommendation_result_normalizer import (
 from app.services.recommendation_service import RecommendationService
 
 
+RECOMMENDATION_RESULT_SOURCE_TYPE = "RECOMMENDATION_RESULT"
+
+
 class AiRequestLifecycleService:
     def __init__(
         self,
@@ -210,11 +213,16 @@ class AiRequestLifecycleService:
     ) -> AiRequestSnapshot:
         request = await self._get_request_or_raise(db, request_type, request_id)
         parsed_query_json = request.parsed_query_json or {}
+        profile_snapshot = await self._condition_profile_snapshot(
+            db=db,
+            request_type=request_type,
+            request=request,
+        )
         condition_result = await self.condition_agent.analyze(
             ConditionInput(
                 raw_query=request.raw_query,
                 selected_conditions=parsed_query_json.get("selected_conditions"),
-                profile_snapshot=await self._profile_snapshot(db, request.user_id),
+                profile_snapshot=profile_snapshot,
             )
         )
         input_issues_json = [
@@ -770,6 +778,19 @@ class AiRequestLifecycleService:
         return {
             key: value for key, value in snapshot.items() if value not in (None, "", [])
         }
+
+    async def _condition_profile_snapshot(
+        self,
+        db: AsyncSession,
+        request_type: str,
+        request: AiRequestModel,
+    ) -> dict[str, Any] | None:
+        if (
+            request_type == "eligibility"
+            and request.source_type == RECOMMENDATION_RESULT_SOURCE_TYPE
+        ):
+            return None
+        return await self._profile_snapshot(db, request.user_id)
 
     def _not_found(self, request_type: str, request_id: int) -> AppException:
         return AppException(
