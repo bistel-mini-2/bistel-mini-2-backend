@@ -68,7 +68,8 @@ def test_compare_policies_returns_diff_and_related(monkeypatch) -> None:
         )
     )
 
-    assert response.policy_a.policy_id == "WLF00000001"
+    assert response.policy_a.policy_id == "1"
+    assert response.policy_a.slug == "WLF00000001"
     assert response.policy_b.name == "B 정책"
     assert response.diff_table
     assert any(item.field == "지원 대상" for item in response.diff_table)

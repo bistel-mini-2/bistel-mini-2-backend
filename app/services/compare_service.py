@@ -92,7 +92,7 @@ class CompareService:
     @classmethod
     def _to_policy_summary(cls, row: dict[str, Any]) -> ComparePolicySummary:
         return ComparePolicySummary(
-            policy_id=str(row["slug"]),
+            policy_id=str(row["policy_id"]),
             slug=str(row["slug"]),
             name=str(row["name"]),
             summary={
