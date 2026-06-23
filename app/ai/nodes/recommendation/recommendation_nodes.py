@@ -2,6 +2,7 @@ from app.ai.states.recommendation_state import RecommendationGraphState
 from app.repositories.policy_assessment_repository import PolicyAssessmentRepository
 from app.services.recommendation_assessment_service import RecommendationAssessmentService
 from app.services.recommendation_candidate_service import RecommendationCandidateService
+from app.services.recommendation_rerank_service import RecommendationRerankService
 from app.services.recommendation_service import RecommendationService
 
 
@@ -12,6 +13,7 @@ class RecommendationGraphNodes:
         recommendation_service: RecommendationService | None = None,
         assessment_service: RecommendationAssessmentService | None = None,
         assessment_repository: PolicyAssessmentRepository | None = None,
+        rerank_service: RecommendationRerankService | None = None,
     ) -> None:
         self.candidate_service = candidate_service or RecommendationCandidateService()
         self.recommendation_service = recommendation_service or RecommendationService()
@@ -21,6 +23,7 @@ class RecommendationGraphNodes:
         self.assessment_repository = (
             assessment_repository or PolicyAssessmentRepository()
         )
+        self.rerank_service = rerank_service or RecommendationRerankService()
 
     async def candidate_search(
         self,
@@ -94,11 +97,64 @@ class RecommendationGraphNodes:
         self,
         state: RecommendationGraphState,
     ) -> RecommendationGraphState:
+        rerank_candidates = self.rerank_service.select_candidate_pool(
+            candidates=state.get("candidates", []),
+            assessments=state.get("assessments", []),
+            result_limit=self.recommendation_service.result_limit,
+        )
         result_json = await self.recommendation_service.build_result(
             merged_condition_json=state["merged_condition_json"],
             candidates=state.get("candidates", []),
+            selected_candidates=rerank_candidates,
             assessments=state.get("assessments", []),
         )
+        return {
+            **state,
+            "base_result_json": result_json,
+            "result_json": result_json,
+        }
+
+    async def llm_rerank(
+        self,
+        state: RecommendationGraphState,
+    ) -> RecommendationGraphState:
+        rerank_result = await self.rerank_service.rerank(
+            merged_condition_json=state["merged_condition_json"],
+            candidates=state.get("candidates", []),
+            assessments=state.get("assessments", []),
+            base_result_json=state.get("base_result_json")
+            or state.get("result_json", {}),
+            result_limit=self.recommendation_service.result_limit,
+        )
+        return {
+            **state,
+            "llm_rerank_result": rerank_result,
+            "llm_fallback_used": rerank_result.fallback_used,
+            "llm_error": rerank_result.error,
+            "result_json": rerank_result.result_json,
+        }
+
+    async def rerank_save(
+        self,
+        state: RecommendationGraphState,
+    ) -> RecommendationGraphState:
+        rerank_result = state.get("llm_rerank_result")
+        if rerank_result and rerank_result.rerank_scores:
+            await self.candidate_service.save_rerank_scores(
+                db=state["db"],
+                request_id=state["request_id"],
+                rerank_scores=rerank_result.rerank_scores,
+            )
+        return state
+
+    async def finalize_result(
+        self,
+        state: RecommendationGraphState,
+    ) -> RecommendationGraphState:
+        result_json = state.get("result_json") or state.get("base_result_json") or {
+            "results": [],
+            "recommendations": [],
+        }
         return {
             **state,
             "result_json": result_json,

@@ -130,6 +130,14 @@ class RecommendationCandidateService:
     ) -> None:
         await self.repository.replace_candidates(db, request_id, candidates)
 
+    async def save_rerank_scores(
+        self,
+        db: AsyncSession,
+        request_id: int,
+        rerank_scores: dict[int, float],
+    ) -> None:
+        await self.repository.update_rerank_scores(db, request_id, rerank_scores)
+
     async def _find_vector_matches(
         self,
         condition: dict[str, Any],

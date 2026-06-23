@@ -8,6 +8,7 @@ from app.ai.states import RecommendationGraphState
 from app.repositories.policy_assessment_repository import PolicyAssessmentRepository
 from app.services.recommendation_assessment_service import RecommendationAssessmentService
 from app.services.recommendation_candidate_service import RecommendationCandidateService
+from app.services.recommendation_rerank_service import RecommendationRerankService
 from app.services.recommendation_service import RecommendationService
 
 
@@ -18,12 +19,14 @@ class RecommendationGraphRunner:
         recommendation_service: RecommendationService | None = None,
         assessment_service: RecommendationAssessmentService | None = None,
         assessment_repository: PolicyAssessmentRepository | None = None,
+        rerank_service: RecommendationRerankService | None = None,
     ) -> None:
         self.nodes = RecommendationGraphNodes(
             candidate_service=candidate_service,
             recommendation_service=recommendation_service,
             assessment_service=assessment_service,
             assessment_repository=assessment_repository,
+            rerank_service=rerank_service,
         )
         self.graph = self._build_graph()
 
@@ -35,13 +38,19 @@ class RecommendationGraphRunner:
         workflow.add_node("policy_assessment", self.nodes.policy_assessment)
         workflow.add_node("assessment_save", self.nodes.assessment_save)
         workflow.add_node("build_result", self.nodes.build_result)
+        workflow.add_node("llm_rerank", self.nodes.llm_rerank)
+        workflow.add_node("rerank_save", self.nodes.rerank_save)
+        workflow.add_node("finalize_result", self.nodes.finalize_result)
         workflow.add_edge(START, "candidate_search")
         workflow.add_edge("candidate_search", "rule_filter")
         workflow.add_edge("rule_filter", "candidate_save")
         workflow.add_edge("candidate_save", "policy_assessment")
         workflow.add_edge("policy_assessment", "assessment_save")
         workflow.add_edge("assessment_save", "build_result")
-        workflow.add_edge("build_result", END)
+        workflow.add_edge("build_result", "llm_rerank")
+        workflow.add_edge("llm_rerank", "rerank_save")
+        workflow.add_edge("rerank_save", "finalize_result")
+        workflow.add_edge("finalize_result", END)
         return workflow.compile()
 
     async def run(

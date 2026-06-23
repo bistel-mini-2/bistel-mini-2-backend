@@ -13,4 +13,8 @@ class RecommendationGraphState(TypedDict):
     query_terms: NotRequired[list[str]]
     candidates: NotRequired[list[Any]]
     assessments: NotRequired[list[Any]]
+    base_result_json: NotRequired[dict[str, Any]]
+    llm_rerank_result: NotRequired[Any]
+    llm_fallback_used: NotRequired[bool]
+    llm_error: NotRequired[str | None]
     result_json: NotRequired[dict[str, Any]]
