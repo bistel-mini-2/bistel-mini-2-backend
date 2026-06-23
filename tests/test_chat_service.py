@@ -1,6 +1,6 @@
 import asyncio
 from typing import Any
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 from app.db.models.chat_message import ChatMessage
 from app.db.models.chat_session import ChatSession
@@ -273,6 +273,102 @@ def test_send_message_fallback_when_graph_fails(monkeypatch) -> None:
     mocks["bulk_save_message_evidences"].assert_awaited_once_with(
         mocks["bulk_save_message_evidences"].await_args.args[0], [],
     )
+
+
+def test_send_message_schedules_title_generation_for_first_message(monkeypatch) -> None:
+    session = _session()
+    _patch_repo_for_send(monkeypatch, session=session)
+
+    monkeypatch.setattr(
+        PolicyRepository,
+        "find_ids_by_codes",
+        AsyncMock(return_value={"WLF1": 42}),
+    )
+    monkeypatch.setattr(
+        chat_service_module,
+        "_run_supervisor_graph",
+        AsyncMock(return_value=_graph_result()),
+    )
+    schedule_mock = MagicMock()
+    monkeypatch.setattr(
+        chat_service_module, "_schedule_title_generation", schedule_mock,
+    )
+
+    asyncio.run(
+        ChatService.send_message(
+            db=AsyncMock(), user_id=1, chat_session_id=10, content="추천해줘",
+        )
+    )
+
+    schedule_mock.assert_called_once_with(10, "추천해줘")
+
+
+def test_send_message_skips_title_generation_when_title_exists(monkeypatch) -> None:
+    session = _session()
+    session.title = "기존 제목"
+    _patch_repo_for_send(monkeypatch, session=session)
+
+    monkeypatch.setattr(
+        PolicyRepository,
+        "find_ids_by_codes",
+        AsyncMock(return_value={"WLF1": 42}),
+    )
+    monkeypatch.setattr(
+        chat_service_module,
+        "_run_supervisor_graph",
+        AsyncMock(return_value=_graph_result()),
+    )
+    schedule_mock = MagicMock()
+    monkeypatch.setattr(
+        chat_service_module, "_schedule_title_generation", schedule_mock,
+    )
+
+    asyncio.run(
+        ChatService.send_message(
+            db=AsyncMock(), user_id=1, chat_session_id=10, content="추천해줘",
+        )
+    )
+
+    schedule_mock.assert_not_called()
+
+
+def test_send_message_skips_title_generation_when_history_not_empty(monkeypatch) -> None:
+    session = _session()
+    mocks = _patch_repo_for_send(monkeypatch, session=session)
+    # 첫 메시지가 아니라 이미 이전 대화가 있는 상태
+    mocks["find_recent_messages"].return_value = [
+        ChatMessage(
+            chat_message_id=99,
+            chat_session_id=10,
+            role="user",
+            message_type="TEXT",
+            content="이전 질문",
+            sequence_no=1,
+        )
+    ]
+
+    monkeypatch.setattr(
+        PolicyRepository,
+        "find_ids_by_codes",
+        AsyncMock(return_value={"WLF1": 42}),
+    )
+    monkeypatch.setattr(
+        chat_service_module,
+        "_run_supervisor_graph",
+        AsyncMock(return_value=_graph_result()),
+    )
+    schedule_mock = MagicMock()
+    monkeypatch.setattr(
+        chat_service_module, "_schedule_title_generation", schedule_mock,
+    )
+
+    asyncio.run(
+        ChatService.send_message(
+            db=AsyncMock(), user_id=1, chat_session_id=10, content="추가 질문",
+        )
+    )
+
+    schedule_mock.assert_not_called()
 
 
 def test_list_messages_includes_normalized_data(monkeypatch) -> None:
