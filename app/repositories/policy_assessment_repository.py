@@ -72,6 +72,12 @@ class PolicyAssessmentRepository:
             ON policy_assessment (request_id, policy_id, assessment_type)
             WHERE request_id IS NOT NULL
             """,
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS
+            policy_assessment_eligibility_policy_type_uidx
+            ON policy_assessment (eligibility_request_id, policy_id, assessment_type)
+            WHERE eligibility_request_id IS NOT NULL
+            """,
         ]:
             await db.execute(text(statement))
 
@@ -151,6 +157,137 @@ class PolicyAssessmentRepository:
                 },
             )
 
+    async def find_policy_evidence_chunks(
+        self,
+        db: AsyncSession,
+        policy_id: int,
+        limit: int = 8,
+    ) -> list[EvidenceChunk]:
+        result = await db.execute(
+            text(
+                """
+                SELECT
+                    c.chunk_id,
+                    d.policy_id,
+                    c.chunk_text,
+                    COALESCE(
+                        c.metadata_json ->> 'source_title',
+                        d.source_title,
+                        p.policy_name,
+                        ''
+                    ) AS source_title,
+                    COALESCE(
+                        c.metadata_json ->> 'source_url',
+                        d.source_url,
+                        p.official_url,
+                        ''
+                    ) AS source_url,
+                    c.metadata_json ->> 'evidence_role' AS evidence_role
+                FROM policy_document_chunk c
+                JOIN policy_document d ON d.document_id = c.document_id
+                JOIN policy p ON p.policy_id = d.policy_id
+                WHERE d.policy_id = :policy_id
+                  AND c.chunk_text IS NOT NULL
+                  AND btrim(c.chunk_text) <> ''
+                ORDER BY
+                    CASE d.source_type
+                        WHEN 'POLICY_DETAIL' THEN 0
+                        WHEN 'POLICY_REFERENCE' THEN 1
+                        ELSE 2
+                    END,
+                    c.chunk_index,
+                    c.chunk_id
+                LIMIT :limit
+                """
+            ),
+            {"policy_id": policy_id, "limit": limit},
+        )
+        return [
+            EvidenceChunk(
+                chunk_id=row["chunk_id"],
+                policy_id=row["policy_id"],
+                snippet=row["chunk_text"],
+                source_title=row["source_title"],
+                source_url=row["source_url"],
+                score=None,
+                evidence_role=row["evidence_role"],
+            )
+            for row in result.mappings().all()
+        ]
+
+    async def find_eligibility_assessment(
+        self,
+        db: AsyncSession,
+        request_id: int,
+        policy_id: int,
+    ) -> dict[str, Any] | None:
+        result = await db.execute(
+            text(
+                """
+                SELECT
+                    pa.assessment_id,
+                    pa.policy_id,
+                    pa.assessment_status,
+                    pa.confidence_score,
+                    pa.matched_conditions_json,
+                    pa.missing_conditions_json,
+                    pa.conflicting_conditions_json,
+                    pa.manual_check_points_json,
+                    pa.reason_summary,
+                    p.policy_code,
+                    p.policy_name
+                FROM policy_assessment pa
+                JOIN policy p ON p.policy_id = pa.policy_id
+                WHERE pa.eligibility_request_id = :request_id
+                  AND pa.policy_id = :policy_id
+                  AND pa.assessment_type = 'eligibility_detail'
+                ORDER BY pa.created_at DESC, pa.assessment_id DESC
+                LIMIT 1
+                """
+            ),
+            {"request_id": request_id, "policy_id": policy_id},
+        )
+        assessment = result.mappings().one_or_none()
+        if assessment is None:
+            return None
+
+        evidence_result = await db.execute(
+            text(
+                """
+                SELECT
+                    ae.chunk_id,
+                    ae.snippet,
+                    ae.similarity_score,
+                    ae.evidence_role,
+                    COALESCE(
+                        pdc.metadata_json ->> 'source_title',
+                        pd.source_title,
+                        ''
+                    ) AS source_title,
+                    COALESCE(
+                        pdc.metadata_json ->> 'source_url',
+                        pd.source_url,
+                        ''
+                    ) AS source_url,
+                    COALESCE(
+                        pdc.metadata_json ->> 'policy_id',
+                        pd.policy_id::text,
+                        ''
+                    ) AS evidence_policy_id
+                FROM assessment_evidence ae
+                LEFT JOIN policy_document_chunk pdc ON pdc.chunk_id = ae.chunk_id
+                LEFT JOIN policy_document pd ON pd.document_id = pdc.document_id
+                WHERE ae.assessment_id = :assessment_id
+                ORDER BY ae.evidence_id
+                """
+            ),
+            {"assessment_id": assessment["assessment_id"]},
+        )
+        return {
+            **dict(assessment),
+            "evidences": [dict(row) for row in evidence_result.mappings().all()],
+        }
+
     @staticmethod
     async def ensure_policy_assessment_schema(conn) -> None:
         async with conn.cursor() as cur:
@@ -206,6 +343,14 @@ class PolicyAssessmentRepository:
                     ON policy_assessment (request_id, policy_id, assessment_type)
                 """
             )
+            await cur.execute(
+                """
+                    CREATE UNIQUE INDEX IF NOT EXISTS
+                    policy_assessment_eligibility_policy_type_uidx
+                    ON policy_assessment (eligibility_request_id, policy_id, assessment_type)
+                    WHERE eligibility_request_id IS NOT NULL
+                """
+            )
 
     @staticmethod
     async def save_assessment(
@@ -221,6 +366,20 @@ class PolicyAssessmentRepository:
         request_id = recommendation_request_id
 
         async with conn.cursor() as cur:
+            if eligibility_request_id is not None:
+                await cur.execute(
+                    """
+                        DELETE FROM policy_assessment
+                        WHERE eligibility_request_id = %s
+                          AND policy_id = %s
+                          AND assessment_type = %s
+                    """,
+                    (
+                        eligibility_request_id,
+                        int(result.policy_id),
+                        assessment_type,
+                    ),
+                )
             await cur.execute(
                 """
                     INSERT INTO policy_assessment (

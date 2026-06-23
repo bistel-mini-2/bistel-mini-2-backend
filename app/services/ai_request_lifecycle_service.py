@@ -6,19 +6,33 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.graphs.recommendation_graph import RecommendationGraphRunner
 from app.ai.agents.condition_agent import ConditionAgent
+from app.common.ai_status import (
+    AssessmentStatus,
+    UserStatus,
+    map_assessment_to_user_status,
+)
 from app.common.exceptions import AppException, ErrorCode
+from app.common.psycopg_pool_conf import psycopg_pool
 from app.db.models.policy import Policy
 from app.repositories.ai_request_repository import AiRequestModel, AiRequestRepository
 from app.repositories.family_profile_repository import FamilyProfileRepository
+from app.repositories.policy_assessment_repository import PolicyAssessmentRepository
 from app.repositories.user_repository import UserRepository
-from app.schemas.ai_contract import ConditionInput, RequestStatus
+from app.schemas.ai_contract import AssessmentInput, ConditionInput, RequestStatus
 from app.schemas.ai_request_schema import (
     AiRequestSnapshot,
+    EligibilityCriteriaItem,
+    EligibilityFollowUpQuestionItem,
+    EligibilityResultResponse,
     FollowUpQuestionItem,
     RecommendationEvidenceItem,
     RecommendationPollingResponse,
     RecommendationPollingStatus,
     RecommendationResultItem,
+)
+from app.services.policy_assessment_service import (
+    ASSESSMENT_TYPE_ELIGIBILITY,
+    PolicyAssessmentService,
 )
 from app.services.recommendation_service import RecommendationService
 
@@ -27,11 +41,15 @@ class AiRequestLifecycleService:
     def __init__(
         self,
         repository: AiRequestRepository | None = None,
+        assessment_repository: PolicyAssessmentRepository | None = None,
+        assessment_service: PolicyAssessmentService | None = None,
         condition_agent: ConditionAgent | None = None,
         recommendation_graph: RecommendationGraphRunner | None = None,
         recommendation_service: RecommendationService | None = None,
     ) -> None:
         self.repository = repository or AiRequestRepository()
+        self.assessment_repository = assessment_repository or PolicyAssessmentRepository()
+        self.assessment_service = assessment_service or PolicyAssessmentService()
         self.condition_agent = condition_agent or ConditionAgent()
         self.recommendation_graph = recommendation_graph
         self.recommendation_service = recommendation_service
@@ -158,6 +176,28 @@ class AiRequestLifecycleService:
             raise self._not_found("recommendation", request_id)
         return self.to_recommendation_polling_response(request)
 
+    async def get_eligibility_result(
+        self,
+        db: AsyncSession,
+        request_id: int,
+        user_id: int,
+    ) -> EligibilityResultResponse:
+        request = await self._get_request_or_raise(db, "eligibility", request_id)
+        if request.user_id != user_id:
+            raise self._not_found("eligibility", request_id)
+
+        policy = await self._get_policy_summary_or_raise(db, int(request.policy_id))
+        assessment = await self.assessment_repository.find_eligibility_assessment(
+            db=db,
+            request_id=request_id,
+            policy_id=int(request.policy_id),
+        )
+        return self.to_eligibility_result_response(
+            request=request,
+            policy=policy,
+            assessment=assessment,
+        )
+
     async def process_condition_request(
         self,
         db: AsyncSession,
@@ -215,7 +255,52 @@ class AiRequestLifecycleService:
                 request=request,
                 result_json=result_json,
             )
+        elif request_type == "eligibility":
+            await self._save_eligibility_assessment(
+                db=db,
+                request=request,
+                request_id=request_id,
+                merged_condition_json=condition_result.merged_condition_json,
+                input_issues_json=input_issues_json,
+                profile_conflict_json=profile_conflict_json,
+            )
         return await self.mark_completed(db, request_type, request_id)
+
+    async def _save_eligibility_assessment(
+        self,
+        db: AsyncSession,
+        request: AiRequestModel,
+        request_id: int,
+        merged_condition_json: dict[str, Any],
+        input_issues_json: list[dict[str, Any]],
+        profile_conflict_json: list[dict[str, Any]],
+    ) -> None:
+        policy_id = int(request.policy_id)
+        assessment_condition = {
+            **merged_condition_json,
+            "input_issues": input_issues_json,
+            "profile_conflicts": profile_conflict_json,
+        }
+        evidence_chunks = await self.assessment_repository.find_policy_evidence_chunks(
+            db=db,
+            policy_id=policy_id,
+        )
+        assessment_result = self.assessment_service.assess(
+            AssessmentInput(
+                policy_id=policy_id,
+                merged_condition_json=assessment_condition,
+                evidence_chunks=evidence_chunks,
+            ),
+            assessment_type=ASSESSMENT_TYPE_ELIGIBILITY,
+        )[0]
+
+        async with psycopg_pool.connection() as conn:
+            await PolicyAssessmentRepository.save_assessment(
+                conn=conn,
+                result=assessment_result,
+                assessment_type=ASSESSMENT_TYPE_ELIGIBILITY,
+                eligibility_request_id=request_id,
+            )
 
     async def resolve_policy_id(
         self,
@@ -335,6 +420,76 @@ class AiRequestLifecycleService:
             ),
         )
 
+    def to_eligibility_result_response(
+        self,
+        request: AiRequestModel,
+        policy: dict[str, Any],
+        assessment: dict[str, Any] | None,
+    ) -> EligibilityResultResponse:
+        request_status = RequestStatus(request.request_status)
+        questions = self._eligibility_follow_up_questions(request.parsed_query_json or {})
+        input_summary = self._eligibility_input_summary(request)
+
+        if assessment is None:
+            return EligibilityResultResponse(
+                request_id=str(request.request_id),
+                status=request_status,
+                policy_id=str(request.policy_id),
+                slug=str(policy["policy_code"]),
+                policy_name=str(policy["policy_name"]),
+                questions=questions,
+                follow_up_questions=questions,
+                input_summary=input_summary,
+                error_message=(
+                    request.error_message if request_status == RequestStatus.FAILED else None
+                ),
+            )
+
+        assessment_status = AssessmentStatus(str(assessment["assessment_status"]))
+        user_status = map_assessment_to_user_status(assessment_status)
+        matched_conditions = self._string_list(assessment.get("matched_conditions_json"))
+        missing_conditions = self._string_list(assessment.get("missing_conditions_json"))
+        conflicting_conditions = self._string_list(
+            assessment.get("conflicting_conditions_json")
+        )
+        manual_check_points = self._string_list(
+            assessment.get("manual_check_points_json")
+        )
+
+        return EligibilityResultResponse(
+            request_id=str(request.request_id),
+            status=request_status,
+            policy_id=str(request.policy_id),
+            slug=str(policy["policy_code"]),
+            policy_name=str(policy["policy_name"]),
+            user_status=user_status.value,
+            banner_level=self._banner_level(user_status),
+            summary=assessment.get("reason_summary"),
+            criteria=self._eligibility_criteria(
+                assessment_status=assessment_status,
+                reason_summary=assessment.get("reason_summary"),
+                matched_conditions=matched_conditions,
+                missing_conditions=missing_conditions,
+                conflicting_conditions=conflicting_conditions,
+                manual_check_points=manual_check_points,
+            ),
+            matched_conditions=matched_conditions,
+            missing_conditions=missing_conditions,
+            conflicting_conditions=conflicting_conditions,
+            manual_check_points=manual_check_points,
+            evidences=[
+                self._eligibility_evidence_item(evidence, request.policy_id)
+                for evidence in assessment.get("evidences", [])
+                if isinstance(evidence, dict)
+            ],
+            questions=questions,
+            follow_up_questions=questions,
+            input_summary=input_summary,
+            error_message=(
+                request.error_message if request_status == RequestStatus.FAILED else None
+            ),
+        )
+
     def _polling_status(
         self,
         request_status: RequestStatus,
@@ -423,6 +578,107 @@ class AiRequestLifecycleService:
             if isinstance(question, dict)
         ][:2]
 
+    def _eligibility_follow_up_questions(
+        self,
+        parsed_query_json: dict[str, Any],
+    ) -> list[EligibilityFollowUpQuestionItem]:
+        questions = parsed_query_json.get("questions") or []
+        if not isinstance(questions, list):
+            return []
+        return [
+            EligibilityFollowUpQuestionItem(
+                follow_up_id=(
+                    str(question.get("follow_up_id"))
+                    if question.get("follow_up_id") is not None
+                    else str(index + 1)
+                ),
+                field_name=str(question.get("field_name") or ""),
+                question_text=str(question.get("question_text") or ""),
+                reason=question.get("reason"),
+                priority=int(question.get("priority") or 0),
+            )
+            for index, question in enumerate(questions[:2])
+            if isinstance(question, dict)
+        ]
+
+    def _eligibility_input_summary(self, request: AiRequestModel) -> dict[str, Any]:
+        parsed_query_json = request.parsed_query_json or {}
+        selected_conditions = parsed_query_json.get("selected_conditions")
+        if isinstance(selected_conditions, dict):
+            return selected_conditions
+        return request.merged_condition_json or {}
+
+    def _eligibility_criteria(
+        self,
+        assessment_status: AssessmentStatus,
+        reason_summary: str | None,
+        matched_conditions: list[str],
+        missing_conditions: list[str],
+        conflicting_conditions: list[str],
+        manual_check_points: list[str],
+    ) -> list[EligibilityCriteriaItem]:
+        criteria: list[EligibilityCriteriaItem] = []
+        criteria.extend(
+            EligibilityCriteriaItem(label=condition, status="ok", note="조건이 충족되었습니다.")
+            for condition in matched_conditions
+        )
+        criteria.extend(
+            EligibilityCriteriaItem(label=condition, status="check", note="추가 확인이 필요합니다.")
+            for condition in missing_conditions
+        )
+        criteria.extend(
+            EligibilityCriteriaItem(label=condition, status="check", note="입력값이 서로 충돌합니다.")
+            for condition in conflicting_conditions
+        )
+        criteria.extend(
+            EligibilityCriteriaItem(label=condition, status="check", note="수동 확인이 필요합니다.")
+            for condition in manual_check_points
+        )
+        if not criteria and reason_summary:
+            status_by_assessment = {
+                AssessmentStatus.LIKELY_MATCH: "ok",
+                AssessmentStatus.NOT_MATCH: "no",
+            }
+            criteria.append(
+                EligibilityCriteriaItem(
+                    label="판정 결과",
+                    status=status_by_assessment.get(assessment_status, "check"),
+                    note=reason_summary,
+                )
+            )
+        return criteria
+
+    def _eligibility_evidence_item(
+        self,
+        item: dict[str, Any],
+        fallback_policy_id: Any,
+    ) -> RecommendationEvidenceItem:
+        evidence_role = item.get("evidence_role")
+        return RecommendationEvidenceItem(
+            chunk_id=item.get("chunk_id") or "",
+            policy_id=item.get("evidence_policy_id") or fallback_policy_id or "",
+            snippet=str(item.get("snippet") or ""),
+            source_title=str(item.get("source_title") or ""),
+            source_url=str(item.get("source_url") or ""),
+            score=self._to_float_or_none(item.get("similarity_score")),
+            evidence_role=(
+                str(evidence_role).lower() if evidence_role is not None else None
+            ),
+        )
+
+    def _banner_level(self, user_status: UserStatus) -> str:
+        level_by_status = {
+            UserStatus.RECOMMENDABLE: "high",
+            UserStatus.NEEDS_CONFIRMATION: "mid",
+            UserStatus.DIFFICULT_TO_RECOMMEND: "low",
+        }
+        return level_by_status[user_status]
+
+    def _string_list(self, value: Any) -> list[str]:
+        if not isinstance(value, list):
+            return []
+        return [str(item) for item in value if item is not None]
+
     def _to_float_or_none(self, value: Any) -> float | None:
         if value is None:
             return None
@@ -459,6 +715,25 @@ class AiRequestLifecycleService:
                 message=f"Policy not found: {policy_id}",
             )
         return int(existing_policy_id)
+
+    async def _get_policy_summary_or_raise(
+        self,
+        db: AsyncSession,
+        policy_id: int,
+    ) -> dict[str, Any]:
+        result = await db.execute(
+            select(Policy.policy_id, Policy.policy_code, Policy.policy_name).where(
+                Policy.policy_id == policy_id
+            )
+        )
+        row = result.mappings().one_or_none()
+        if row is None:
+            raise AppException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                code=ErrorCode.POLICY_NOT_FOUND,
+                message=f"Policy not found: {policy_id}",
+            )
+        return dict(row)
 
     async def _profile_snapshot(
         self,

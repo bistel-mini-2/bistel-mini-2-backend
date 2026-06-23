@@ -120,7 +120,6 @@ class AiRequestRepository:
         request_type: str,
         request_id: int,
     ) -> AiRequestModel | None:
-        await self.ensure_request_schema(db)
         model = self._model_for(request_type)
         result = await db.execute(select(model).where(model.request_id == request_id))
         return result.scalar_one_or_none()

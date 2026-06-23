@@ -10,6 +10,7 @@ from app.core.dependencies import CurrentUserDep, DbSessionDep
 from app.db.session import AsyncSessionLocal
 from app.schemas.ai_request_schema import (
     AiRequestSnapshot,
+    EligibilityResultResponse,
     EligibilityRequestCreate,
     RecommendationPollingResponse,
     RecommendationRequestCreate,
@@ -39,6 +40,15 @@ def _request_meta(snapshot: AiRequestSnapshot) -> dict[str, object]:
 
 def _recommendation_polling_meta(
     response: RecommendationPollingResponse,
+) -> dict[str, object]:
+    return {
+        "request_id": response.request_id,
+        "follow_up_required": bool(response.follow_up_questions),
+    }
+
+
+def _eligibility_result_meta(
+    response: EligibilityResultResponse,
 ) -> dict[str, object]:
     return {
         "request_id": response.request_id,
@@ -211,10 +221,9 @@ async def get_eligibility_request(
     current_user: CurrentUserDep,
 ) -> JSONResponse:
     service = AiRequestLifecycleService()
-    snapshot = await service.get_request(
+    response = await service.get_eligibility_result(
         db=db,
-        request_type="eligibility",
         request_id=request_id,
         user_id=current_user.user_id,
     )
-    return success_response(data=snapshot, meta=_request_meta(snapshot))
+    return success_response(data=response, meta=_eligibility_result_meta(response))
