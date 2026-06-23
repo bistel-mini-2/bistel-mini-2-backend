@@ -15,6 +15,7 @@ from app.db.models.chat_session import ChatSession
 from app.repositories.chat_repository import ChatRepository
 from app.repositories.policy_repository import PolicyRepository
 from app.schemas.chat_schema import (
+    ApplyCard,
     AssistantMessage,
     AssistantMessageEvidence,
     AssistantMessagePolicy,
@@ -258,6 +259,7 @@ def _build_structured_json(decision: dict, payload: dict) -> dict:
         "user_status": payload.get("user_status"),
         "sources": payload.get("sources", []),
         "actions": payload.get("actions", []),
+        "apply_card": payload.get("apply_card"),
         "disclaimer": payload.get("disclaimer"),
     }
 
@@ -331,6 +333,8 @@ def _build_assistant_response(
         )
         for ev in payload.get("evidences", [])
     ]
+    apply_card_payload = payload.get("apply_card")
+    apply_card = ApplyCard(**apply_card_payload) if apply_card_payload else None
     return AssistantMessage(
         chat_message_id=str(assistant_message.chat_message_id),
         content=payload.get("content") or "",
@@ -339,6 +343,7 @@ def _build_assistant_response(
         policies=policies,
         actions=payload.get("actions", []),
         evidences=evidences,
+        apply_card=apply_card,
         disclaimer=payload.get("disclaimer"),
     )
 
@@ -384,10 +389,13 @@ def _to_message_item(
 def _unwrap_message_meta(structured_json: dict | None) -> dict:
     if not structured_json:
         return {}
+    apply_card_payload = structured_json.get("apply_card")
+    apply_card = ApplyCard(**apply_card_payload) if apply_card_payload else None
     return {
         "user_status": structured_json.get("user_status"),
         "sources": structured_json.get("sources", []),
         "actions": structured_json.get("actions", []),
+        "apply_card": apply_card,
         "disclaimer": structured_json.get("disclaimer"),
     }
 
@@ -400,5 +408,6 @@ def _fallback_payload() -> dict:
         "policies": [],
         "evidences": [],
         "actions": [],
+        "apply_card": None,
         "disclaimer": False,
     }

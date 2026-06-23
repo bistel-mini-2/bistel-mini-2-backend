@@ -2,6 +2,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.schemas.apply_schema import ChecklistItem
+
 
 class ChatSessionCreateRequest(BaseModel):
     title: str | None = Field(default=None, max_length=255)
@@ -50,6 +52,17 @@ class AssistantMessageEvidence(BaseModel):
         return v.lower() if v else v
 
 
+class ApplyCard(BaseModel):
+    policy_id: str
+    policy_name: str
+    how_to_apply: str | None = None
+    apply_period: str | None = None
+    contact: str | None = None
+    official_url: str | None = None
+    checklist: list[ChecklistItem] = Field(default_factory=list)
+    caution: str | None = None
+
+
 class AssistantMessage(BaseModel):
     chat_message_id: str
     content: str
@@ -58,6 +71,7 @@ class AssistantMessage(BaseModel):
     policies: list[AssistantMessagePolicy] = Field(default_factory=list)
     actions: list[str] = Field(default_factory=list)
     evidences: list[AssistantMessageEvidence] = Field(default_factory=list)
+    apply_card: ApplyCard | None = None
     disclaimer: bool | None = None
 
 
@@ -83,6 +97,7 @@ class ChatMessageItem(BaseModel):
     policies: list[AssistantMessagePolicy] = Field(default_factory=list)
     actions: list[str] = Field(default_factory=list)
     evidences: list[AssistantMessageEvidence] = Field(default_factory=list)
+    apply_card: ApplyCard | None = None
     disclaimer: bool | None = None
 
     model_config = ConfigDict(from_attributes=True)

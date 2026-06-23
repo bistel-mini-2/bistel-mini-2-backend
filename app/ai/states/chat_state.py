@@ -29,6 +29,7 @@ class ChatGraphState(TypedDict):
     branch_content: NotRequired[str]
     branch_policies: NotRequired[list[dict[str, Any]]]
     branch_evidences: NotRequired[list[dict[str, Any]]]
+    branch_apply_card: NotRequired[dict[str, Any] | None]
     assistant_payload: NotRequired[dict[str, Any]]
     evidences_to_save: NotRequired[list[dict[str, Any]]]
     policy_links_to_save: NotRequired[list[dict[str, Any]]]

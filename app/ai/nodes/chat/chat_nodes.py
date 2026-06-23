@@ -15,9 +15,12 @@ from app.ai.states.chat_state import (
     Intent,
 )
 from app.common.ai_status import RequestStatus
+from app.common.exceptions import AppException, ErrorCode
 from app.core.config import settings
 from app.db.session import AsyncSessionLocal
 from app.schemas.ai_request_schema import AiRequestSnapshot
+from app.schemas.apply_schema import ApplyPreparationResponse
+from app.services.apply_preparation_service import ApplyPreparationService
 from app.services.policy_rag_service import PolicyRagService
 
 if TYPE_CHECKING:
@@ -138,6 +141,10 @@ _RECOMMEND_FALLBACK_FOLLOW_UP = (
 _RECOMMEND_FALLBACK_ERROR = (
     "맞춤 추천을 만드는 중에 문제가 발생했어요. 잠시 후 다시 시도해 주세요."
 )
+_APPLY_LIFECYCLE_TIMEOUT_SECONDS = 12
+_APPLY_LOCK_TIMEOUT = "5s"
+_APPLY_STATEMENT_TIMEOUT = "10s"
+_APPLY_CHECKLIST_PREVIEW = 5
 _EVIDENCE_ROLE_ENUM: frozenset[str] = frozenset(
     {"SUMMARY", "TARGET", "BENEFIT", "APPLICATION", "CAUTION"}
 )
@@ -221,6 +228,58 @@ def _adapt_recommendation_result(
     return policies, evidences
 
 
+def _pick_apply_target(
+    policies: list[dict[str, Any]],
+) -> tuple[str | None, str | None]:
+    for policy in policies:
+        slug = policy.get("slug")
+        if slug:
+            return str(slug), policy.get("policy_name") or None
+    return None, None
+
+
+def _build_apply_card(
+    apply_response: ApplyPreparationResponse, policy_name: str | None
+) -> dict[str, Any]:
+    checklist = [
+        {"id": item.id, "label": item.label, "done": item.done}
+        for item in apply_response.checklist[:_APPLY_CHECKLIST_PREVIEW]
+    ]
+    return {
+        "policy_id": apply_response.policy_id,
+        "policy_name": policy_name or apply_response.policy_id,
+        "how_to_apply": apply_response.how_to_apply,
+        "apply_period": apply_response.apply_period,
+        "contact": apply_response.contact,
+        "official_url": apply_response.official_url,
+        "checklist": checklist,
+        "caution": apply_response.caution,
+    }
+
+
+def _format_apply_card_context(apply_card: dict[str, Any]) -> str:
+    parts: list[str] = []
+    name = apply_card.get("policy_name")
+    if name:
+        parts.append(f"- 정책명: {name}")
+    if apply_card.get("how_to_apply"):
+        parts.append(f"- 신청 방법: {apply_card['how_to_apply']}")
+    if apply_card.get("apply_period"):
+        parts.append(f"- 신청 기간: {apply_card['apply_period']}")
+    if apply_card.get("contact"):
+        parts.append(f"- 문의처: {apply_card['contact']}")
+    if apply_card.get("official_url"):
+        parts.append(f"- 공식 안내: {apply_card['official_url']}")
+    checklist = apply_card.get("checklist") or []
+    if checklist:
+        items = "; ".join(item["label"] for item in checklist if item.get("label"))
+        if items:
+            parts.append(f"- 체크리스트: {items}")
+    if apply_card.get("caution"):
+        parts.append(f"- 주의사항: {apply_card['caution']}")
+    return "\n".join(parts)
+
+
 def _history_to_lc_messages(history: list[HistoryMessage]) -> list[BaseMessage]:
     messages: list[BaseMessage] = []
     for entry in history:
@@ -292,7 +351,51 @@ class ChatGraphNodes:
         return await self._branch_with_rag("compare", state)
 
     async def branch_apply(self, state: ChatGraphState) -> ChatGraphState:
-        return await self._branch_with_rag("apply", state)
+        policies, evidences = await self._rag_lookup(state["user_content"])
+        slug, policy_name = _pick_apply_target(policies)
+        if slug is None:
+            content = await self._generate_branch_answer("apply", state, evidences)
+            return {
+                **state,
+                "branch_content": content,
+                "branch_policies": [],
+                "branch_evidences": evidences,
+                "branch_apply_card": None,
+            }
+
+        apply_response = await self._run_apply_preparation(
+            user_id=state["user_id"],
+            policy_slug=slug,
+        )
+        if apply_response is None:
+            content = await self._generate_branch_answer("apply", state, evidences)
+            return {
+                **state,
+                "branch_content": content,
+                "branch_policies": [],
+                "branch_evidences": evidences,
+                "branch_apply_card": None,
+            }
+
+        apply_card = _build_apply_card(apply_response, policy_name)
+        apply_policies = [
+            {
+                "policy_id": slug,
+                "slug": slug,
+                "policy_name": policy_name or "",
+                "summary": None,
+                "tag": None,
+                "tagTone": None,
+            }
+        ]
+        content = await self._generate_apply_answer(state, evidences, apply_card)
+        return {
+            **state,
+            "branch_content": content,
+            "branch_policies": apply_policies,
+            "branch_evidences": evidences,
+            "branch_apply_card": apply_card,
+        }
 
     async def branch_policy_summary(self, state: ChatGraphState) -> ChatGraphState:
         return await self._branch_with_rag("policy_summary", state)
@@ -325,6 +428,7 @@ class ChatGraphNodes:
             "policies": state.get("branch_policies", []),
             "evidences": state.get("branch_evidences", []),
             "actions": [api_action] if api_action else [],
+            "apply_card": state.get("branch_apply_card"),
             "disclaimer": intent != "unclear",
         }
         return {**state, "assistant_payload": payload}
@@ -419,6 +523,75 @@ class ChatGraphNodes:
             "branch_policies": [],
             "branch_evidences": [],
         }
+
+    async def _run_apply_preparation(
+        self,
+        user_id: int,
+        policy_slug: str,
+    ) -> ApplyPreparationResponse | None:
+        try:
+            async with AsyncSessionLocal() as db:
+                try:
+                    await db.execute(
+                        text(f"SET LOCAL lock_timeout = '{_APPLY_LOCK_TIMEOUT}'")
+                    )
+                    await db.execute(
+                        text(
+                            f"SET LOCAL statement_timeout = "
+                            f"'{_APPLY_STATEMENT_TIMEOUT}'"
+                        )
+                    )
+                    response = await asyncio.wait_for(
+                        ApplyPreparationService.get(
+                            db=db,
+                            user_id=user_id,
+                            policy_slug=policy_slug,
+                        ),
+                        timeout=_APPLY_LIFECYCLE_TIMEOUT_SECONDS,
+                    )
+                    await db.commit()
+                    return response
+                except Exception:
+                    await db.rollback()
+                    raise
+        except AppException as exc:
+            if exc.code != ErrorCode.POLICY_NOT_FOUND:
+                raise
+            logger.info(
+                "chat branch_apply preview skipped: %s", exc.message
+            )
+            return None
+        except Exception:
+            logger.exception("chat branch_apply preview failed")
+            return None
+
+    async def _generate_apply_answer(
+        self,
+        state: ChatGraphState,
+        evidences: list[dict],
+        apply_card: dict,
+    ) -> str:
+        system = _BRANCH_SYSTEM_PROMPTS["apply"]
+        apply_context = _format_apply_card_context(apply_card)
+        if apply_context:
+            system = f"{system}\n\n신청 정보:\n{apply_context}"
+        if evidences:
+            rag_context = "\n\n".join(
+                f"[{evidence.get('source_title') or '정책'}] {evidence.get('snippet', '')}"
+                for evidence in evidences
+            )
+            system = f"{system}\n\n참고 자료:\n{rag_context}"
+
+        messages: list[BaseMessage] = [SystemMessage(content=system)]
+        messages.extend(_history_to_lc_messages(state["history"]))
+        messages.append(HumanMessage(content=state["user_content"]))
+        try:
+            response = await _llm().ainvoke(messages)
+            content = response.content
+            return content if isinstance(content, str) else str(content)
+        except Exception:
+            logger.exception("Apply branch answer generation failed; using fallback")
+            return "죄송합니다. 답변을 생성하는 중 문제가 발생했어요. 잠시 후 다시 시도해 주세요."
 
     async def _branch_with_rag(
         self,
