@@ -54,7 +54,8 @@ class FamilySpecialCondition(StrEnum):
     MULTICULTURAL = "multi"
     DISABILITY = "disabled"
     MULTI_CHILD = "many"
-    LOW_INCOME = "dual"
+    DUAL_INCOME = "dual"
+    LOW_INCOME = "low_income"
 
 
 class FamilyProfileRequest(BaseModel):

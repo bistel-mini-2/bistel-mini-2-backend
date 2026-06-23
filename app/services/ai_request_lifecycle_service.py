@@ -34,6 +34,10 @@ from app.services.policy_assessment_service import (
     ASSESSMENT_TYPE_ELIGIBILITY,
     PolicyAssessmentService,
 )
+from app.services.recommendation_result_normalizer import (
+    normalize_recommendation_result_item,
+    normalize_recommendation_result_json,
+)
 from app.services.recommendation_service import RecommendationService
 
 
@@ -250,6 +254,7 @@ class AiRequestLifecycleService:
                 input_issues=input_issues_json,
                 profile_conflict_json=profile_conflict_json,
             )
+            result_json = normalize_recommendation_result_json(result_json)
             await self.repository.update_result(
                 db=db,
                 request=request,
@@ -365,6 +370,8 @@ class AiRequestLifecycleService:
             if hasattr(request, "result_json") and request.result_json is not None
             else {}
         )
+        if request_type == "recommendation":
+            result_json = normalize_recommendation_result_json(result_json)
         results = list(result_json.get("results") or [])
         recommendations = list(result_json.get("recommendations") or results)
         return AiRequestSnapshot(
@@ -402,9 +409,12 @@ class AiRequestLifecycleService:
         )
         results = (
             self._recommendation_results(
-                request.result_json
-                if hasattr(request, "result_json") and request.result_json is not None
-                else {}
+                normalize_recommendation_result_json(
+                    request.result_json
+                    if hasattr(request, "result_json")
+                    and request.result_json is not None
+                    else {}
+                )
             )
             if request_status == RequestStatus.COMPLETED
             else []
@@ -520,6 +530,7 @@ class AiRequestLifecycleService:
         self,
         item: dict[str, Any],
     ) -> RecommendationResultItem:
+        item = normalize_recommendation_result_item(item)
         raw_evidences = item.get("evidence") or item.get("evidences") or []
         evidences = [
             self._recommendation_evidence_item(evidence, item.get("policy_id"))
@@ -540,6 +551,8 @@ class AiRequestLifecycleService:
                 ),
                 "match_score": self._to_float_or_none(item.get("match_score")),
                 "evidence": evidences,
+                "evidences": evidences,
+                "raw_evidences": list(item.get("raw_evidences") or []),
                 "follow_up_questions": [],
             }
         )

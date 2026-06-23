@@ -78,7 +78,15 @@ class RecommendationResultItem(BaseModel):
     policy_name: str
     summary: str
     match_score: float | None = None
+    raw_match_score: float | None = None
+    priority_score: float | None = None
+    recommendation_rank: int | None = None
+    priority_label: str | None = None
+    why_recommended: str | None = None
+    check_before_apply: str | None = None
+    evidences: list[RecommendationEvidenceItem] = Field(default_factory=list)
     evidence: list[RecommendationEvidenceItem] = Field(default_factory=list)
+    raw_evidences: list[Any] = Field(default_factory=list)
     follow_up_questions: list[FollowUpQuestionItem] = Field(default_factory=list)
 
 

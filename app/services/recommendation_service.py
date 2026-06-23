@@ -14,6 +14,10 @@ from app.services.recommendation_candidate_service import (
     CANDIDATE_STATUS_UNCERTAIN,
     PolicyCandidate,
 )
+from app.services.recommendation_result_normalizer import (
+    normalize_card_evidences,
+    normalize_card_text,
+)
 
 
 PolicyChunkSearcher = Callable[..., Awaitable[list[EvidenceChunk]]]
@@ -23,7 +27,7 @@ class RecommendationService:
     def __init__(
         self,
         chunk_searcher: PolicyChunkSearcher = search_policy_chunks,
-        result_limit: int = 5,
+        result_limit: int = 6,
         evidence_timeout_seconds: float = 20,
     ) -> None:
         self.chunk_searcher = chunk_searcher
@@ -176,15 +180,22 @@ class RecommendationService:
         evidences: list[EvidenceChunk],
         assessment: RecommendationPolicyAssessment | None = None,
     ) -> dict[str, Any]:
-        evidence_items = [evidence.model_dump(mode="json") for evidence in evidences]
+        raw_evidence_items = [
+            evidence.model_dump(mode="json") for evidence in evidences
+        ]
+        card_evidence_items = normalize_card_evidences(raw_evidence_items)
         match_score = min(
-            round(candidate.match_score + (0.05 if evidence_items else 0), 4),
+            round(candidate.match_score + (0.05 if raw_evidence_items else 0), 4),
             1.0,
         )
-        reason = (
-            assessment.reason_summary
-            if assessment is not None
-            else self._reason(candidate.matched_rules, bool(evidence_items))
+        reason = normalize_card_text(
+            (
+                assessment.reason_summary
+                if assessment is not None
+                else self._reason(candidate.matched_rules, bool(raw_evidence_items))
+            ),
+            limit=220,
+            max_sentences=2,
         )
         item = {
             "policy_id": str(candidate.policy.policy_id),
@@ -201,8 +212,9 @@ class RecommendationService:
             "filter_match_json": candidate.filter_match_json,
             "reason": reason,
             "reason_summary": reason,
-            "evidence": evidence_items,
-            "evidences": evidence_items,
+            "evidence": card_evidence_items,
+            "evidences": card_evidence_items,
+            "raw_evidences": raw_evidence_items,
         }
         if assessment is not None:
             item.update(
