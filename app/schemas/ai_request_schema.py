@@ -89,3 +89,34 @@ class RecommendationPollingResponse(BaseModel):
     recommendations: list[RecommendationResultItem] = Field(default_factory=list)
     follow_up_questions: list[FollowUpQuestionItem] = Field(default_factory=list)
     error_message: str | None = None
+
+
+class EligibilityCriteriaItem(BaseModel):
+    label: str
+    status: Literal["ok", "check", "no"]
+    note: str
+
+
+class EligibilityFollowUpQuestionItem(FollowUpQuestionItem):
+    follow_up_id: str | None = None
+
+
+class EligibilityResultResponse(BaseModel):
+    request_id: str
+    status: RequestStatus
+    policy_id: str
+    slug: str
+    policy_name: str
+    user_status: str | None = None
+    banner_level: Literal["high", "mid", "low"] | None = None
+    summary: str | None = None
+    criteria: list[EligibilityCriteriaItem] = Field(default_factory=list)
+    matched_conditions: list[str] = Field(default_factory=list)
+    missing_conditions: list[str] = Field(default_factory=list)
+    conflicting_conditions: list[str] = Field(default_factory=list)
+    manual_check_points: list[str] = Field(default_factory=list)
+    evidences: list[RecommendationEvidenceItem] = Field(default_factory=list)
+    questions: list[EligibilityFollowUpQuestionItem] = Field(default_factory=list)
+    follow_up_questions: list[EligibilityFollowUpQuestionItem] = Field(default_factory=list)
+    input_summary: dict[str, Any] = Field(default_factory=dict)
+    error_message: str | None = None
