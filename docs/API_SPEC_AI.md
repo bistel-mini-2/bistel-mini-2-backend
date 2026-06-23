@@ -982,7 +982,7 @@ type PolicyAiSummaryResponse = {
   owner: "추천/회원"
   request: "request_id, merged_condition_json, input_issues?, profile_conflict_json?"
   response: "result_json"
-  notes: "외부 추천 요청 생성/조회 API 뒤에서 호출되는 유스케이스 계층. #77 request lifecycle을 재사용하며 ConditionAnalysis -> profile merge -> RecommendationGraphRunner(CandidateSearch -> RuleFilter -> CandidateSave -> PolicyAssessment -> AssessmentSave -> ResultBuild) -> RAG evidence -> result_json 저장 순서로 호출한다."
+  notes: "외부 추천 요청 생성/조회 API 뒤에서 호출되는 유스케이스 계층. #77 request lifecycle을 재사용하며 ConditionAnalysis -> profile merge -> RecommendationGraphRunner(CandidateSearch -> RuleFilter -> CandidateSave -> PolicyAssessment -> AssessmentSave -> ResultBuild -> LlmRerank -> RerankSave -> FinalizeResult) -> result_json 저장 순서로 호출한다. LLM은 후보 목록 안에서만 순서/설명을 보강하며 실패 시 rule/assessment 기반 result_json으로 fallback한다."
 
 - id: condition_analysis_service_analyze
   type: "service contract"
