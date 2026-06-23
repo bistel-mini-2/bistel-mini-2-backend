@@ -542,14 +542,21 @@ type PolicyAiSummaryResponse = {
           benefit_summary: "string"
           reason_summary: "string"
           match_score: "number?"
-          evidence:
+          raw_match_score: "number?, 기존 조건 적합도 원점수"
+          priority_score: "number?, 카드 표시용 추천 우선순위 점수"
+          recommendation_rank: "number?, LLM/우선순위 정렬 순번"
+          priority_label: "가장 먼저 확인 | 우선 확인 | 조건 잘 맞음 | 추가 확인 필요 | 함께 확인"
+          why_recommended: "string?"
+          check_before_apply: "string?"
+          evidences:
             - chunk_id: "string | number"
               policy_id: "string | number"
-              snippet: "string"
+              snippet: "string, 카드 표시용 80~160자 내외"
               source_title: "string"
               source_url: "string"
               score: "number?"
               evidence_role: "string?"
+          raw_evidences: "array, 원문 chunk/디버깅용 긴 근거"
           follow_up_questions: []
       recommendations: "results와 동일한 호환 필드"
       follow_up_questions:
@@ -561,7 +568,7 @@ type PolicyAiSummaryResponse = {
     meta:
       request_id: "string"
       follow_up_required: "boolean"
-  notes: "GET은 ConditionAgent, RecommendationGraphRunner, LLM, PolicyAssessment, RAG 검색을 실행하지 않고 저장된 request_status/result_json만 읽는다. READY/PROCESSING은 loading, COMPLETED/FOLLOW_UP_REQUIRED는 done, FAILED는 error로 변환한다. COMPLETED이면 result_json.results -> result_json.recommendations 순서로 fallback하고, FOLLOW_UP_REQUIRED이면 parsed_query_json.questions를 최대 2개 반환한다."
+  notes: "GET은 ConditionAgent, RecommendationGraphRunner, LLM, PolicyAssessment, RAG 검색을 실행하지 않고 저장된 request_status/result_json만 읽는다. READY/PROCESSING은 loading, COMPLETED/FOLLOW_UP_REQUIRED는 done, FAILED는 error로 변환한다. COMPLETED이면 result_json.results -> result_json.recommendations 순서로 fallback하고, FOLLOW_UP_REQUIRED이면 parsed_query_json.questions를 최대 2개 반환한다. 기본 추천 결과는 프론트 카드 2개 x 3줄 표시를 기준으로 최대 6개 반환한다. 카드 UI는 recommendations[].priority_score와 priority_label로 추천 우선순위를 표시하고, raw_match_score는 기존 조건 적합도 원점수로 보존한다. recommendations[].evidences는 기본 근거 필드다. LLM rerank가 성공하면 입력 evidence chunk 안에서 생성한 카드용 근거 문장을 내려주고, 실패/누락 시 백엔드 normalizer가 짧은 스니펫으로 fallback한다. 긴 원문 chunk는 raw_evidences로 분리된다. evidence 단수 필드는 하위 호환용이다."
 
 - id: recommendation_save
   name: "추천 결과 저장"
@@ -1045,7 +1052,7 @@ type PolicyAiSummaryResponse = {
     excluded:
       - policy_id: "string"
         reason: "string"
-  notes: "기능명세서의 정책 후보 검색. Candidate Search가 DB/RAG 기반 후보를 찾고 Rule Filter Node가 명확히 아닌 정책을 EXCLUDED로 분리한다. 애매한 조건은 UNCERTAIN으로 유지하며, 결과는 recommendation_candidate에 저장한다. LLM rerank 전까지 rerank_score는 null이다."
+  notes: "기능명세서의 정책 후보 검색. Candidate Search가 DB/RAG 기반 후보를 찾고 Rule Filter Node가 명확히 아닌 정책을 EXCLUDED로 분리한다. 애매한 조건은 UNCERTAIN으로 유지하며, 결과는 recommendation_candidate에 저장한다. 소득 조건은 기준 중위소득 N% 이하 또는 저소득/차상위/기초생활 등 명시 신호가 있으면 사용자 income 구간과 비교해 초과 시 EXCLUDED로 분리한다. LLM rerank 전까지 rerank_score는 null이다."
 
 - id: eligibility_service_analyze
   type: "service contract"

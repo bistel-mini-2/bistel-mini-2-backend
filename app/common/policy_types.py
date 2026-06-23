@@ -47,7 +47,7 @@ class SpecialCondition(StrEnum):
     MULTICULTURAL = "multi"
     DISABILITY = "disabled"
     MULTI_CHILD = "many"
-    LOW_INCOME = "dual"
+    DUAL_INCOME = "dual"
     VETERAN = "veteran"
 
 
@@ -57,7 +57,7 @@ SPECIAL_CONDITION_TO_DB: dict[str, str] = {
     "multi": "다문화·탈북민",
     "disabled": "장애인",
     "many": "다자녀",
-    "dual": "저소득",
+    "dual": "맞벌이",
     "veteran": "보훈대상자",
 }
 

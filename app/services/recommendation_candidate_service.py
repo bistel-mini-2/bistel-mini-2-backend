@@ -1,5 +1,6 @@
 import logging
 import asyncio
+import re
 from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import Any
@@ -25,6 +26,29 @@ SPECIAL_RECOMMENDATION_TERMS = {
     "dual": "맞벌이",
     "veteran": "보훈",
 }
+
+INCOME_LEVEL_TO_PERCENT = {
+    "low": 50,
+    "mid1": 100,
+    "mid2": 150,
+    "high": 200,
+}
+
+LOW_INCOME_POLICY_KEYWORDS = (
+    "저소득",
+    "기초생활",
+    "기초생활수급",
+    "생계급여",
+    "의료급여",
+    "주거급여",
+    "교육급여",
+    "차상위",
+)
+
+INCOME_LIMIT_PATTERNS = (
+    re.compile(r"기준\s*중위소득\s*(\d{2,3})\s*%?\s*(?:이하|미만|이내|내)"),
+    re.compile(r"중위소득\s*(\d{2,3})\s*%?\s*(?:이하|미만|이내|내)"),
+)
 
 
 @dataclass
@@ -291,6 +315,7 @@ class RecommendationCandidateService:
             text_value,
             matched_rules,
             uncertain_rules,
+            excluded_rules,
         )
         score += self._apply_special_rule(condition, text_value, tags, matched_rules)
         score += self._apply_needs_rule(condition, text_value, matched_rules)
@@ -520,26 +545,92 @@ class RecommendationCandidateService:
         text_value: str,
         matched_rules: list[dict[str, Any]],
         uncertain_rules: list[dict[str, Any]],
+        excluded_rules: list[dict[str, Any]],
     ) -> float:
         income = self._first(condition, "income", "income_level", "income_bracket")
-        if "소득" not in text_value and "중위소득" not in text_value:
+        has_income_signal = (
+            "소득" in text_value
+            or "중위소득" in text_value
+            or self._has_low_income_keyword(text_value)
+        )
+        if not has_income_signal:
             return 0.0
-        if income:
+        if not income:
+            uncertain_rules.append(
+                {
+                    "field": "income",
+                    "condition_value": None,
+                    "reason": "사용자 소득 정보가 없어 정책 소득 기준은 추가 확인 필요",
+                }
+            )
+            return 0.0
+
+        user_income_percent = self._income_percent(income)
+        policy_income_limit = self._policy_income_limit_percent(text_value)
+        if (
+            user_income_percent is not None
+            and policy_income_limit is not None
+            and user_income_percent > policy_income_limit
+        ):
+            excluded_rules.append(
+                {
+                    "field": "income",
+                    "condition_value": income,
+                    "policy_value": f"중위소득 {policy_income_limit}% 이하",
+                    "result": "income_limit_mismatch",
+                    "reason": (
+                        "사용자 소득 구간이 정책의 중위소득 기준을 초과합니다."
+                    ),
+                }
+            )
+            return 0.0
+
+        if (
+            user_income_percent is not None
+            and user_income_percent > 150
+            and self._has_low_income_keyword(text_value)
+        ):
+            excluded_rules.append(
+                {
+                    "field": "income",
+                    "condition_value": income,
+                    "policy_value": "저소득층 중심 정책",
+                    "result": "low_income_policy_mismatch",
+                    "reason": (
+                        "150% 초과 소득 구간은 저소득층 중심 정책과 맞지 않습니다."
+                    ),
+                }
+            )
+            return 0.0
+
+        if user_income_percent is not None and policy_income_limit is not None:
             matched_rules.append(
                 self._matched_rule(
                     "income",
                     income,
-                    "policy_text",
-                    0.1,
-                    "소득 조건 확인 대상",
+                    f"중위소득 {policy_income_limit}% 이하",
+                    0.12,
+                    "소득 구간이 정책 기준 범위 안에 있음",
                 )
             )
-            return 0.1
+            return 0.12
+
+        if self._has_low_income_keyword(text_value):
+            uncertain_rules.append(
+                {
+                    "field": "income",
+                    "condition_value": income,
+                    "policy_value": "저소득층 중심 정책",
+                    "reason": "정책이 저소득층을 언급하지만 정확한 소득 상한은 추가 확인 필요",
+                }
+            )
+            return 0.0
+
         uncertain_rules.append(
             {
                 "field": "income",
-                "condition_value": None,
-                "reason": "사용자 소득 정보가 없어 정책 소득 기준은 추가 확인 필요",
+                "condition_value": income,
+                "reason": "정책 소득 기준을 텍스트에서 직접 비교하기 어려워 추가 확인 필요",
             }
         )
         return 0.0
@@ -699,6 +790,30 @@ class RecommendationCandidateService:
                     return [value]
             return list(rule_value.values())
         return [rule_value]
+
+    def _income_percent(self, value: Any) -> float | None:
+        if value in (None, "", [], "unknown"):
+            return None
+        normalized = str(value).strip()
+        if normalized in INCOME_LEVEL_TO_PERCENT:
+            return float(INCOME_LEVEL_TO_PERCENT[normalized])
+        return self._to_number(normalized)
+
+    def _policy_income_limit_percent(self, text_value: str) -> float | None:
+        limits: list[float] = []
+        for pattern in INCOME_LIMIT_PATTERNS:
+            for match in pattern.finditer(text_value):
+                number = self._to_number(match.group(1))
+                if number is not None:
+                    limits.append(number)
+        if limits:
+            return max(limits)
+        if self._has_low_income_keyword(text_value):
+            return 100.0
+        return None
+
+    def _has_low_income_keyword(self, text_value: str) -> bool:
+        return any(keyword in text_value for keyword in LOW_INCOME_POLICY_KEYWORDS)
 
     def _condition_value(self, condition: dict[str, Any], field_name: str) -> Any:
         aliases = {
@@ -881,6 +996,9 @@ class RecommendationCandidateService:
     def _to_number(self, value: Any) -> float | None:
         if value in (None, "", []):
             return None
+        income_percent = INCOME_LEVEL_TO_PERCENT.get(str(value).strip())
+        if income_percent is not None:
+            return float(income_percent)
         try:
             return float(str(value).replace("%", "").strip())
         except ValueError:
