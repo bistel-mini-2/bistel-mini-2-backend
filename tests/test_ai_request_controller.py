@@ -394,3 +394,148 @@ def test_process_eligibility_request_saves_policy_assessment(monkeypatch) -> Non
         "eligibility_request_id": 123,
         "matched_conditions": ["region"],
     }
+
+
+def test_recommendation_result_eligibility_skips_saved_profile(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+    request = SimpleNamespace(
+        request_id=124,
+        request_status=RequestStatus.PROCESSING.value,
+        user_id=7,
+        policy_id=24,
+        source_type="RECOMMENDATION_RESULT",
+        source_ref_id="recommendation-1",
+        raw_query=None,
+        parsed_query_json={
+            "selected_conditions": {
+                "region": "seoul",
+                "stage": "newborn",
+                "income": "mid1",
+            }
+        },
+        merged_condition_json={},
+        profile_conflict_json=[],
+        error_message=None,
+    )
+
+    class FakeRepository:
+        async def find_by_id(self, db, request_type, request_id):
+            return request
+
+        async def update_payload(
+            self,
+            db,
+            request,
+            parsed_query_json=None,
+            merged_condition_json=None,
+            profile_conflict_json=None,
+        ):
+            captured["payload"] = {
+                "merged_condition_json": merged_condition_json,
+                "profile_conflict_json": profile_conflict_json,
+            }
+            request.parsed_query_json = parsed_query_json
+            request.merged_condition_json = merged_condition_json
+            request.profile_conflict_json = profile_conflict_json
+            return request
+
+        async def update_status(self, db, request, status, error_message=None):
+            captured["status"] = status
+            request.request_status = status.value
+            request.error_message = error_message
+            return request
+
+    class FakeConditionAgent:
+        async def analyze(self, condition_input):
+            captured["condition_profile_snapshot"] = condition_input.profile_snapshot
+            return ConditionResult(
+                parsed_query_json={
+                    "selected_conditions": condition_input.selected_conditions,
+                },
+                merged_condition_json={
+                    **condition_input.selected_conditions,
+                    "matched_conditions": ["region"],
+                },
+                profile_conflicts=[],
+            )
+
+    class FakeAssessmentRepository:
+        async def find_policy_evidence_chunks(self, db, policy_id, limit=8):
+            return []
+
+    class FakeConnection:
+        async def __aenter__(self):
+            return "conn"
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    class FakePool:
+        def connection(self):
+            return FakeConnection()
+
+    async def fake_save_assessment(
+        conn,
+        result,
+        assessment_type,
+        recommendation_request_id=None,
+        eligibility_request_id=None,
+        confidence_score=None,
+        selected_for_result=False,
+    ):
+        captured["saved_status"] = result.assessment_status.value
+        captured["saved_conflicts"] = result.conflicting_conditions
+        return 999
+
+    async def fake_profile_snapshot(self, db, user_id):
+        captured["profile_snapshot_called"] = True
+        return {
+            "region": "busan",
+            "stage": "teen",
+            "income": "high",
+        }
+
+    monkeypatch.setattr(
+        "app.services.ai_request_lifecycle_service.psycopg_pool",
+        FakePool(),
+    )
+    monkeypatch.setattr(
+        "app.services.ai_request_lifecycle_service.PolicyAssessmentRepository.save_assessment",
+        fake_save_assessment,
+    )
+    monkeypatch.setattr(
+        AiRequestLifecycleService,
+        "_profile_snapshot",
+        fake_profile_snapshot,
+    )
+
+    service = AiRequestLifecycleService(
+        repository=FakeRepository(),
+        assessment_repository=FakeAssessmentRepository(),
+        condition_agent=FakeConditionAgent(),
+    )
+
+    import asyncio
+
+    asyncio.run(
+        service.process_condition_request(
+            db=SimpleNamespace(),
+            request_type="eligibility",
+            request_id=124,
+        )
+    )
+
+    assert captured.get("profile_snapshot_called") is None
+    assert captured["condition_profile_snapshot"] is None
+    assert captured["payload"] == {
+        "merged_condition_json": {
+            "region": "seoul",
+            "stage": "newborn",
+            "income": "mid1",
+            "matched_conditions": ["region"],
+        },
+        "profile_conflict_json": [],
+    }
+    assert captured["status"] == RequestStatus.COMPLETED
+    assert captured["saved_status"] == "LIKELY_MATCH"
+    assert captured["saved_conflicts"] == []
