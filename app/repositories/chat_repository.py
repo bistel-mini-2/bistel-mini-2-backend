@@ -93,6 +93,16 @@ class ChatRepository:
         )
 
     @staticmethod
+    async def update_title(
+        db: AsyncSession, chat_session_id: int, title: str
+    ) -> None:
+        await db.execute(
+            update(ChatSession)
+            .where(ChatSession.chat_session_id == chat_session_id)
+            .values(title=title)
+        )
+
+    @staticmethod
     async def bulk_save_message_policies(
         db: AsyncSession, links: list[dict]
     ) -> None:

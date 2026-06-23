@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from datetime import datetime
 
@@ -24,6 +25,7 @@ from app.schemas.chat_schema import (
     ChatSessionListItem,
     ChatSessionListResponse,
 )
+from app.services.chat_title_service import assign_title_if_missing
 
 
 logger = logging.getLogger(f"{__name__}.ChatService")
@@ -86,6 +88,7 @@ class ChatService:
         session = await _get_owned_session_or_raise(db, user_id, chat_session_id)
 
         history = await _load_history(db, session.chat_session_id)
+        is_first_message = not history and not session.title
         user_message = await _save_user_message(db, session.chat_session_id, content)
         await db.commit()
 
@@ -106,6 +109,9 @@ class ChatService:
             db, session.chat_session_id, datetime.utcnow()
         )
 
+        if is_first_message:
+            _schedule_title_generation(session.chat_session_id, content)
+
         return ChatMessageSendResponse(
             chat_session_id=str(session.chat_session_id),
             user_message_id=str(user_message.chat_message_id),
@@ -114,6 +120,10 @@ class ChatService:
 
 
 # --- helpers ---------------------------------------------------------------
+
+
+def _schedule_title_generation(chat_session_id: int, user_content: str) -> None:
+    asyncio.create_task(assign_title_if_missing(chat_session_id, user_content))
 
 
 async def _get_owned_session_or_raise(
