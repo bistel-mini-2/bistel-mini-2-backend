@@ -32,11 +32,16 @@ SUPERVISOR_SYSTEM = """당신은 임신·출산·육아 정책 챗봇의 Supervi
 """
 
 
-_BRANCH_SYSTEM_PROMPTS: dict[Intent, str] = {
+_COMMON_SAFETY_RULES = """[안전 안내 — 모든 답변에 적용]
+- 정책 수급 가능 여부를 단정짓지 마세요. "받을 수 있습니다", "신청 가능합니다" 같은 확정 표현 대신 "조건에 맞으면", "해당될 수 있어요" 같은 추정 표현을 사용하세요.
+- 답변 본문에 면책 문구를 직접 넣지 마세요 (별도 disclaimer 필드로 노출됩니다).
+- 정확한 판단·신청 가능 여부는 공식기관(주민센터·복지로 등) 확인이 필요함을 자연스럽게 안내하세요."""
+
+
+_BASE_BRANCH_PROMPTS: dict[Intent, str] = {
     "policy_summary": """당신은 임신·출산·육아 정책을 안내하는 챗봇입니다.
 주어진 정책 문서 발췌(참고 자료)만 근거로 한국어 3~5문장으로 답변하세요.
-- 발췌에 없는 내용은 추측하지 마세요.
-- 본문에 면책 안내 문장을 넣지 마세요 (별도 필드로 처리).""",
+- 발췌에 없는 내용은 추측하지 마세요.""",
     "recommend": """사용자의 상황에 맞는 정책을 추천하는 챗봇입니다.
 참고 자료의 정책 중 사용자 질문과 관련 있어 보이는 정책을 짧게 소개하세요.
 - 정확한 추천은 '맞춤 추천' 화면에서 받을 수 있음을 자연스럽게 안내하세요.
@@ -56,6 +61,31 @@ _BRANCH_SYSTEM_PROMPTS: dict[Intent, str] = {
 - 한국어 2~3문장.
 - 정책 자료는 사용하지 마세요.""",
 }
+
+
+_BRANCH_SYSTEM_PROMPTS: dict[Intent, str] = {
+    intent: (
+        f"{_COMMON_SAFETY_RULES}\n\n{prompt}" if intent != "unclear" else prompt
+    )
+    for intent, prompt in _BASE_BRANCH_PROMPTS.items()
+}
+
+
+_ASSERTIVE_PHRASES: tuple[str, ...] = (
+    "받을 수 있습니다",
+    "받을 수 있어요",
+    "받으실 수 있습니다",
+    "신청 가능합니다",
+    "신청하실 수 있습니다",
+    "지원받을 수 있습니다",
+    "지원받으실 수 있습니다",
+    "대상입니다",
+    "해당됩니다",
+)
+
+
+def _detect_assertive_phrases(content: str) -> list[str]:
+    return [phrase for phrase in _ASSERTIVE_PHRASES if phrase in content]
 
 
 _INTENT_TO_API_ACTION: dict[Intent, str | None] = {
@@ -161,8 +191,16 @@ class ChatGraphNodes:
         decision = state.get("supervisor_decision") or {"intent": "unclear", "raw": "missing"}
         intent: Intent = decision["intent"]
         api_action = _INTENT_TO_API_ACTION.get(intent)
+        content = state.get("branch_content") or ""
+        if intent != "unclear":
+            assertive = _detect_assertive_phrases(content)
+            if assertive:
+                logger.warning(
+                    "chat answer contains assertive phrases despite safety prompt",
+                    extra={"intent": intent, "phrases": assertive},
+                )
         payload = {
-            "content": state.get("branch_content") or "",
+            "content": content,
             "user_status": None,
             "sources": [],
             "policies": state.get("branch_policies", []),
