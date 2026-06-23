@@ -17,8 +17,15 @@ ALLOWED_LIFE_STAGES = {item.value for item in LifeStage}
 ALLOWED_CHILD_AGES = {item.value for item in ChildAge}
 ALLOWED_INCOME_LEVELS = {item.value for item in IncomeLevel}
 ALLOWED_REGION_CODES = {item.value for item in RegionCode}
-ALLOWED_SPECIAL_FLAGS = {"single", "multi",
-                         "disabled", "many", "dual", "veteran"}
+ALLOWED_SPECIAL_FLAGS = {
+    "single",
+    "multi",
+    "disabled",
+    "many",
+    "dual",
+    "low_income",
+    "veteran",
+}
 
 STAGE_ALIASES = {
     "임신": "pregnant",
@@ -60,6 +67,10 @@ SPECIAL_ALIASES = {
     "장애": "disabled",
     "다자녀": "many",
     "맞벌이": "dual",
+    "저소득": "low_income",
+    "저소득층": "low_income",
+    "기초생활": "low_income",
+    "차상위": "low_income",
     "보훈": "veteran",
 }
 
@@ -140,6 +151,7 @@ class LangChainConditionExtractor:
                     - disabled: 장애
                     - many: 다자녀
                     - dual: 맞벌이
+                    - low_income: 저소득
                     - veteran: 보훈
 
                     사용자가 명확히 말하지 않은 스칼라 필드는 null로, 리스트 필드(special, needs)는 빈 배열로 둔다.

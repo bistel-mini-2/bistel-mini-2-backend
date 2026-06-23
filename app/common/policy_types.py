@@ -48,6 +48,7 @@ class SpecialCondition(StrEnum):
     DISABILITY = "disabled"
     MULTI_CHILD = "many"
     DUAL_INCOME = "dual"
+    LOW_INCOME = "low_income"
     VETERAN = "veteran"
 
 
@@ -58,6 +59,7 @@ SPECIAL_CONDITION_TO_DB: dict[str, str] = {
     "disabled": "장애인",
     "many": "다자녀",
     "dual": "맞벌이",
+    "low_income": "저소득",
     "veteran": "보훈대상자",
 }
 

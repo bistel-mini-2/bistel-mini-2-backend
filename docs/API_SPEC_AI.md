@@ -82,7 +82,9 @@ type SelectedConditions = {
   childAge?: "preborn" | "0" | "1" | "2-5" | "6-12" | "13+" | string;
   income?: "low" | "mid1" | "mid2" | "high" | "unknown" | string;
   region?: "seoul" | "gyeonggi" | "metro" | "etc" | string;
-  special?: Array<"single" | "multi" | "disabled" | "many" | "dual" | string>;
+  special?: Array<
+    "single" | "multi" | "disabled" | "many" | "dual" | "low_income" | string
+  >;
 };
 
 type Evidence = {
@@ -226,7 +228,7 @@ type PolicyAiSummaryResponse = {
         childAge: "preborn | 0 | 1 | 2-5 | 6-12 | 13+"
         income: "low | mid1 | mid2 | high | unknown"
         region: "seoul | busan | daegu | incheon | gwangju | daejeon | ulsan | sejong | gyeonggi | gangwon | chungbuk | chungnam | jeonbuk | jeonnam | gyeongbuk | gyeongnam | jeju"
-        special: "Array<single | multi | disabled | many | dual>"
+        special: "Array<single | multi | disabled | many | dual | low_income>"
         updated_at: "datetime?"
     error: null
     meta: {}
@@ -244,7 +246,7 @@ type PolicyAiSummaryResponse = {
     childAge: "preborn | 0 | 1 | 2-5 | 6-12 | 13+"
     income: "low | mid1 | mid2 | high | unknown"
     region: "seoul | busan | daegu | incheon | gwangju | daejeon | ulsan | sejong | gyeonggi | gangwon | chungbuk | chungnam | jeonbuk | jeonnam | gyeongbuk | gyeongnam | jeju"
-    special: "Array<single | multi | disabled | many | dual>"
+    special: "Array<single | multi | disabled | many | dual | low_income>"
   response_schema:
     success: true
     data:

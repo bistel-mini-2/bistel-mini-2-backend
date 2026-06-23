@@ -24,6 +24,7 @@ SPECIAL_RECOMMENDATION_TERMS = {
     "disabled": "장애",
     "many": "다자녀",
     "dual": "맞벌이",
+    "low_income": "저소득",
     "veteran": "보훈",
 }
 
