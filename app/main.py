@@ -16,6 +16,10 @@ from app.api.apply_controller import (
 from app.api.ai_request_controller import eligibility_router, recommendation_router
 from app.api.auth_controller import auth_router, users_router
 from app.api.chat_controller import router as chat_router
+from app.api.compare_controller import (
+    public_router as compare_public_router,
+    router as compare_router,
+)
 from app.api.family_profile_controller import router as family_profile_router
 from app.api.favorite_controller import (
     favorites_router,
@@ -78,6 +82,8 @@ app.include_router(recommendation_router)
 app.include_router(eligibility_router)
 app.include_router(apply_router)
 app.include_router(apply_checklist_router)
+app.include_router(compare_router)
+app.include_router(compare_public_router)
 app.include_router(chat_router)
 register_exception_handlers(app)
 
