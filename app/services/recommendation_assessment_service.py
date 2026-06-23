@@ -35,7 +35,7 @@ class RecommendationAssessmentService:
         candidates: list[PolicyCandidate],
         input_issues: list[dict[str, Any]] | None = None,
         profile_conflict_json: list[dict[str, Any]] | None = None,
-        result_limit: int = 5,
+        result_limit: int = 6,
     ) -> list[RecommendationPolicyAssessment]:
         assessments = [
             self._assess_candidate(

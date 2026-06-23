@@ -51,7 +51,17 @@
 - `GET` 최종 응답 `data.status = "done"`
 - `data.follow_up_questions = []`
 - `data.results.length > 0`
-- `results[0].evidence.length > 0`이면 RAG evidence 연결 정상
+- `data.results.length <= 6`
+- 기본 추천 결과는 프론트 카드 2개 x 3줄 표시를 기준으로 최대 6개 반환
+- `results[0].recommendation_rank = 1`
+- `results[0].priority_score`는 카드 표시용 추천 우선순위 점수
+- `results[0].raw_match_score`는 기존 조건 적합도 원점수
+- `results[0].priority_label`이 `가장 먼저 확인 | 우선 확인 | 조건 잘 맞음 | 추가 확인 필요 | 함께 확인` 중 하나인지 확인
+- `results[0].evidences.length > 0`이면 카드용 RAG evidence 연결 정상
+- `results[0].evidences.length <= 3`
+- `results[0].evidences[0].snippet`은 LLM이 원문 chunk 안에서 생성한 짧은 카드용 문장이다.
+  LLM 실패/누락 시 백엔드 normalizer가 만든 짧은 스니펫으로 fallback된다.
+- 긴 원문은 `raw_evidences`에서 확인
 - `results[0].reason_summary`가 한글 문장
 - LLM 성공 시 `rerank_score`가 포함됨
 
@@ -295,7 +305,7 @@ special 조건이 후보 검색과 rule filter에 반영되는지 확인한다.
 
 - `data.status = "done"`
 - 결과 정책의 `reason_summary` 또는 `matched_conditions`에 다자녀/장애 관련성이 드러나는지 확인
-- evidence가 관련 정책 문서 근거를 포함하는지 확인
+- `evidences`가 관련 정책 문서 근거를 짧은 카드용 스니펫으로 포함하는지 확인
 
 ## DB 확인 쿼리
 
@@ -328,9 +338,14 @@ SELECT
   result_item->>'policy_name' AS policy_name,
   result_item->>'user_status' AS user_status,
   result_item->>'assessment_status' AS assessment_status,
+  result_item->>'recommendation_rank' AS recommendation_rank,
+  result_item->>'priority_score' AS priority_score,
+  result_item->>'raw_match_score' AS raw_match_score,
+  result_item->>'priority_label' AS priority_label,
   result_item->>'rerank_score' AS rerank_score,
   result_item->>'llm_backfilled' AS llm_backfilled,
-  jsonb_array_length(COALESCE(result_item->'evidence', '[]'::jsonb)) AS evidence_count,
+  jsonb_array_length(COALESCE(result_item->'evidences', '[]'::jsonb)) AS evidence_count,
+  jsonb_array_length(COALESCE(result_item->'raw_evidences', '[]'::jsonb)) AS raw_evidence_count,
   result_item->>'reason_summary' AS reason_summary
 FROM recommendation_request r,
 LATERAL jsonb_array_elements(r.result_json->'results') AS result_item
@@ -388,6 +403,9 @@ ORDER BY selected_for_result DESC, confidence_score DESC;
   - selected_for_result
 - `recommendation_request.result_json`
   - 최종 results/recommendations
-  - evidence
+  - priority_score / recommendation_rank / priority_label
+  - raw_match_score
+  - evidences
+  - raw_evidences
   - LLM reason/rerank 결과
   - fallback summary
