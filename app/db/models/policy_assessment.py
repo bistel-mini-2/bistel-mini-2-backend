@@ -11,7 +11,11 @@ from app.db.session import Base
 class PolicyAssessment(Base):
     __tablename__ = "policy_assessment"
 
-    assessment_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    assessment_id: Mapped[int] = mapped_column(
+        BigInteger,
+        primary_key=True,
+        autoincrement=True,
+    )
     request_id: Mapped[int | None] = mapped_column(
         BigInteger,
         ForeignKey("recommendation_request.request_id", ondelete="CASCADE"),
@@ -59,7 +63,11 @@ class PolicyAssessment(Base):
 class AssessmentEvidence(Base):
     __tablename__ = "assessment_evidence"
 
-    evidence_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    evidence_id: Mapped[int] = mapped_column(
+        BigInteger,
+        primary_key=True,
+        autoincrement=True,
+    )
     assessment_id: Mapped[int] = mapped_column(
         BigInteger,
         ForeignKey("policy_assessment.assessment_id", ondelete="CASCADE"),
