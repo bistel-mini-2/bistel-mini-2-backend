@@ -103,8 +103,8 @@ def test_assign_title_if_missing_updates_when_title_blank(monkeypatch) -> None:
     monkeypatch.setattr(
         ChatRepository, "find_session_by_id", AsyncMock(return_value=session),
     )
-    update_mock = AsyncMock()
-    monkeypatch.setattr(ChatRepository, "update_title", update_mock)
+    update_mock = AsyncMock(return_value=True)
+    monkeypatch.setattr(ChatRepository, "update_title_if_missing", update_mock)
     monkeypatch.setattr(
         chat_title_service_module,
         "generate_session_title",
@@ -125,7 +125,7 @@ def test_assign_title_if_missing_skips_when_title_present(monkeypatch) -> None:
         ChatRepository, "find_session_by_id", AsyncMock(return_value=session),
     )
     update_mock = AsyncMock()
-    monkeypatch.setattr(ChatRepository, "update_title", update_mock)
+    monkeypatch.setattr(ChatRepository, "update_title_if_missing", update_mock)
     generate_mock = AsyncMock(return_value="생성된 제목")
     monkeypatch.setattr(
         chat_title_service_module, "generate_session_title", generate_mock,
@@ -145,9 +145,35 @@ def test_assign_title_if_missing_skips_when_session_missing(monkeypatch) -> None
         ChatRepository, "find_session_by_id", AsyncMock(return_value=None),
     )
     update_mock = AsyncMock()
-    monkeypatch.setattr(ChatRepository, "update_title", update_mock)
+    monkeypatch.setattr(ChatRepository, "update_title_if_missing", update_mock)
 
     asyncio.run(assign_title_if_missing(10, "사용자 첫 메시지"))
 
     update_mock.assert_not_called()
     db.commit.assert_not_called()
+
+
+def test_assign_title_if_missing_uses_conditional_update(monkeypatch) -> None:
+    db = _patch_session_local(monkeypatch)
+    session = ChatSession(chat_session_id=10, user_id=1, title=None)
+
+    monkeypatch.setattr(
+        ChatRepository, "find_session_by_id", AsyncMock(return_value=session),
+    )
+    manual_update_mock = AsyncMock()
+    conditional_update_mock = AsyncMock(return_value=False)
+    monkeypatch.setattr(ChatRepository, "update_title", manual_update_mock)
+    monkeypatch.setattr(
+        ChatRepository, "update_title_if_missing", conditional_update_mock,
+    )
+    monkeypatch.setattr(
+        chat_title_service_module,
+        "generate_session_title",
+        AsyncMock(return_value="생성된 제목"),
+    )
+
+    asyncio.run(assign_title_if_missing(10, "사용자 첫 메시지"))
+
+    conditional_update_mock.assert_awaited_once_with(db, 10, "생성된 제목")
+    manual_update_mock.assert_not_awaited()
+    db.commit.assert_awaited_once()

@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import func, select, text, update
+from sqlalchemy import func, or_, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.chat_message import ChatMessage
@@ -95,12 +95,27 @@ class ChatRepository:
     @staticmethod
     async def update_title(
         db: AsyncSession, chat_session_id: int, title: str
-    ) -> None:
+    ) -> datetime:
+        now = datetime.utcnow()
         await db.execute(
             update(ChatSession)
             .where(ChatSession.chat_session_id == chat_session_id)
-            .values(title=title)
+            .values(title=title, updated_at=now)
         )
+        return now
+
+    @staticmethod
+    async def update_title_if_missing(
+        db: AsyncSession, chat_session_id: int, title: str
+    ) -> bool:
+        now = datetime.utcnow()
+        result = await db.execute(
+            update(ChatSession)
+            .where(ChatSession.chat_session_id == chat_session_id)
+            .where(or_(ChatSession.title.is_(None), ChatSession.title == ""))
+            .values(title=title, updated_at=now)
+        )
+        return bool(result.rowcount)
 
     @staticmethod
     async def bulk_save_message_policies(
