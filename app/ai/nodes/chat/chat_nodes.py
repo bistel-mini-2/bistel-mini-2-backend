@@ -1,18 +1,33 @@
 from __future__ import annotations
 
+import asyncio
 import logging
+from typing import TYPE_CHECKING, Any
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
+from sqlalchemy import text
 
 from app.ai.states.chat_state import (
     ChatGraphState,
     HistoryMessage,
     Intent,
 )
+from app.common.ai_status import RequestStatus
 from app.core.config import settings
+from app.db.session import AsyncSessionLocal
+from app.schemas.ai_request_schema import AiRequestSnapshot
 from app.services.policy_rag_service import PolicyRagService
+
+if TYPE_CHECKING:
+    from app.services.ai_request_lifecycle_service import AiRequestLifecycleService
+
+
+def _lifecycle_service_class() -> type["AiRequestLifecycleService"]:
+    from app.services.ai_request_lifecycle_service import AiRequestLifecycleService
+
+    return AiRequestLifecycleService
 
 
 logger = logging.getLogger(__name__)
@@ -113,6 +128,26 @@ _RAG_TOP_K = 5
 _POLICIES_MAX = 3
 _EVIDENCES_MAX = 5
 _SNIPPET_LIMIT = 300
+_RECOMMEND_SOURCE_TYPE = "CHAT"
+_RECOMMEND_LIFECYCLE_TIMEOUT_SECONDS = 60
+_RECOMMEND_LOCK_TIMEOUT = "5s"
+_RECOMMEND_STATEMENT_TIMEOUT = "60s"
+_RECOMMEND_FALLBACK_FOLLOW_UP = (
+    "맞춤 추천을 위해 정보가 더 필요해요. 맞춤 추천 화면에서 추가로 입력해 주세요."
+)
+_RECOMMEND_FALLBACK_ERROR = (
+    "맞춤 추천을 만드는 중에 문제가 발생했어요. 잠시 후 다시 시도해 주세요."
+)
+_EVIDENCE_ROLE_ENUM: frozenset[str] = frozenset(
+    {"SUMMARY", "TARGET", "BENEFIT", "APPLICATION", "CAUTION"}
+)
+
+
+def _normalize_evidence_role(value: Any) -> str | None:
+    if not isinstance(value, str) or not value:
+        return None
+    upper = value.upper()
+    return upper if upper in _EVIDENCE_ROLE_ENUM else None
 
 
 class _IntentDecision(BaseModel):
@@ -124,6 +159,66 @@ def _llm() -> ChatOpenAI:
     if settings.openai_api_key:
         kwargs["api_key"] = settings.openai_api_key
     return ChatOpenAI(**kwargs)
+
+
+async def _mark_recommendation_failed(request_id: int, error_message: str) -> None:
+    async with AsyncSessionLocal() as db:
+        try:
+            await _lifecycle_service_class()().mark_failed(
+                db=db,
+                request_type="recommendation",
+                request_id=request_id,
+                error_message=error_message,
+            )
+            await db.commit()
+        except Exception:
+            await db.rollback()
+            logger.exception(
+                "failed to mark recommendation request as failed: %s", request_id
+            )
+
+
+def _adapt_recommendation_result(
+    result_json: dict[str, Any],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    results = result_json.get("results") or []
+    policies: list[dict[str, Any]] = []
+    evidences: list[dict[str, Any]] = []
+    seen_chunks: set[Any] = set()
+    for item in results[:_POLICIES_MAX]:
+        slug = item.get("slug") or item.get("policy_code") or item.get("policy_id")
+        if slug:
+            policies.append(
+                {
+                    "policy_id": item.get("policy_id") or slug,
+                    "slug": slug,
+                    "policy_name": item.get("policy_name") or "",
+                    "summary": item.get("summary") or item.get("benefit_summary"),
+                    "tag": None,
+                    "tagTone": None,
+                }
+            )
+        for evidence in item.get("evidence") or []:
+            chunk_id = evidence.get("chunk_id")
+            if chunk_id is None or chunk_id in seen_chunks:
+                continue
+            seen_chunks.add(chunk_id)
+            evidences.append(
+                {
+                    "chunk_id": chunk_id,
+                    "snippet": (evidence.get("snippet") or "")[:_SNIPPET_LIMIT],
+                    "source_title": evidence.get("source_title")
+                    or item.get("policy_name")
+                    or "",
+                    "source_url": evidence.get("source_url"),
+                    "evidence_role": _normalize_evidence_role(
+                        evidence.get("evidence_role")
+                    ),
+                }
+            )
+            if len(evidences) >= _EVIDENCES_MAX:
+                return policies, evidences
+    return policies, evidences
 
 
 def _history_to_lc_messages(history: list[HistoryMessage]) -> list[BaseMessage]:
@@ -140,8 +235,13 @@ def _history_to_lc_messages(history: list[HistoryMessage]) -> list[BaseMessage]:
 
 
 class ChatGraphNodes:
-    def __init__(self, rag_service: PolicyRagService | None = None) -> None:
+    def __init__(
+        self,
+        rag_service: PolicyRagService | None = None,
+        lifecycle_service: AiRequestLifecycleService | None = None,
+    ) -> None:
         self.rag_service = rag_service or PolicyRagService()
+        self.lifecycle_service = lifecycle_service
 
     async def supervisor(self, state: ChatGraphState) -> ChatGraphState:
         llm = _llm().with_structured_output(_IntentDecision)
@@ -164,7 +264,26 @@ class ChatGraphNodes:
         }
 
     async def branch_recommend(self, state: ChatGraphState) -> ChatGraphState:
-        return await self._branch_with_rag("recommend", state)
+        snapshot = await self._run_recommendation_lifecycle(
+            user_id=state["user_id"],
+            user_content=state["user_content"],
+        )
+        if snapshot is None:
+            return await self._recommend_fallback(state, _RECOMMEND_FALLBACK_ERROR)
+        if snapshot.status == RequestStatus.FOLLOW_UP_REQUIRED:
+            return await self._recommend_fallback(
+                state, _RECOMMEND_FALLBACK_FOLLOW_UP
+            )
+        if snapshot.status != RequestStatus.COMPLETED:
+            return await self._recommend_fallback(state, _RECOMMEND_FALLBACK_ERROR)
+        policies, evidences = _adapt_recommendation_result(snapshot.result_json)
+        content = await self._generate_branch_answer("recommend", state, evidences)
+        return {
+            **state,
+            "branch_content": content,
+            "branch_policies": policies,
+            "branch_evidences": evidences,
+        }
 
     async def branch_eligibility(self, state: ChatGraphState) -> ChatGraphState:
         return await self._branch_with_rag("eligibility", state)
@@ -235,6 +354,71 @@ class ChatGraphNodes:
             if p.get("slug")
         ]
         return {**state, "policy_links_to_save": links}
+
+    async def _run_recommendation_lifecycle(
+        self,
+        user_id: int,
+        user_content: str,
+    ) -> AiRequestSnapshot | None:
+        request_id: int | None = None
+        try:
+            async with AsyncSessionLocal() as db:
+                try:
+                    await db.execute(
+                        text(f"SET LOCAL lock_timeout = '{_RECOMMEND_LOCK_TIMEOUT}'")
+                    )
+                    await db.execute(
+                        text(
+                            f"SET LOCAL statement_timeout = "
+                            f"'{_RECOMMEND_STATEMENT_TIMEOUT}'"
+                        )
+                    )
+                    lifecycle = (
+                        self.lifecycle_service or _lifecycle_service_class()()
+                    )
+                    created = await lifecycle.create_request(
+                        db=db,
+                        user_id=user_id,
+                        request_type="recommendation",
+                        source_type=_RECOMMEND_SOURCE_TYPE,
+                        raw_query=user_content,
+                    )
+                    request_id = int(created.request_id)
+                    await lifecycle.mark_processing(
+                        db=db,
+                        request_type="recommendation",
+                        request_id=request_id,
+                    )
+                    snapshot = await asyncio.wait_for(
+                        lifecycle.process_condition_request(
+                            db=db,
+                            request_type="recommendation",
+                            request_id=request_id,
+                        ),
+                        timeout=_RECOMMEND_LIFECYCLE_TIMEOUT_SECONDS,
+                    )
+                    await db.commit()
+                    return snapshot
+                except Exception:
+                    await db.rollback()
+                    raise
+        except Exception as exc:
+            logger.exception("chat branch_recommend lifecycle failed")
+            if request_id is not None:
+                await _mark_recommendation_failed(request_id, str(exc))
+            return None
+
+    async def _recommend_fallback(
+        self,
+        state: ChatGraphState,
+        message: str,
+    ) -> ChatGraphState:
+        return {
+            **state,
+            "branch_content": message,
+            "branch_policies": [],
+            "branch_evidences": [],
+        }
 
     async def _branch_with_rag(
         self,

@@ -87,6 +87,7 @@ class ChatService:
 
         history = await _load_history(db, session.chat_session_id)
         user_message = await _save_user_message(db, session.chat_session_id, content)
+        await db.commit()
 
         graph_result = await _run_supervisor_graph(
             user_id=user_id,
