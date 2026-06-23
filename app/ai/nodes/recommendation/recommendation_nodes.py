@@ -125,6 +125,10 @@ class RecommendationGraphNodes:
             base_result_json=state.get("base_result_json")
             or state.get("result_json", {}),
             result_limit=self.recommendation_service.result_limit,
+            raw_query=state.get("raw_query"),
+            selected_conditions=state.get("selected_conditions") or {},
+            input_issues=state.get("input_issues", []),
+            profile_conflict_json=state.get("profile_conflict_json", []),
         )
         return {
             **state,

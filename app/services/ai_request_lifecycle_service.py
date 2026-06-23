@@ -261,6 +261,8 @@ class AiRequestLifecycleService:
                 merged_condition_json=condition_result.merged_condition_json,
                 input_issues=input_issues_json,
                 profile_conflict_json=profile_conflict_json,
+                raw_query=request.raw_query,
+                selected_conditions=parsed_query_json.get("selected_conditions"),
             )
             result_json = normalize_recommendation_result_json(result_json)
             await self.repository.update_result(

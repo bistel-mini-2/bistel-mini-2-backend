@@ -79,6 +79,9 @@ class RecommendationAssessmentService:
         matched_conditions = self._dict_list(filter_match_json.get("matched_rules"))
         uncertain_rules = self._dict_list(filter_match_json.get("uncertain_rules"))
         excluded_rules = self._dict_list(filter_match_json.get("excluded_rules"))
+        if candidate.candidate_status == CANDIDATE_STATUS_EXCLUDED:
+            return self._excluded_assessment(candidate, excluded_rules)
+
         missing_conditions = self._missing_conditions(
             merged_condition_json=merged_condition_json,
             input_issues=input_issues,
@@ -112,14 +115,38 @@ class RecommendationAssessmentService:
             ),
         )
 
+    def _excluded_assessment(
+        self,
+        candidate: PolicyCandidate,
+        excluded_rules: list[dict[str, Any]],
+    ) -> RecommendationPolicyAssessment:
+        return RecommendationPolicyAssessment(
+            policy_id=int(candidate.policy.policy_id),
+            assessment_status=AssessmentStatus.NOT_MATCH,
+            user_status=map_assessment_to_user_status(AssessmentStatus.NOT_MATCH),
+            confidence_score=self._confidence_score(
+                AssessmentStatus.NOT_MATCH,
+                candidate.retrieval_score,
+            ),
+            matched_conditions_json=[],
+            missing_conditions_json=[],
+            conflicting_conditions_json=[],
+            manual_check_points_json=[],
+            reason_summary=self._reason_summary(
+                assessment_status=AssessmentStatus.NOT_MATCH,
+                matched_conditions=[],
+                missing_conditions=[],
+                excluded_rules=excluded_rules,
+                manual_check_points=[],
+            ),
+        )
+
     def _assessment_status(
         self,
         candidate: PolicyCandidate,
         missing_conditions: list[dict[str, Any]],
         conflicting_conditions: list[dict[str, Any]],
     ) -> AssessmentStatus:
-        if candidate.candidate_status == CANDIDATE_STATUS_EXCLUDED:
-            return AssessmentStatus.NOT_MATCH
         if self._has_result_changing_conflict(conflicting_conditions):
             return AssessmentStatus.CONFLICTING_PROFILE
         if self._missing_field_count(missing_conditions) >= 2:
@@ -253,7 +280,7 @@ class RecommendationAssessmentService:
         if assessment_status == AssessmentStatus.LIKELY_MATCH:
             return round(min(max(retrieval_score, 0.7), 0.95), 2)
         if assessment_status == AssessmentStatus.NOT_MATCH:
-            return round(min(max(retrieval_score + 0.2, 0.7), 0.95), 2)
+            return round(min(retrieval_score, 0.3), 2)
         if assessment_status == AssessmentStatus.INSUFFICIENT_PROFILE:
             return 0.35
         if assessment_status == AssessmentStatus.CONFLICTING_PROFILE:
@@ -281,8 +308,43 @@ class RecommendationAssessmentService:
             )
             return reason or "일부 조건은 추가 확인이 필요하지만 현재 조건 기준으로 후보로 유지됩니다."
         if matched_conditions:
+            labels = self._matched_field_labels(matched_conditions)
+            if labels:
+                return f"{', '.join(labels)} 조건이 정책 기준과 맞아 추천 가능성이 높습니다."
             return "사용자 조건과 주요 정책 조건이 일치해 추천 가능성이 높습니다."
         return "현재 정보 기준으로 추천 가능성이 높습니다."
+
+    _FIELD_LABELS = {
+        "stage": "생애주기",
+        "life_stage": "생애주기",
+        "target_stage": "생애주기",
+        "childAge": "자녀 연령",
+        "child_age": "자녀 연령",
+        "child_age_range": "자녀 연령",
+        "region": "거주 지역",
+        "region_code": "거주 지역",
+        "income": "소득 구간",
+        "income_level": "소득 구간",
+        "income_bracket": "소득 구간",
+        "special": "가구 특성",
+        "special_flags": "가구 특성",
+        "needs": "관심 지원",
+    }
+
+    def _matched_field_labels(
+        self,
+        matched_conditions: list[dict[str, Any]],
+    ) -> list[str]:
+        # candidate_search 는 내부 검색 신호라 사용자 노출 문구에서는 제외한다.
+        labels: list[str] = []
+        for condition in matched_conditions:
+            field_name = str(condition.get("field") or condition.get("field_name") or "")
+            label = self._FIELD_LABELS.get(field_name)
+            if label and label not in labels:
+                labels.append(label)
+            if len(labels) >= 3:
+                break
+        return labels
 
     def _selection_key(
         self,

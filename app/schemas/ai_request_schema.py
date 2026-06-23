@@ -77,6 +77,8 @@ class RecommendationResultItem(BaseModel):
     policy_id: str
     policy_name: str
     summary: str
+    target_description: str | None = None
+    benefit_description: str | None = None
     match_score: float | None = None
     raw_match_score: float | None = None
     priority_score: float | None = None
