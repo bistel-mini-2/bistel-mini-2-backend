@@ -225,13 +225,13 @@ class PolicyAssessmentService:
         if section is None:
             return None
         role_by_section = {
-            "기본 정보": "summary",
-            "요약": "summary",
-            "지원 대상": "target",
-            "지원 내용": "benefit",
-            "신청 방법": "application",
-            "신청 기간": "application",
-            "유의 사항": "caution",
+            "기본 정보": "SUMMARY",
+            "요약": "SUMMARY",
+            "지원 대상": "TARGET",
+            "지원 내용": "BENEFIT",
+            "신청 방법": "APPLICATION",
+            "신청 기간": "APPLICATION",
+            "유의 사항": "CAUTION",
         }
         return role_by_section.get(section)
 
