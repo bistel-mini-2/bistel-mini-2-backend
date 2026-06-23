@@ -261,15 +261,10 @@ snippet text
 evidence_role varchar(30) [note: 'SUMMARY, TARGET, BENEFIT, APPLICATION, CAUTION. assessment_evidence와 동일 enum. API 응답은 소문자로 직렬화. RAG가 role을 분류한 경우에만 값을 채우며 nullable.']
 }
 
-Table favorite_policy {
-favorite_id bigint [pk, increment]
-user_id bigint [not null]
-policy_id bigint [not null]
-created_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
-
-indexes {
-(user_id, policy_id) [unique]
-}
+Table user_favorites {
+user_id bigint [pk, not null]
+policy_id bigint [pk, not null]
+saved_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
 }
 
 Table compare_basket {
@@ -406,8 +401,8 @@ Ref: chat_message_policy.policy_id > policy.policy_id [delete: cascade]
 Ref: chat_message_evidence.chat_message_id > chat_message.chat_message_id [delete: cascade]
 Ref: chat_message_evidence.chunk_id > policy_document_chunk.chunk_id [delete: cascade]
 
-Ref: favorite_policy.user_id > users.user_id [delete: cascade]
-Ref: favorite_policy.policy_id > policy.policy_id [delete: cascade]
+Ref: user_favorites.user_id > users.user_id [delete: cascade]
+Ref: user_favorites.policy_id > policy.policy_id [delete: cascade]
 
 Ref: compare_basket.user_id > users.user_id [delete: cascade]
 Ref: compare_basket.policy_id > policy.policy_id [delete: cascade]
