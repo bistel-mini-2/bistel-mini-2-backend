@@ -3,7 +3,11 @@ from fastapi.responses import JSONResponse
 
 from app.common.response import success_response
 from app.core.dependencies import CurrentUserDep, DbSessionDep
-from app.schemas.chat_schema import ChatMessageSendRequest, ChatSessionCreateRequest
+from app.schemas.chat_schema import (
+    ChatMessageSendRequest,
+    ChatSessionCreateRequest,
+    ChatSessionTitleUpdateRequest,
+)
 from app.services.chat_service import ChatService
 
 
@@ -28,6 +32,22 @@ async def list_chat_sessions(
     current_user: CurrentUserDep,
 ) -> JSONResponse:
     response = await ChatService.list_sessions(db, user_id=current_user.user_id)
+    return success_response(data=response)
+
+
+@router.patch("/sessions/{chat_session_id}")
+async def update_chat_session_title(
+    chat_session_id: int,
+    payload: ChatSessionTitleUpdateRequest,
+    db: DbSessionDep,
+    current_user: CurrentUserDep,
+) -> JSONResponse:
+    response = await ChatService.update_session_title(
+        db,
+        user_id=current_user.user_id,
+        chat_session_id=chat_session_id,
+        title=payload.title,
+    )
     return success_response(data=response)
 
 

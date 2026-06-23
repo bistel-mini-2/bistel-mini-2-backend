@@ -25,6 +25,7 @@ from app.schemas.chat_schema import (
     ChatSessionCreateResponse,
     ChatSessionListItem,
     ChatSessionListResponse,
+    ChatSessionTitleUpdateResponse,
 )
 from app.services.chat_title_service import assign_title_if_missing
 
@@ -63,6 +64,23 @@ class ChatService:
                 )
                 for session in sessions
             ]
+        )
+
+    @staticmethod
+    async def update_session_title(
+        db: AsyncSession,
+        user_id: int,
+        chat_session_id: int,
+        title: str,
+    ) -> ChatSessionTitleUpdateResponse:
+        session = await _get_owned_session_or_raise(db, user_id, chat_session_id)
+        updated_at = await ChatRepository.update_title(
+            db, session.chat_session_id, title
+        )
+        return ChatSessionTitleUpdateResponse(
+            chat_session_id=str(session.chat_session_id),
+            title=title,
+            updated_at=updated_at,
         )
 
     @staticmethod

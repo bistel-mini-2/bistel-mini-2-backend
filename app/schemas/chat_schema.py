@@ -14,6 +14,26 @@ class ChatSessionCreateResponse(BaseModel):
     session_status: str
 
 
+class ChatSessionTitleUpdateRequest(BaseModel):
+    title: str = Field(..., max_length=255)
+
+    @field_validator("title", mode="before")
+    @classmethod
+    def _strip_non_blank_title(cls, value: str) -> str:
+        if not isinstance(value, str):
+            return value
+        title = value.strip()
+        if not title:
+            raise ValueError("Title must not be blank")
+        return title
+
+
+class ChatSessionTitleUpdateResponse(BaseModel):
+    chat_session_id: str
+    title: str
+    updated_at: datetime
+
+
 class ChatSessionListItem(BaseModel):
     chat_session_id: str
     title: str | None

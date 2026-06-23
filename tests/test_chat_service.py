@@ -1,7 +1,12 @@
 import asyncio
+from datetime import datetime
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
+from fastapi import status
+
+from app.common.exceptions import AppException
 from app.db.models.chat_message import ChatMessage
 from app.db.models.chat_session import ChatSession
 from app.repositories.chat_repository import ChatRepository
@@ -171,6 +176,75 @@ def test_send_message_persists_normalized_outputs(monkeypatch) -> None:
     assert "evidences" not in assistant_msg_obj.structured_json
     assert assistant_msg_obj.structured_json["_supervisor"]["intent"] == "recommend"
     assert assistant_msg_obj.structured_json["actions"] == ["recommend"]
+
+
+def test_update_session_title_updates_owned_session(monkeypatch) -> None:
+    session = _session(user_id=1, chat_session_id=10)
+    updated_at = datetime(2026, 6, 23, 10, 30, 0)
+
+    find_mock = AsyncMock(return_value=session)
+    update_mock = AsyncMock(return_value=updated_at)
+    db = AsyncMock()
+    monkeypatch.setattr(ChatRepository, "find_session_by_id", find_mock)
+    monkeypatch.setattr(ChatRepository, "update_title", update_mock)
+
+    response = asyncio.run(
+        ChatService.update_session_title(
+            db=db,
+            user_id=1,
+            chat_session_id=10,
+            title="수정 제목",
+        )
+    )
+
+    find_mock.assert_awaited_once()
+    update_mock.assert_awaited_once_with(db, 10, "수정 제목")
+    assert response.chat_session_id == "10"
+    assert response.title == "수정 제목"
+    assert response.updated_at == updated_at
+
+
+def test_update_session_title_raises_404_for_other_user(monkeypatch) -> None:
+    session = _session(user_id=2, chat_session_id=10)
+    monkeypatch.setattr(
+        ChatRepository, "find_session_by_id", AsyncMock(return_value=session),
+    )
+    update_mock = AsyncMock()
+    monkeypatch.setattr(ChatRepository, "update_title", update_mock)
+
+    with pytest.raises(AppException) as exc_info:
+        asyncio.run(
+            ChatService.update_session_title(
+                db=AsyncMock(),
+                user_id=1,
+                chat_session_id=10,
+                title="수정 제목",
+            )
+        )
+
+    assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
+    update_mock.assert_not_awaited()
+
+
+def test_update_session_title_raises_404_for_missing_session(monkeypatch) -> None:
+    monkeypatch.setattr(
+        ChatRepository, "find_session_by_id", AsyncMock(return_value=None),
+    )
+    update_mock = AsyncMock()
+    monkeypatch.setattr(ChatRepository, "update_title", update_mock)
+
+    with pytest.raises(AppException) as exc_info:
+        asyncio.run(
+            ChatService.update_session_title(
+                db=AsyncMock(),
+                user_id=1,
+                chat_session_id=10,
+                title="수정 제목",
+            )
+        )
+
+    assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
+    update_mock.assert_not_awaited()
 
 
 def test_send_message_skips_unknown_policy_slug(monkeypatch) -> None:

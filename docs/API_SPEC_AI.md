@@ -888,6 +888,24 @@ type PolicyAiSummaryResponse = {
           updated_at: "string (iso8601)?"
   notes: "본인 세션 목록. 정렬 last_message_at DESC NULLS LAST, created_at DESC. 페이지네이션 미사용(전체 반환)."
 
+- id: chat_session_title_update
+  name: "채팅 세션 제목 수정"
+  method: PATCH
+  path: "/api/v1/chat/sessions/{chat_session_id}"
+  auth: "required"
+  priority: "medium"
+  owner: "챗봇/신청"
+  path_params:
+    - chat_session_id
+  body:
+    title: "string (trimmed, 1..255)"
+  response_schema:
+    data:
+      chat_session_id: "string"
+      title: "string"
+      updated_at: "string (iso8601)"
+  notes: "본인 소유 세션의 title만 수정한다. 존재하지 않거나 본인 소유가 아닌 세션은 404. 공백/빈 값 또는 255자 초과는 422 validation error. 첫 메시지 자동 제목 생성은 title이 아직 비어 있을 때만 조건부 저장하므로 수동 수정 제목을 덮어쓰지 않는다."
+
 - id: chat_message_send
   name: "채팅 메시지 전송"
   method: POST

@@ -1,4 +1,5 @@
 from collections.abc import AsyncGenerator
+from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -17,6 +18,7 @@ from app.schemas.chat_schema import (
     ChatMessageListResponse,
     ChatMessageSendResponse,
     ChatSessionCreateResponse,
+    ChatSessionTitleUpdateResponse,
 )
 from app.services.chat_service import ChatService
 
@@ -55,6 +57,57 @@ def test_create_chat_session_returns_201(monkeypatch) -> None:
     assert body["success"] is True
     assert body["data"]["chat_session_id"] == "9"
     assert body["data"]["session_status"] == "ACTIVE"
+
+
+def test_update_chat_session_title_returns_updated_title(monkeypatch) -> None:
+    update_mock = AsyncMock(return_value=ChatSessionTitleUpdateResponse(
+        chat_session_id="9",
+        title="수정 제목",
+        updated_at=datetime(2026, 6, 23, 10, 30, 0),
+    ))
+    monkeypatch.setattr(ChatService, "update_session_title", update_mock)
+
+    with TestClient(_build_app()) as client:
+        resp = client.patch(
+            "/api/v1/chat/sessions/9",
+            json={"title": "  수정 제목  "},
+        )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["success"] is True
+    assert body["data"]["chat_session_id"] == "9"
+    assert body["data"]["title"] == "수정 제목"
+    update_mock.assert_awaited_once()
+    assert update_mock.await_args.kwargs["chat_session_id"] == 9
+    assert update_mock.await_args.kwargs["title"] == "수정 제목"
+
+
+def test_update_chat_session_title_rejects_blank_title(monkeypatch) -> None:
+    update_mock = AsyncMock()
+    monkeypatch.setattr(ChatService, "update_session_title", update_mock)
+
+    with TestClient(_build_app()) as client:
+        resp = client.patch("/api/v1/chat/sessions/9", json={"title": "   "})
+
+    assert resp.status_code == 422
+    assert resp.json()["error"]["code"] == "VALIDATION_ERROR"
+    update_mock.assert_not_awaited()
+
+
+def test_update_chat_session_title_rejects_over_max_length(monkeypatch) -> None:
+    update_mock = AsyncMock()
+    monkeypatch.setattr(ChatService, "update_session_title", update_mock)
+
+    with TestClient(_build_app()) as client:
+        resp = client.patch(
+            "/api/v1/chat/sessions/9",
+            json={"title": "가" * 256},
+        )
+
+    assert resp.status_code == 422
+    assert resp.json()["error"]["code"] == "VALIDATION_ERROR"
+    update_mock.assert_not_awaited()
 
 
 def test_send_chat_message_serializes_normalized_fields(monkeypatch) -> None:

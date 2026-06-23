@@ -68,7 +68,7 @@ async def assign_title_if_missing(chat_session_id: int, user_content: str) -> No
             if session is None or session.title:
                 return
             title = await generate_session_title(user_content)
-            await ChatRepository.update_title(db, chat_session_id, title)
+            await ChatRepository.update_title_if_missing(db, chat_session_id, title)
             await db.commit()
         except Exception:
             await db.rollback()
