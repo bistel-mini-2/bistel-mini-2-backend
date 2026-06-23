@@ -1,0 +1,309 @@
+import asyncio
+from types import SimpleNamespace
+from typing import Any
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+from fastapi import status
+
+from app.ai.nodes.chat import chat_nodes
+from app.ai.nodes.chat.chat_nodes import (
+    ChatGraphNodes,
+    _build_apply_card,
+    _format_apply_card_context,
+    _pick_apply_target,
+)
+from app.common.exceptions import AppException, ErrorCode
+from app.schemas.apply_schema import ApplyPreparationResponse, ChecklistItem
+
+
+def _apply_response() -> ApplyPreparationResponse:
+    return ApplyPreparationResponse(
+        apply_id=None,
+        saved=False,
+        policy_id="WLF1",
+        how_to_apply="복지로 온라인 신청",
+        apply_period="2026-01-01 ~ 2026-12-31",
+        contact="129",
+        official_url="https://www.bokjiro.go.kr",
+        checklist=[
+            ChecklistItem(id="1", label="신분증", done=False),
+            ChecklistItem(id="2", label="통장 사본", done=False),
+        ],
+        caution="공식 사이트에서 최종 확인하세요",
+        progress_percent=0,
+    )
+
+
+class _FakeRagResult:
+    def __init__(self, results: list[Any]) -> None:
+        self.results = results
+
+
+def _rag_chunk(
+    *,
+    chunk_id: int,
+    policy_code: str | None,
+    policy_name: str | None,
+    text: str = "참고 텍스트",
+    source_url: str | None = None,
+) -> SimpleNamespace:
+    return SimpleNamespace(
+        chunk_id=chunk_id,
+        document_id=10,
+        policy_id=100,
+        policy_code=policy_code,
+        policy_name=policy_name,
+        section=None,
+        source_type="POLICY",
+        source_url=source_url,
+        chunk_text=text,
+        distance=0.1,
+    )
+
+
+class _FakeRagService:
+    def __init__(self, results: list[Any]) -> None:
+        self._results = results
+        self.search = AsyncMock(return_value=_FakeRagResult(results))
+
+
+class _FakeSession:
+    async def __aenter__(self) -> "_FakeSession":
+        return self
+
+    async def __aexit__(self, *args: Any) -> None:
+        return None
+
+    async def execute(self, *args: Any, **kwargs: Any) -> Any:
+        return MagicMock()
+
+    async def commit(self) -> None:
+        return None
+
+    async def rollback(self) -> None:
+        return None
+
+
+@pytest.fixture
+def patched_session(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(chat_nodes, "AsyncSessionLocal", lambda: _FakeSession())
+
+
+@pytest.fixture
+def patched_llm(monkeypatch: pytest.MonkeyPatch) -> AsyncMock:
+    llm = AsyncMock()
+    llm.ainvoke = AsyncMock(
+        return_value=SimpleNamespace(content="신청 방법을 안내해 드릴게요.")
+    )
+    monkeypatch.setattr(chat_nodes, "_llm", lambda: llm)
+    return llm
+
+
+def _state() -> dict[str, Any]:
+    return {
+        "user_id": 7,
+        "user_content": "아이돌봄서비스 어떻게 신청해?",
+        "history": [],
+    }
+
+
+def test_pick_apply_target_returns_first_with_slug() -> None:
+    policies = [
+        {"slug": None, "policy_name": "X"},
+        {"slug": "WLF1", "policy_name": "임신·출산 진료비"},
+        {"slug": "WLF2", "policy_name": "산모·신생아"},
+    ]
+    slug, name = _pick_apply_target(policies)
+    assert slug == "WLF1"
+    assert name == "임신·출산 진료비"
+
+
+def test_pick_apply_target_returns_none_when_empty() -> None:
+    assert _pick_apply_target([]) == (None, None)
+
+
+def test_build_apply_card_maps_fields_and_limits_checklist() -> None:
+    response = ApplyPreparationResponse(
+        apply_id=None,
+        saved=False,
+        policy_id="WLF1",
+        how_to_apply="온라인",
+        apply_period="상시",
+        contact="129",
+        official_url="https://example.com",
+        checklist=[
+            ChecklistItem(id=str(i), label=f"항목{i}", done=False)
+            for i in range(1, 10)
+        ],
+        caution="주의",
+        progress_percent=0,
+    )
+
+    card = _build_apply_card(response, "테스트 정책")
+
+    assert card["policy_id"] == "WLF1"
+    assert card["policy_name"] == "테스트 정책"
+    assert card["how_to_apply"] == "온라인"
+    assert len(card["checklist"]) == 5
+    assert card["checklist"][0] == {"id": "1", "label": "항목1", "done": False}
+
+
+def test_format_apply_card_context_lists_known_fields() -> None:
+    card = _build_apply_card(_apply_response(), "임신·출산 진료비")
+    text = _format_apply_card_context(card)
+    assert "임신·출산 진료비" in text
+    assert "복지로" in text
+    assert "신청 기간" in text
+    assert "129" in text
+    assert "신분증" in text
+
+
+def test_branch_apply_invokes_service_and_adapts_payload(
+    patched_session: None,
+    patched_llm: AsyncMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    rag = _FakeRagService(
+        [
+            _rag_chunk(
+                chunk_id=11,
+                policy_code="WLF1",
+                policy_name="임신·출산 진료비",
+                text="임신부 누구나 신청할 수 있습니다.",
+                source_url="https://example.com/11",
+            )
+        ]
+    )
+    apply_get = AsyncMock(return_value=_apply_response())
+    monkeypatch.setattr(
+        chat_nodes.ApplyPreparationService, "get", apply_get
+    )
+
+    nodes = ChatGraphNodes(rag_service=rag)
+
+    result = asyncio.run(nodes.branch_apply(_state()))
+
+    apply_get.assert_awaited_once()
+    call_kwargs = apply_get.await_args.kwargs
+    assert call_kwargs["user_id"] == 7
+    assert call_kwargs["policy_slug"] == "WLF1"
+
+    assert result["branch_content"] == "신청 방법을 안내해 드릴게요."
+    assert [p["slug"] for p in result["branch_policies"]] == ["WLF1"]
+    assert result["branch_evidences"][0]["chunk_id"] == 11
+    apply_card = result["branch_apply_card"]
+    assert apply_card["policy_id"] == "WLF1"
+    assert apply_card["how_to_apply"] == "복지로 온라인 신청"
+    assert apply_card["contact"] == "129"
+    assert len(apply_card["checklist"]) == 2
+
+
+def test_branch_apply_falls_back_when_rag_has_no_slug(
+    patched_session: None,
+    patched_llm: AsyncMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    rag = _FakeRagService(
+        [_rag_chunk(chunk_id=11, policy_code=None, policy_name=None)]
+    )
+    apply_get = AsyncMock()
+    monkeypatch.setattr(
+        chat_nodes.ApplyPreparationService, "get", apply_get
+    )
+
+    nodes = ChatGraphNodes(rag_service=rag)
+
+    result = asyncio.run(nodes.branch_apply(_state()))
+
+    apply_get.assert_not_awaited()
+    assert result["branch_apply_card"] is None
+    assert result["branch_policies"] == []
+    assert result["branch_evidences"][0]["chunk_id"] == 11
+    assert result["branch_content"] == "신청 방법을 안내해 드릴게요."
+
+
+def test_branch_apply_falls_back_when_policy_not_found(
+    patched_session: None,
+    patched_llm: AsyncMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    rag = _FakeRagService(
+        [_rag_chunk(chunk_id=11, policy_code="WLF1", policy_name="임신·출산")]
+    )
+
+    async def _raise_not_found(*args: Any, **kwargs: Any) -> Any:
+        raise AppException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            code=ErrorCode.POLICY_NOT_FOUND,
+            message="Policy not found",
+        )
+
+    monkeypatch.setattr(
+        chat_nodes.ApplyPreparationService, "get", AsyncMock(side_effect=_raise_not_found)
+    )
+
+    nodes = ChatGraphNodes(rag_service=rag)
+
+    result = asyncio.run(nodes.branch_apply(_state()))
+
+    assert result["branch_apply_card"] is None
+    assert result["branch_policies"] == []
+    assert result["branch_evidences"][0]["chunk_id"] == 11
+
+
+def test_branch_apply_reraises_non_policy_not_found_app_exception(
+    patched_session: None,
+    patched_llm: AsyncMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    rag = _FakeRagService(
+        [_rag_chunk(chunk_id=11, policy_code="WLF1", policy_name="임신·출산")]
+    )
+
+    async def _raise_unauthorized(*args: Any, **kwargs: Any) -> Any:
+        raise AppException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            code=ErrorCode.UNAUTHORIZED,
+            message="unauthorized",
+        )
+
+    monkeypatch.setattr(
+        chat_nodes.ApplyPreparationService,
+        "get",
+        AsyncMock(side_effect=_raise_unauthorized),
+    )
+
+    nodes = ChatGraphNodes(rag_service=rag)
+    with pytest.raises(AppException):
+        asyncio.run(nodes.branch_apply(_state()))
+
+
+def test_branch_apply_policy_link_extract_emits_apply_target(
+    patched_session: None,
+    patched_llm: AsyncMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    rag = _FakeRagService(
+        [_rag_chunk(chunk_id=11, policy_code="WLF1", policy_name="임신·출산 진료비")]
+    )
+    monkeypatch.setattr(
+        chat_nodes.ApplyPreparationService,
+        "get",
+        AsyncMock(return_value=_apply_response()),
+    )
+
+    nodes = ChatGraphNodes(rag_service=rag)
+    after_branch = asyncio.run(nodes.branch_apply(_state()))
+
+    state_with_decision = {
+        **after_branch,
+        "supervisor_decision": {"intent": "apply", "raw": "{}"},
+    }
+    payload_state = asyncio.run(nodes.assistant_payload_build(state_with_decision))
+    link_state = asyncio.run(nodes.policy_link_extract(payload_state))
+
+    assert payload_state["assistant_payload"]["apply_card"]["policy_id"] == "WLF1"
+    assert link_state["policy_links_to_save"] == [
+        {"policy_slug": "WLF1", "action_type": "APPLY_TARGET"}
+    ]
