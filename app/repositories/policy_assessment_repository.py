@@ -7,6 +7,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.schemas.ai_contract import AssessmentResult, EvidenceChunk
 
 
+ASSESSMENT_EVIDENCE_ROLES = {
+    "SUMMARY",
+    "TARGET",
+    "BENEFIT",
+    "APPLICATION",
+    "CAUTION",
+}
+
+
 class PolicyAssessmentRepository:
     @staticmethod
     async def ensure_assessment_schema(db: AsyncSession) -> None:
@@ -287,10 +296,24 @@ class PolicyAssessmentRepository:
                     int(evidence.chunk_id),
                     evidence.snippet,
                     evidence.score,
-                    evidence.evidence_role,
+                    PolicyAssessmentRepository._normalize_evidence_role(
+                        evidence.evidence_role
+                    ),
                 ),
             )
 
     @staticmethod
     def _json(value: Any) -> str:
         return json.dumps(value, ensure_ascii=False)
+
+    @staticmethod
+    def _normalize_evidence_role(evidence_role: str | None) -> str | None:
+        if evidence_role is None:
+            return None
+
+        normalized_role = evidence_role.strip().upper()
+        if not normalized_role:
+            return None
+        if normalized_role not in ASSESSMENT_EVIDENCE_ROLES:
+            return None
+        return normalized_role

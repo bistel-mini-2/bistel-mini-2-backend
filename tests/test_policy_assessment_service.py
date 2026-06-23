@@ -3,6 +3,7 @@ import pytest
 from app.common.ai_status import AssessmentStatus, UserStatus
 from app.schemas.ai_contract import AssessmentInput, EvidenceChunk
 from app.schemas.policy_rag_schema import PolicyRagSearchResult
+from app.repositories.policy_assessment_repository import PolicyAssessmentRepository
 from app.services.policy_assessment_service import (
     ASSESSMENT_TYPE_ELIGIBILITY,
     ASSESSMENT_TYPE_RECOMMENDATION,
@@ -27,7 +28,7 @@ def make_input(condition: dict, policy_id: int = 1) -> AssessmentInput:
                 source_title="정책 상세",
                 source_url="https://example.com",
                 score=0.1,
-                evidence_role="target",
+                evidence_role="TARGET",
             )
         ],
     )
@@ -42,7 +43,7 @@ def test_likely_match(service: PolicyAssessmentService):
     assert result.assessment_status == AssessmentStatus.LIKELY_MATCH
     assert result.user_status == UserStatus.RECOMMENDABLE
     assert result.matched_conditions == ["region", "income"]
-    assert result.evidences[0].evidence_role == "target"
+    assert result.evidences[0].evidence_role == "TARGET"
 
 
 def test_needs_more_info_with_one_missing_condition(
@@ -147,5 +148,12 @@ def test_build_evidence_chunks_maps_section_to_evidence_role(
         ]
     )
 
-    assert evidences[0].evidence_role == "target"
+    assert evidences[0].evidence_role == "TARGET"
     assert evidences[0].source_title == "테스트 정책 - 지원 대상"
+
+
+def test_repository_normalizes_evidence_role_for_database():
+    assert PolicyAssessmentRepository._normalize_evidence_role("target") == "TARGET"
+    assert PolicyAssessmentRepository._normalize_evidence_role(" BENEFIT ") == "BENEFIT"
+    assert PolicyAssessmentRepository._normalize_evidence_role("reference") is None
+    assert PolicyAssessmentRepository._normalize_evidence_role("") is None
