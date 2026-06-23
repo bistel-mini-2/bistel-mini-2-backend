@@ -1,3 +1,4 @@
+import asyncio
 from typing import Any, Protocol
 
 from pydantic import BaseModel, Field
@@ -16,7 +17,8 @@ ALLOWED_LIFE_STAGES = {item.value for item in LifeStage}
 ALLOWED_CHILD_AGES = {item.value for item in ChildAge}
 ALLOWED_INCOME_LEVELS = {item.value for item in IncomeLevel}
 ALLOWED_REGION_CODES = {item.value for item in RegionCode}
-ALLOWED_SPECIAL_FLAGS = {"single", "multi", "disabled", "many", "dual", "veteran"}
+ALLOWED_SPECIAL_FLAGS = {"single", "multi",
+                         "disabled", "many", "dual", "veteran"}
 
 STAGE_ALIASES = {
     "임신": "pregnant",
@@ -77,8 +79,13 @@ class ConditionExtractor(Protocol):
 
 
 class LangChainConditionExtractor:
-    def __init__(self, model: str = "gpt-4o-mini") -> None:
+    def __init__(
+        self,
+        model: str = "gpt-4o-mini",
+        timeout_seconds: float = 30,
+    ) -> None:
         self.model = model
+        self.timeout_seconds = timeout_seconds
 
     async def extract(self, raw_query: str) -> dict[str, Any]:
         if not raw_query.strip():
@@ -87,24 +94,68 @@ class LangChainConditionExtractor:
         from langchain_openai import ChatOpenAI
 
         llm = ChatOpenAI(model=self.model, temperature=0)
-        structured_llm = llm.with_structured_output(NaturalLanguageConditionExtraction)
-        result = await structured_llm.ainvoke(
-            [
-                (
-                    "system",
-                    "Extract Korean welfare recommendation conditions into the "
-                    "given schema. Use only these codes when possible: "
-                    "stage=pregnant|newborn|infant|child|teen, "
-                    "childAge=preborn|0|1|2-5|6-12|13+, "
-                    "income=low|mid1|mid2|high|unknown, "
-                    "region=national|seoul|busan|daegu|incheon|gwangju|daejeon|"
-                    "ulsan|sejong|gyeonggi|gangwon|chungbuk|chungnam|jeonbuk|"
-                    "jeonnam|gyeongbuk|gyeongnam|jeju, "
-                    "special=single|multi|disabled|many|dual|veteran.",
-                ),
-                ("user", raw_query),
-            ]
-        )
+        structured_llm = llm.with_structured_output(
+            NaturalLanguageConditionExtraction)
+        messages = [
+            (
+                "system",
+                """
+                    너는 한국 복지정책 추천 서비스의 조건 추출기다.
+
+                    사용자의 한국어 자연어 입력에서 정책 추천에 필요한 조건을 추출해
+                    NaturalLanguageConditionExtraction 스키마로만 반환한다.
+
+                    반드시 아래 코드값만 사용한다.
+
+                    stage:
+                    - pregnant: 임신 중, 출산 예정, 태아
+                    - newborn: 신생아
+                    - infant: 영유아, 영아, 1~6세
+                    - child: 아동, 초등학생, 7~12세
+                    - teen: 청소년, 중고등학생, 13~18세
+
+                    childAge:
+                    - preborn: 태아, 출산 예정
+                    - 0: 0세
+                    - 1: 1세
+                    - 2-5: 2~5세
+                    - 6-12: 6~12세
+                    - 13+: 13세 이상
+
+                    income:
+                    - low: 기준 중위소득 50% 이하
+                    - mid1: 50~100%
+                    - mid2: 100~150%
+                    - high: 150% 초과
+                    - unknown: 모르거나 입력하지 않음
+
+                    region:
+                    national, seoul, busan, daegu, incheon, gwangju, daejeon,
+                    ulsan, sejong, gyeonggi, gangwon, chungbuk, chungnam,
+                    jeonbuk, jeonnam, gyeongbuk, gyeongnam, jeju
+
+                    special:
+                    - single: 한부모, 조손
+                    - multi: 다문화, 탈북
+                    - disabled: 장애
+                    - many: 다자녀
+                    - dual: 맞벌이
+                    - veteran: 보훈
+
+                    사용자가 명확히 말하지 않은 스칼라 필드는 null로, 리스트 필드(special, needs)는 빈 배열로 둔다.
+                    사용자의 관심사나 원하는 지원 내용은 needs에 한국어 키워드로 담는다.
+                    설명 문장을 추가하지 말고 스키마 필드만 채운다.
+                    """
+            ),
+            ("user", raw_query),
+        ]
+        try:
+            result = await asyncio.wait_for(
+                structured_llm.ainvoke(messages),
+                timeout=self.timeout_seconds,
+            )
+        except asyncio.TimeoutError:
+            return {}
         if isinstance(result, NaturalLanguageConditionExtraction):
             return result.model_dump(exclude_none=True)
         if isinstance(result, dict):
@@ -193,7 +244,8 @@ class ConditionAgent:
 
         needs = source.get("needs") or source.get("user_needs")
         if isinstance(needs, list) and needs:
-            normalized["needs"] = [str(item) for item in needs if item not in (None, "")]
+            normalized["needs"] = [str(item)
+                                   for item in needs if item not in (None, "")]
         return normalized, issues
 
     def _copy_scalar(
