@@ -1,11 +1,14 @@
 import asyncio
+import json
 from datetime import datetime
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi import status
 
+from app.ai.nodes.chat.chat_nodes import BRANCH_LLM_TAG
 from app.common.exceptions import AppException
 from app.db.models.chat_message import ChatMessage
 from app.db.models.chat_session import ChatSession
@@ -520,3 +523,131 @@ def test_list_messages_includes_normalized_data(monkeypatch) -> None:
     # evidence_role validator로 lowercase 변환
     assert assistant_item.evidences[0].evidence_role == "summary"
     assert assistant_item.evidences[0].chunk_id == "101"
+
+
+# --- streaming -------------------------------------------------------------
+
+
+class _FakeGraph:
+    def __init__(self, events: list[dict] | None = None, raise_after: int | None = None) -> None:
+        self._events = events or []
+        self._raise_after = raise_after
+
+    def astream_events(self, state: dict, version: str = "v2"):
+        events = self._events
+        raise_after = self._raise_after
+
+        async def gen():
+            for index, event in enumerate(events):
+                yield event
+                if raise_after is not None and index + 1 >= raise_after:
+                    raise RuntimeError("boom")
+
+        return gen()
+
+
+def _token_event(text: str, *, tags: list[str] | None = None) -> dict:
+    return {
+        "event": "on_chat_model_stream",
+        "tags": tags if tags is not None else [BRANCH_LLM_TAG],
+        "data": {"chunk": SimpleNamespace(content=text)},
+    }
+
+
+def _chain_end_event(output: dict) -> dict:
+    return {"event": "on_chain_end", "data": {"output": output}}
+
+
+def _parse_sse_chunks(chunks: list[str]) -> list[dict]:
+    parsed: list[dict] = []
+    for chunk in chunks:
+        assert chunk.startswith("data: ")
+        assert chunk.endswith("\n\n")
+        parsed.append(json.loads(chunk[len("data: ") : -2]))
+    return parsed
+
+
+async def _collect(agen) -> list[str]:
+    return [item async for item in agen]
+
+
+def test_send_message_stream_emits_tokens_then_done(monkeypatch) -> None:
+    session = _session()
+    db = AsyncMock()
+    mocks = _patch_repo_for_send(monkeypatch, session=session)
+
+    monkeypatch.setattr(
+        PolicyRepository,
+        "find_ids_by_codes",
+        AsyncMock(return_value={"WLF1": 42}),
+    )
+
+    graph_result = _graph_result()
+    fake_events = [
+        _token_event("안녕"),
+        _token_event("하세요"),
+        # supervisor 등 다른 태그의 토큰은 무시되어야 함
+        _token_event("ignored", tags=["supervisor"]),
+        _chain_end_event(graph_result),
+    ]
+    monkeypatch.setattr(
+        chat_service_module,
+        "chat_supervisor_graph",
+        _FakeGraph(events=fake_events),
+    )
+
+    chunks = asyncio.run(_collect(
+        ChatService.send_message_stream(db=db, session=session, content="추천해줘")
+    ))
+    events = _parse_sse_chunks(chunks)
+
+    # token, token, done 순서
+    assert [e["type"] for e in events] == ["token", "token", "done"]
+    assert events[0]["delta"] == "안녕"
+    assert events[1]["delta"] == "하세요"
+
+    # done payload에 ChatMessageSendResponse 구조 포함
+    payload = events[2]["payload"]
+    assert payload["chat_session_id"] == "10"
+    assert payload["assistant_message"]["content"] == "테스트 답변"
+    assert payload["assistant_message"]["policies"][0]["action_type"] == "RECOMMENDED"
+
+    # 정규화 INSERT가 한 번만 호출되었는지
+    mocks["bulk_save_message_policies"].assert_awaited_once()
+    mocks["bulk_save_message_evidences"].assert_awaited_once()
+    mocks["update_last_message_at"].assert_awaited_once()
+
+
+def test_send_message_stream_error_event_when_graph_raises(monkeypatch) -> None:
+    session = _session()
+    db = AsyncMock()
+    mocks = _patch_repo_for_send(monkeypatch, session=session)
+
+    monkeypatch.setattr(
+        PolicyRepository,
+        "find_ids_by_codes",
+        AsyncMock(return_value={}),
+    )
+
+    # 토큰 한 개 emit 후 raise — final_state 미수집 → error 이벤트로 종료
+    monkeypatch.setattr(
+        chat_service_module,
+        "chat_supervisor_graph",
+        _FakeGraph(events=[_token_event("부분")], raise_after=1),
+    )
+
+    chunks = asyncio.run(_collect(
+        ChatService.send_message_stream(db=db, session=session, content="x")
+    ))
+    events = _parse_sse_chunks(chunks)
+
+    assert [e["type"] for e in events] == ["token", "error"]
+    assert events[1]["code"] == "INTERNAL_SERVER_ERROR"
+
+    # 유저 메시지·assistant 메시지·정규화 row가 모두 저장되지 않아야 함
+    # (P1-1 수정: 그래프 실패 시 user message도 남지 않도록 commit을 함께 묶음)
+    mocks["save_message"].assert_not_awaited()
+    mocks["bulk_save_message_policies"].assert_not_awaited()
+    mocks["bulk_save_message_evidences"].assert_not_awaited()
+    mocks["update_last_message_at"].assert_not_awaited()
+    db.commit.assert_not_awaited()

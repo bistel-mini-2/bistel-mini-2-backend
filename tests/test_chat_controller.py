@@ -1,14 +1,17 @@
+import json
 from collections.abc import AsyncGenerator
 from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
-from fastapi import FastAPI
+import pytest
+from fastapi import FastAPI, status
 from fastapi.testclient import TestClient
 
 from app.api.chat_controller import router
-from app.common.exceptions import register_exception_handlers
+from app.common.exceptions import AppException, ErrorCode, register_exception_handlers
 from app.core.dependencies import get_current_user
+from app.db.models.chat_session import ChatSession
 from app.db.session import get_db_session
 from app.schemas.chat_schema import (
     AssistantMessage,
@@ -228,3 +231,94 @@ def test_list_chat_messages_includes_normalized_join(monkeypatch) -> None:
     assert assistant_msg["evidences"][0]["chunk_id"] == "101"
     assert assistant_msg["evidences"][0]["evidence_role"] == "summary"
     assert assistant_msg["actions"] == ["recommend"]
+
+
+# --- SSE streaming endpoint ----------------------------------------------
+
+
+def _stream_response() -> ChatMessageSendResponse:
+    return ChatMessageSendResponse(
+        chat_session_id="9",
+        user_message_id="11",
+        assistant_message=AssistantMessage(
+            chat_message_id="12",
+            content="안녕하세요",
+            actions=["recommend"],
+            disclaimer=True,
+        ),
+    )
+
+
+def _parse_sse_body(body: str) -> list[dict]:
+    events: list[dict] = []
+    for block in body.split("\n\n"):
+        block = block.strip()
+        if not block:
+            continue
+        assert block.startswith("data: ")
+        events.append(json.loads(block[len("data: ") :]))
+    return events
+
+
+def test_stream_chat_message_returns_sse_token_and_done(monkeypatch) -> None:
+    monkeypatch.setattr(
+        ChatService,
+        "ensure_owned_session",
+        AsyncMock(return_value=ChatSession(chat_session_id=9, user_id=5)),
+    )
+
+    async def fake_stream(db, *, session, content):
+        yield 'data: {"type":"token","delta":"안녕"}\n\n'
+        yield 'data: {"type":"token","delta":"하세요"}\n\n'
+        yield (
+            'data: '
+            + json.dumps(
+                {"type": "done", "payload": _stream_response().model_dump(mode="json")},
+                ensure_ascii=False,
+            )
+            + "\n\n"
+        )
+
+    monkeypatch.setattr(ChatService, "send_message_stream", fake_stream)
+
+    with TestClient(_build_app()) as client:
+        resp = client.post(
+            "/api/v1/chat/sessions/9/messages/stream",
+            json={"content": "추천해줘"},
+        )
+
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("text/event-stream")
+    assert resp.headers["cache-control"] == "no-cache"
+    assert resp.headers["x-accel-buffering"] == "no"
+
+    events = _parse_sse_body(resp.text)
+    assert [e["type"] for e in events] == ["token", "token", "done"]
+    assert events[0]["delta"] == "안녕"
+    assert events[2]["payload"]["assistant_message"]["content"] == "안녕하세요"
+
+
+def test_stream_chat_message_returns_404_for_unknown_session(monkeypatch) -> None:
+    async def raise_404(db, *, user_id, chat_session_id):
+        raise AppException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            code=ErrorCode.NOT_FOUND,
+            message="Chat session not found",
+        )
+
+    monkeypatch.setattr(ChatService, "ensure_owned_session", raise_404)
+    stream_mock = AsyncMock()
+    monkeypatch.setattr(ChatService, "send_message_stream", stream_mock)
+
+    with TestClient(_build_app()) as client:
+        resp = client.post(
+            "/api/v1/chat/sessions/9/messages/stream",
+            json={"content": "추천해줘"},
+        )
+
+    assert resp.status_code == 404
+    assert resp.headers["content-type"].startswith("application/json")
+    body = resp.json()
+    assert body["success"] is False
+    assert body["error"]["code"] == "NOT_FOUND"
+    stream_mock.assert_not_called()
