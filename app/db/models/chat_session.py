@@ -1,6 +1,8 @@
 from datetime import datetime
+from typing import Any
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, String, func
+from sqlalchemy import BigInteger, DateTime, ForeignKey, String, func, text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.session import Base
@@ -28,6 +30,12 @@ class ChatSession(Base):
     )
     last_message_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     latest_request_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    slot_json: Mapped[dict[str, Any]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=dict,
+        server_default=text("'{}'::jsonb"),
+    )
     created_at: Mapped[datetime | None] = mapped_column(
         DateTime,
         nullable=True,

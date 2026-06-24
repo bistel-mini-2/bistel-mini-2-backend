@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -115,6 +115,7 @@ class ChatService:
             user_id=user_id,
             user_content=content,
             history=history,
+            slot=session.slot_json or {},
         )
 
         assistant_message, assistant_response = await _persist_assistant_outputs(
@@ -122,6 +123,7 @@ class ChatService:
             session_id=session.chat_session_id,
             user_message_id=user_message.chat_message_id,
             graph_result=graph_result,
+            current_slot=session.slot_json or {},
         )
 
         await ChatRepository.update_last_message_at(
@@ -186,12 +188,13 @@ async def _save_user_message(
 
 
 async def _run_supervisor_graph(
-    *, user_id: int, user_content: str, history: list[dict]
+    *, user_id: int, user_content: str, history: list[dict], slot: dict | None = None
 ) -> dict:
     graph_state = {
         "user_id": user_id,
         "user_content": user_content,
         "history": history,
+        "slot": slot or {},
     }
     try:
         return await chat_supervisor_graph.ainvoke(graph_state)
@@ -211,6 +214,7 @@ async def _persist_assistant_outputs(
     session_id: int,
     user_message_id: int,
     graph_result: dict,
+    current_slot: dict | None = None,
 ) -> tuple[ChatMessage, AssistantMessage]:
     payload = graph_result.get("assistant_payload") or _fallback_payload()
     decision = graph_result.get("supervisor_decision") or {
@@ -249,6 +253,15 @@ async def _persist_assistant_outputs(
         _build_evidence_rows(assistant_message.chat_message_id, evidences_to_save),
     )
 
+    next_slot = _build_next_slot(
+        current_slot=current_slot or {},
+        policy_links=policy_links_to_save,
+        branch_policies=payload.get("policies", []),
+        slug_to_policy_id=slug_to_policy_id,
+    )
+    if next_slot is not None:
+        await ChatRepository.update_session_slot(db, session_id, next_slot)
+
     response = _build_assistant_response(
         assistant_message,
         payload,
@@ -256,6 +269,67 @@ async def _persist_assistant_outputs(
         slug_to_policy_id,
     )
     return assistant_message, response
+
+
+_SLOT_MAX_POLICIES = 3
+
+
+def _build_next_slot(
+    *,
+    current_slot: dict,
+    policy_links: list[dict],
+    branch_policies: list[dict],
+    slug_to_policy_id: dict[str, int],
+) -> dict | None:
+    slug_to_action: dict[str, str] = {}
+    for link in policy_links:
+        slug = link.get("policy_slug")
+        action = link.get("action_type")
+        if slug and action and slug not in slug_to_action:
+            slug_to_action[slug] = action
+
+    slug_to_name: dict[str, str] = {}
+    for policy in branch_policies:
+        slug = policy.get("slug")
+        if slug and slug not in slug_to_name:
+            slug_to_name[slug] = policy.get("policy_name") or ""
+
+    new_entries: list[dict] = []
+    seen: set[str] = set()
+    for policy in branch_policies:
+        slug = policy.get("slug")
+        if not slug or slug in seen:
+            continue
+        policy_id = slug_to_policy_id.get(slug)
+        action = slug_to_action.get(slug)
+        if policy_id is None or action is None:
+            continue
+        seen.add(slug)
+        new_entries.append({
+            "policy_id": policy_id,
+            "slug": slug,
+            "policy_name": slug_to_name.get(slug) or "",
+            "last_action": action,
+        })
+
+    if not new_entries:
+        return None
+
+    existing = list(current_slot.get("recent_policies") or [])
+    merged: list[dict] = list(new_entries)
+    for entry in existing:
+        slug = entry.get("slug")
+        if not slug or slug in seen:
+            continue
+        seen.add(slug)
+        merged.append(entry)
+        if len(merged) >= _SLOT_MAX_POLICIES:
+            break
+
+    return {
+        "recent_policies": merged[:_SLOT_MAX_POLICIES],
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 async def _resolve_policy_ids(
