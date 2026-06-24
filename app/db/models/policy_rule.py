@@ -1,6 +1,6 @@
 from typing import Any
 
-from sqlalchemy import BigInteger, Boolean, ForeignKey, String, Text
+from sqlalchemy import BigInteger, Boolean, ForeignKey, Numeric, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -39,3 +39,29 @@ class PolicyRule(Base):
     )
     manual_check_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    rule_group: Mapped[str] = mapped_column(
+        String(100),
+        nullable=False,
+        default="ALL",
+        server_default="ALL",
+    )
+    group_operator: Mapped[str] = mapped_column(
+        String(10),
+        nullable=False,
+        default="AND",
+        server_default="AND",
+    )
+    source_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    confidence: Mapped[float | None] = mapped_column(Numeric(5, 4), nullable=True)
+    review_required: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="false",
+    )
+    is_exclusion: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="false",
+    )

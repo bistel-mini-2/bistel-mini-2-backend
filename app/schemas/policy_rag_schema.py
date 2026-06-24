@@ -1,4 +1,6 @@
-from pydantic import BaseModel
+from typing import Any
+
+from pydantic import BaseModel, Field
 
 
 class PolicyRagEmbeddingItem(BaseModel):
@@ -23,8 +25,12 @@ class PolicyRagSearchResult(BaseModel):
     policy_code: str | None = None
     policy_name: str | None = None
     section: str | None = None
+    semantic_section: str | None = None
     source_type: str | None = None
+    source_title: str | None = None
     source_url: str | None = None
+    evidence_role: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
     chunk_text: str
     distance: float
 

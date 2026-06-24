@@ -98,10 +98,10 @@ class PolicyAssessmentService:
                 chunk_id=result.chunk_id or "",
                 policy_id=result.policy_id or "",
                 snippet=result.chunk_text,
-                source_title=self._source_title(result),
+                source_title=result.source_title or self._source_title(result),
                 source_url=result.source_url or "",
                 score=result.distance,
-                evidence_role=self._evidence_role(result.section),
+                evidence_role=result.evidence_role or self._evidence_role(result.section),
             )
             for result in search_results
         ]

@@ -457,15 +457,43 @@ class PolicyImportRepository:
                     is_hard_filter boolean NOT NULL DEFAULT true,
                     manual_check_required boolean NOT NULL DEFAULT false,
                     manual_check_reason text,
-                    note text
+                    note text,
+                    rule_group varchar(100) NOT NULL DEFAULT 'ALL',
+                    group_operator varchar(10) NOT NULL DEFAULT 'AND',
+                    source_text text,
+                    confidence numeric(5, 4),
+                    review_required boolean NOT NULL DEFAULT false,
+                    is_exclusion boolean NOT NULL DEFAULT false
                 )
             """,
         )
+        for statement in [
+            "ALTER TABLE policy_rule ADD COLUMN IF NOT EXISTS rule_group varchar(100) NOT NULL DEFAULT 'ALL'",
+            "ALTER TABLE policy_rule ADD COLUMN IF NOT EXISTS group_operator varchar(10) NOT NULL DEFAULT 'AND'",
+            "ALTER TABLE policy_rule ADD COLUMN IF NOT EXISTS source_text text",
+            "ALTER TABLE policy_rule ADD COLUMN IF NOT EXISTS confidence numeric(5, 4)",
+            "ALTER TABLE policy_rule ADD COLUMN IF NOT EXISTS review_required boolean NOT NULL DEFAULT false",
+            "ALTER TABLE policy_rule ADD COLUMN IF NOT EXISTS is_exclusion boolean NOT NULL DEFAULT false",
+            "ALTER TABLE policy_rule DROP CONSTRAINT IF EXISTS policy_rule_group_operator_check",
+            """
+                ALTER TABLE policy_rule
+                ADD CONSTRAINT policy_rule_group_operator_check
+                CHECK (group_operator IN ('AND', 'OR'))
+            """,
+        ]:
+            await cls._execute(conn, statement)
         await cls._execute(
             conn,
             """
                 CREATE INDEX IF NOT EXISTS policy_rule_policy_id_idx
                 ON policy_rule (policy_id)
+            """,
+        )
+        await cls._execute(
+            conn,
+            """
+                CREATE INDEX IF NOT EXISTS policy_rule_policy_group_idx
+                ON policy_rule (policy_id, rule_group, group_operator)
             """,
         )
         await cls._execute(
