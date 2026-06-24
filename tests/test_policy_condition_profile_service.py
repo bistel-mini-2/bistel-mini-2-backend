@@ -172,3 +172,11 @@ async def test_condition_profile_preserves_income_and_target_or_tree(
     assert condition_tree["conditions"][0]["operator"] == "AND"
     assert condition_tree["conditions"][1]["operator"] == "OR"
     assert saved["condition_json"]["exclusions"][0]["type"] == "program_overlap"
+
+
+def test_system_prompt_prioritizes_target_text_over_openapi_category() -> None:
+    prompt = PolicyConditionProfileService()._system_prompt()
+
+    assert "OpenAPI의 category, sub_category, lifeArray, trgterIndvdlArray는 참고 정보" in prompt
+    assert "지원대상, 선정기준, target_description 원문을 우선" in prompt
+    assert "지원대상/선정기준 원문을 기준으로 condition_tree" in prompt

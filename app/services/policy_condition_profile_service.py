@@ -288,6 +288,9 @@ condition_tree 권장 형식:
 주의:
 - "임산부 또는 34세 이하"처럼 선택 조건이면 반드시 OR 그룹으로 표현합니다.
 - "생계급여 수급가구 중 ..."처럼 선행 자격과 대상 조건이 결합되면 전체는 AND로 표현합니다.
+- OpenAPI의 category, sub_category, lifeArray, trgterIndvdlArray는 참고 정보일 뿐입니다.
+- 실제 조건 판단은 지원대상, 선정기준, target_description 원문을 우선합니다.
+- OpenAPI 분류 정보와 지원대상/선정기준 원문이 충돌하면 지원대상/선정기준 원문을 기준으로 condition_tree를 작성합니다.
 - "저소득층"처럼 정확한 기준이 없으면 임의의 중위소득 비율을 만들지 말고 unknowns에 남깁니다.
 - 답변 필드의 모든 자연어는 한국어로 작성합니다.
 """.strip()
