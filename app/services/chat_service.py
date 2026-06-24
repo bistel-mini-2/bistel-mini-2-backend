@@ -1,6 +1,9 @@
 import asyncio
+import json
 import logging
+from collections.abc import AsyncIterator
 from datetime import datetime, timezone
+from typing import Any
 
 from fastapi import status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,6 +12,7 @@ from app.ai.graphs.chat_supervisor_graph import (
     HISTORY_LIMIT,
     chat_supervisor_graph,
 )
+from app.ai.nodes.chat.chat_nodes import BRANCH_LLM_TAG
 from app.common.exceptions import AppException, ErrorCode
 from app.db.models.chat_message import ChatMessage
 from app.db.models.chat_session import ChatSession
@@ -139,8 +143,120 @@ class ChatService:
             assistant_message=assistant_response,
         )
 
+    @staticmethod
+    async def ensure_owned_session(
+        db: AsyncSession, user_id: int, chat_session_id: int
+    ) -> ChatSession:
+        return await _get_owned_session_or_raise(db, user_id, chat_session_id)
+
+    @staticmethod
+    async def send_message_stream(
+        db: AsyncSession,
+        session: ChatSession,
+        content: str,
+    ) -> AsyncIterator[str]:
+        history = await _load_history(db, session.chat_session_id)
+        is_first_message = not history and not session.title
+
+        graph_state = {
+            "user_id": session.user_id,
+            "user_content": content,
+            "history": history,
+            "slot": session.slot_json or {},
+        }
+
+        final_state: dict[str, Any] = {}
+        stream_failed = False
+        try:
+            async for event in chat_supervisor_graph.astream_events(
+                graph_state, version="v2"
+            ):
+                kind = event.get("event")
+                if kind == "on_chat_model_stream":
+                    if BRANCH_LLM_TAG not in (event.get("tags") or []):
+                        continue
+                    delta = _extract_token_text(event.get("data", {}).get("chunk"))
+                    if delta:
+                        yield _sse_event({"type": "token", "delta": delta})
+                elif kind == "on_chain_end":
+                    output = event.get("data", {}).get("output")
+                    if isinstance(output, dict):
+                        final_state.update(output)
+        except Exception:
+            stream_failed = True
+            logger.exception("Chat supervisor graph streaming failed")
+
+        if stream_failed or not final_state.get("assistant_payload"):
+            yield _sse_event({
+                "type": "error",
+                "code": ErrorCode.INTERNAL_SERVER_ERROR.value,
+                "message": "답변을 생성하는 중 문제가 발생했어요. 잠시 후 다시 시도해 주세요.",
+            })
+            return
+
+        try:
+            user_message = await _save_user_message(
+                db, session.chat_session_id, content
+            )
+            _, assistant_response = await _persist_assistant_outputs(
+                db,
+                session_id=session.chat_session_id,
+                user_message_id=user_message.chat_message_id,
+                graph_result=final_state,
+                current_slot=session.slot_json or {},
+            )
+            await ChatRepository.update_last_message_at(
+                db, session.chat_session_id, datetime.utcnow()
+            )
+            await db.commit()
+        except Exception:
+            await db.rollback()
+            logger.exception("Persisting chat messages failed during stream")
+            yield _sse_event({
+                "type": "error",
+                "code": ErrorCode.INTERNAL_SERVER_ERROR.value,
+                "message": "답변을 저장하는 중 문제가 발생했어요. 잠시 후 다시 시도해 주세요.",
+            })
+            return
+
+        if is_first_message:
+            _schedule_title_generation(session.chat_session_id, content)
+
+        response = ChatMessageSendResponse(
+            chat_session_id=str(session.chat_session_id),
+            user_message_id=str(user_message.chat_message_id),
+            assistant_message=assistant_response,
+        )
+        yield _sse_event({
+            "type": "done",
+            "payload": response.model_dump(mode="json"),
+        })
+
 
 # --- helpers ---------------------------------------------------------------
+
+
+def _sse_event(payload: dict[str, Any]) -> str:
+    return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+
+def _extract_token_text(chunk: Any) -> str:
+    if chunk is None:
+        return ""
+    content = getattr(chunk, "content", None)
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for item in content:
+            if isinstance(item, str):
+                parts.append(item)
+            elif isinstance(item, dict):
+                text = item.get("text")
+                if isinstance(text, str):
+                    parts.append(text)
+        return "".join(parts)
+    return ""
 
 
 def _schedule_title_generation(chat_session_id: int, user_content: str) -> None:
