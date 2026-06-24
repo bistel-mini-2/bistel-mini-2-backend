@@ -29,6 +29,7 @@ class PolicyImportService:
             await PolicyImportRepository.replace_policy_documents(conn)
         )
         tag_count = await PolicyImportRepository.replace_policy_tags(conn)
+        policy_rule_count = await PolicyImportRepository.replace_policy_rules(conn)
         checklist_count = (
             await PolicyImportRepository.replace_policy_checklist_templates(conn)
         )
@@ -39,6 +40,7 @@ class PolicyImportService:
             imported_required_document_count=required_document_count,
             imported_policy_document_count=policy_document_count,
             imported_tag_count=tag_count,
+            imported_policy_rule_count=policy_rule_count,
             imported_checklist_template_count=checklist_count,
             skipped_count=max(raw_count - policy_count, 0),
         )
