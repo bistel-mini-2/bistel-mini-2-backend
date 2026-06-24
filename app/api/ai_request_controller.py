@@ -227,3 +227,20 @@ async def get_eligibility_request(
         user_id=current_user.user_id,
     )
     return success_response(data=response, meta=_eligibility_result_meta(response))
+
+
+@eligibility_router.patch("/requests/{request_id}/cancel")
+async def cancel_eligibility_request(
+    request_id: int,
+    db: DbSessionDep,
+    current_user: CurrentUserDep,
+) -> JSONResponse:
+    service = AiRequestLifecycleService()
+    snapshot = await service.cancel_request(
+        db=db,
+        request_type="eligibility",
+        request_id=request_id,
+        user_id=current_user.user_id,
+    )
+    await db.commit()
+    return success_response(data=snapshot, meta=_request_meta(snapshot))
