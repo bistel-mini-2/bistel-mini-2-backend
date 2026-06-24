@@ -271,7 +271,13 @@ class RecommendationCandidateRepository:
                 is_hard_filter,
                 manual_check_required,
                 manual_check_reason,
-                note
+                note,
+                rule_group,
+                group_operator,
+                source_text,
+                confidence,
+                review_required,
+                is_exclusion
             FROM policy_rule
             WHERE policy_id IN :policy_ids
             """

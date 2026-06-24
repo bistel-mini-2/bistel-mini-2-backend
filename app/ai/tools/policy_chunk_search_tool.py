@@ -40,10 +40,17 @@ async def search_policy_chunks(
                 chunk_id=result.chunk_id,
                 policy_id=result.policy_id,
                 snippet=result.chunk_text,
-                source_title=_source_title(result.policy_name, result.section),
+                source_title=(
+                    result.source_title
+                    or _source_title(result.policy_name, result.section)
+                ),
                 source_url=result.source_url or "",
                 score=_distance_to_score(result.distance),
-                evidence_role=_evidence_role(result.section) or evidence_role,
+                evidence_role=(
+                    result.evidence_role
+                    or _evidence_role(result.section)
+                    or evidence_role
+                ),
             )
         )
     return chunks

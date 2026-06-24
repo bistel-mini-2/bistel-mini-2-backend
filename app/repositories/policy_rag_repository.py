@@ -1,6 +1,9 @@
 from typing import Any
 
 
+POLICY_RAG_METADATA_VERSION = "2026-06-24.1"
+
+
 class PolicyRagRepository:
     @staticmethod
     async def find_embedding_targets(
@@ -38,6 +41,16 @@ class PolicyRagRepository:
                         p.policy_id,
                         p.policy_code,
                         p.policy_name,
+                        p.main_category,
+                        p.sub_category,
+                        p.provider_name,
+                        p.provider_type,
+                        p.region_scope,
+                        p.region_code,
+                        p.benefit_type,
+                        p.application_status,
+                        p.application_start_date,
+                        p.application_end_date,
                         md5(c.chunk_text) AS chunk_hash
                     FROM policy_document_chunk c
                     JOIN policy_document d ON d.document_id = c.document_id
@@ -53,11 +66,12 @@ class PolicyRagRepository:
                       AND (
                           embedding.id IS NULL
                           OR embedding.cmetadata->>'chunk_hash' IS DISTINCT FROM md5(c.chunk_text)
+                          OR embedding.cmetadata->>'metadata_version' IS DISTINCT FROM %s
                       )
                     ORDER BY c.chunk_id
                     LIMIT %s
                 """,
-                (source_type, source_type, limit),
+                (source_type, source_type, POLICY_RAG_METADATA_VERSION, limit),
             )
             rows = await cur.fetchall()
 
@@ -73,6 +87,16 @@ class PolicyRagRepository:
             "policy_id",
             "policy_code",
             "policy_name",
+            "main_category",
+            "sub_category",
+            "provider_name",
+            "provider_type",
+            "region_scope",
+            "region_code",
+            "benefit_type",
+            "application_status",
+            "application_start_date",
+            "application_end_date",
             "chunk_hash",
         ]
         return [dict(zip(columns, row, strict=True)) for row in rows]
@@ -97,6 +121,16 @@ class PolicyRagRepository:
                     p.policy_id,
                     p.policy_code,
                     p.policy_name,
+                    p.main_category,
+                    p.sub_category,
+                    p.provider_name,
+                    p.provider_type,
+                    p.region_scope,
+                    p.region_code,
+                    p.benefit_type,
+                    p.application_status,
+                    p.application_start_date,
+                    p.application_end_date,
                     md5(c.chunk_text) AS chunk_hash
                 FROM policy_document_chunk c
                 JOIN policy_document d ON d.document_id = c.document_id
@@ -122,6 +156,16 @@ class PolicyRagRepository:
             "policy_id",
             "policy_code",
             "policy_name",
+            "main_category",
+            "sub_category",
+            "provider_name",
+            "provider_type",
+            "region_scope",
+            "region_code",
+            "benefit_type",
+            "application_status",
+            "application_start_date",
+            "application_end_date",
             "chunk_hash",
         ]
         return [dict(zip(columns, row, strict=True)) for row in rows]
