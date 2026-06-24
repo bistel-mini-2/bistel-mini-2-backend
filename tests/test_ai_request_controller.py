@@ -139,6 +139,64 @@ def test_create_eligibility_request_uses_common_lifecycle(monkeypatch) -> None:
     }
 
 
+def test_cancel_eligibility_request_uses_common_lifecycle(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    async def fake_db() -> AsyncGenerator[object, None]:
+        async def commit():
+            captured["committed"] = True
+
+        yield SimpleNamespace(commit=commit)
+
+    async def fake_current_user() -> object:
+        return SimpleNamespace(user_id=7)
+
+    async def fake_cancel_request(
+        self,
+        db,
+        *,
+        request_type,
+        request_id,
+        user_id,
+    ):
+        captured["cancel"] = {
+            "request_type": request_type,
+            "request_id": request_id,
+            "user_id": user_id,
+        }
+        return SimpleNamespace(
+            request_id=str(request_id),
+            status=SimpleNamespace(value="CANCELED"),
+        )
+
+    monkeypatch.setattr(
+        AiRequestLifecycleService,
+        "cancel_request",
+        fake_cancel_request,
+    )
+
+    app = FastAPI()
+    app.include_router(eligibility_router)
+    app.dependency_overrides[get_db_session] = fake_db
+    app.dependency_overrides[get_current_user] = fake_current_user
+    register_exception_handlers(app)
+
+    with TestClient(app) as client:
+        response = client.patch("/api/v1/eligibility/requests/123/cancel")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["success"] is True
+    assert body["data"]["request_id"] == "123"
+    assert body["data"]["status"]["value"] == "CANCELED"
+    assert captured["cancel"] == {
+        "request_type": "eligibility",
+        "request_id": 123,
+        "user_id": 7,
+    }
+    assert captured["committed"] is True
+
+
 def test_get_eligibility_request_returns_result_response(monkeypatch) -> None:
     captured: dict[str, object] = {}
 
@@ -394,6 +452,97 @@ def test_process_eligibility_request_saves_policy_assessment(monkeypatch) -> Non
         "eligibility_request_id": 123,
         "matched_conditions": ["region"],
     }
+
+
+def test_process_eligibility_request_stops_when_canceled(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+    request = SimpleNamespace(
+        request_id=123,
+        request_status=RequestStatus.PROCESSING.value,
+        user_id=7,
+        policy_id=24,
+        source_type="POLICY_DETAIL",
+        source_ref_id="WLF00000024",
+        raw_query=None,
+        parsed_query_json={"selected_conditions": {"region": "seoul"}},
+        merged_condition_json={},
+        profile_conflict_json=[],
+        error_message=None,
+    )
+
+    class FakeRepository:
+        async def find_by_id(self, db, request_type, request_id):
+            captured["find_count"] = int(captured.get("find_count", 0)) + 1
+            if captured["find_count"] >= 3:
+                request.request_status = RequestStatus.CANCELED.value
+            return request
+
+        async def update_payload(
+            self,
+            db,
+            request,
+            parsed_query_json=None,
+            merged_condition_json=None,
+            profile_conflict_json=None,
+        ):
+            captured["payload_updated"] = True
+            request.parsed_query_json = parsed_query_json
+            request.merged_condition_json = merged_condition_json
+            request.profile_conflict_json = profile_conflict_json
+            return request
+
+        async def update_status(self, db, request, status, error_message=None):
+            captured["status"] = status
+            request.request_status = status.value
+            request.error_message = error_message
+            return request
+
+    class FakeConditionAgent:
+        async def analyze(self, condition_input):
+            captured["condition_called"] = True
+            return ConditionResult(
+                parsed_query_json={"selected_conditions": {"region": "seoul"}},
+                merged_condition_json={
+                    "region": "seoul",
+                    "matched_conditions": ["region"],
+                },
+            )
+
+    class FakeAssessmentRepository:
+        async def find_policy_evidence_chunks(self, db, policy_id, limit=8):
+            captured["assessment_started"] = True
+            return []
+
+    async def fake_profile_snapshot(self, db, user_id):
+        return None
+
+    monkeypatch.setattr(
+        AiRequestLifecycleService,
+        "_profile_snapshot",
+        fake_profile_snapshot,
+    )
+
+    service = AiRequestLifecycleService(
+        repository=FakeRepository(),
+        assessment_repository=FakeAssessmentRepository(),
+        condition_agent=FakeConditionAgent(),
+    )
+
+    import asyncio
+
+    snapshot = asyncio.run(
+        service.process_condition_request(
+            db=SimpleNamespace(),
+            request_type="eligibility",
+            request_id=123,
+        )
+    )
+
+    assert snapshot.status == RequestStatus.CANCELED
+    assert captured["condition_called"] is True
+    assert captured.get("payload_updated") is None
+    assert captured.get("assessment_started") is None
+    assert captured.get("status") is None
 
 
 def test_recommendation_result_eligibility_skips_saved_profile(monkeypatch) -> None:

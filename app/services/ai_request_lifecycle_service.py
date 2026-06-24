@@ -42,6 +42,12 @@ from app.services.recommendation_service import RecommendationService
 
 
 RECOMMENDATION_RESULT_SOURCE_TYPE = "RECOMMENDATION_RESULT"
+TERMINAL_REQUEST_STATUSES = {
+    RequestStatus.COMPLETED,
+    RequestStatus.FOLLOW_UP_REQUIRED,
+    RequestStatus.FAILED,
+    RequestStatus.CANCELED,
+}
 
 
 class AiRequestLifecycleService:
@@ -160,6 +166,29 @@ class AiRequestLifecycleService:
             error_message=error_message,
         )
 
+    async def cancel_request(
+        self,
+        db: AsyncSession,
+        request_type: str,
+        request_id: int,
+        user_id: int,
+    ) -> AiRequestSnapshot:
+        request = await self._get_request_or_raise(db, request_type, request_id)
+        if request.user_id != user_id:
+            raise self._not_found(request_type, request_id)
+
+        request_status = RequestStatus(request.request_status)
+        if request_status in TERMINAL_REQUEST_STATUSES:
+            return self.to_snapshot(request_type, request)
+
+        request = await self.repository.update_status(
+            db=db,
+            request=request,
+            status=RequestStatus.CANCELED,
+            error_message=None,
+        )
+        return self.to_snapshot(request_type, request)
+
     async def get_request(
         self,
         db: AsyncSession,
@@ -212,12 +241,18 @@ class AiRequestLifecycleService:
         request_id: int,
     ) -> AiRequestSnapshot:
         request = await self._get_request_or_raise(db, request_type, request_id)
+        if self._is_canceled(request):
+            return self.to_snapshot(request_type, request)
+
         parsed_query_json = request.parsed_query_json or {}
         profile_snapshot = await self._condition_profile_snapshot(
             db=db,
             request_type=request_type,
             request=request,
         )
+        if await self._is_request_canceled(db, request_type, request_id):
+            return self.to_snapshot(request_type, request)
+
         condition_result = await self.condition_agent.analyze(
             ConditionInput(
                 raw_query=request.raw_query,
@@ -225,6 +260,9 @@ class AiRequestLifecycleService:
                 profile_snapshot=profile_snapshot,
             )
         )
+        if await self._is_request_canceled(db, request_type, request_id):
+            return self.to_snapshot(request_type, request)
+
         input_issues_json = [
             issue.model_dump(mode="json")
             for issue in condition_result.input_issues
@@ -248,6 +286,9 @@ class AiRequestLifecycleService:
             merged_condition_json=condition_result.merged_condition_json,
             profile_conflict_json=profile_conflict_json,
         )
+        if await self._is_request_canceled(db, request_type, request_id):
+            return self.to_snapshot(request_type, request)
+
         if condition_result.follow_up_candidates:
             return await self.mark_follow_up_required(
                 db,
@@ -279,6 +320,9 @@ class AiRequestLifecycleService:
                 input_issues_json=input_issues_json,
                 profile_conflict_json=profile_conflict_json,
             )
+        if await self._is_request_canceled(db, request_type, request_id):
+            return self.to_snapshot(request_type, request)
+
         return await self.mark_completed(db, request_type, request_id)
 
     async def _save_eligibility_assessment(
@@ -368,6 +412,21 @@ class AiRequestLifecycleService:
         if request is None:
             raise self._not_found(request_type, request_id)
         return request
+
+    async def _is_request_canceled(
+        self,
+        db: AsyncSession,
+        request_type: str,
+        request_id: int,
+    ) -> bool:
+        request = await self._get_request_or_raise(db, request_type, request_id)
+        if hasattr(db, "refresh"):
+            await db.refresh(request)
+        return self._is_canceled(request)
+
+    @staticmethod
+    def _is_canceled(request: AiRequestModel) -> bool:
+        return RequestStatus(request.request_status) == RequestStatus.CANCELED
 
     def to_snapshot(
         self,
