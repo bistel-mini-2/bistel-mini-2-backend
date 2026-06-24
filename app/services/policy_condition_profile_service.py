@@ -322,7 +322,11 @@ condition_tree 권장 형식:
         return "\n".join(line.strip() for line in text.splitlines() if line.strip())
 
 
+def get_policy_condition_profile_service() -> PolicyConditionProfileService:
+    return PolicyConditionProfileService()
+
+
 PolicyConditionProfileServiceDep = Annotated[
     PolicyConditionProfileService,
-    Depends(PolicyConditionProfileService),
+    Depends(get_policy_condition_profile_service),
 ]
