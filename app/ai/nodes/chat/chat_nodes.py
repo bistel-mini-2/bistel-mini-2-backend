@@ -177,6 +177,10 @@ class _IntentDecision(BaseModel):
     )
 
 
+BRANCH_LLM_TAG = "chat_branch_llm"
+_BRANCH_LLM_CONFIG = {"tags": [BRANCH_LLM_TAG]}
+
+
 def _llm() -> ChatOpenAI:
     kwargs: dict = {"model": _LLM_MODEL, "temperature": 0.2}
     if settings.openai_api_key:
@@ -662,7 +666,7 @@ class ChatGraphNodes:
         messages.extend(_history_to_lc_messages(state["history"]))
         messages.append(HumanMessage(content=state["user_content"]))
         try:
-            response = await _llm().ainvoke(messages)
+            response = await _llm().ainvoke(messages, config=_BRANCH_LLM_CONFIG)
             content = response.content
             return content if isinstance(content, str) else str(content)
         except Exception:
@@ -776,7 +780,7 @@ class ChatGraphNodes:
         messages.append(HumanMessage(content=state["user_content"]))
 
         try:
-            response = await _llm().ainvoke(messages)
+            response = await _llm().ainvoke(messages, config=_BRANCH_LLM_CONFIG)
             content = response.content
             return content if isinstance(content, str) else str(content)
         except Exception:

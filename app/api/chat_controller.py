@@ -1,5 +1,5 @@
 from fastapi import APIRouter, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from app.common.response import success_response
 from app.core.dependencies import CurrentUserDep, DbSessionDep
@@ -9,6 +9,13 @@ from app.schemas.chat_schema import (
     ChatSessionTitleUpdateRequest,
 )
 from app.services.chat_service import ChatService
+
+
+_SSE_HEADERS = {
+    "Cache-Control": "no-cache",
+    "X-Accel-Buffering": "no",
+    "Connection": "keep-alive",
+}
 
 
 router = APIRouter(prefix="/api/v1/chat", tags=["Chat"])
@@ -80,3 +87,20 @@ async def send_chat_message(
         content=payload.content,
     )
     return success_response(data=response, status_code=status.HTTP_201_CREATED)
+
+
+@router.post("/sessions/{chat_session_id}/messages/stream")
+async def stream_chat_message(
+    chat_session_id: int,
+    payload: ChatMessageSendRequest,
+    db: DbSessionDep,
+    current_user: CurrentUserDep,
+) -> StreamingResponse:
+    session = await ChatService.ensure_owned_session(
+        db, user_id=current_user.user_id, chat_session_id=chat_session_id
+    )
+    return StreamingResponse(
+        ChatService.send_message_stream(db, session=session, content=payload.content),
+        media_type="text/event-stream",
+        headers=_SSE_HEADERS,
+    )
