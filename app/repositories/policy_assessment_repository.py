@@ -215,6 +215,40 @@ class PolicyAssessmentRepository:
             for row in result.mappings().all()
         ]
 
+    async def find_policy_rules(
+        self,
+        db: AsyncSession,
+        policy_id: int,
+    ) -> list[dict[str, Any]]:
+        table_result = await db.execute(
+            text("SELECT to_regclass('public.policy_rule') IS NOT NULL")
+        )
+        if not bool(table_result.scalar_one()):
+            return []
+
+        result = await db.execute(
+            text(
+                """
+                SELECT
+                    rule_id,
+                    policy_id,
+                    rule_type,
+                    operator,
+                    field_name,
+                    value_json,
+                    is_hard_filter,
+                    manual_check_required,
+                    manual_check_reason,
+                    note
+                FROM policy_rule
+                WHERE policy_id = :policy_id
+                ORDER BY rule_id
+                """
+            ),
+            {"policy_id": policy_id},
+        )
+        return [dict(row) for row in result.mappings().all()]
+
     async def find_eligibility_assessment(
         self,
         db: AsyncSession,

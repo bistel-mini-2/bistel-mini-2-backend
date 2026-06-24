@@ -443,6 +443,297 @@ class PolicyImportRepository:
         )
 
     @classmethod
+    async def replace_policy_rules(cls, conn) -> int:
+        await cls._execute(
+            conn,
+            """
+                CREATE TABLE IF NOT EXISTS policy_rule (
+                    rule_id bigserial PRIMARY KEY,
+                    policy_id bigint NOT NULL REFERENCES policy(policy_id) ON DELETE CASCADE,
+                    rule_type varchar(50) NOT NULL,
+                    operator varchar(30) NOT NULL,
+                    field_name varchar(100) NOT NULL,
+                    value_json jsonb NOT NULL,
+                    is_hard_filter boolean NOT NULL DEFAULT true,
+                    manual_check_required boolean NOT NULL DEFAULT false,
+                    manual_check_reason text,
+                    note text
+                )
+            """,
+        )
+        await cls._execute(
+            conn,
+            """
+                CREATE INDEX IF NOT EXISTS policy_rule_policy_id_idx
+                ON policy_rule (policy_id)
+            """,
+        )
+        await cls._execute(
+            conn,
+            """
+                DELETE FROM policy_rule pr
+                USING policy_raw_import r
+                JOIN policy p ON p.policy_code = r.serv_id
+                WHERE pr.policy_id = p.policy_id
+                  AND r.list_json IS NOT NULL
+                  AND r.detail_json IS NOT NULL
+                  AND r.detail_status = 'COMPLETED'
+            """,
+        )
+
+        return await cls._fetch_count(
+            conn,
+            """
+                WITH raw AS (
+                    SELECT
+                        p.policy_id,
+                        COALESCE(
+                            NULLIF(r.detail_json->>'lifeArray', ''),
+                            NULLIF(r.list_json->>'lifeArray', '')
+                        ) AS life_array,
+                        COALESCE(
+                            NULLIF(r.detail_json->>'trgterIndvdlArray', ''),
+                            NULLIF(r.list_json->>'trgterIndvdlArray', '')
+                        ) AS special_array,
+                        concat_ws(
+                            E'\n',
+                            NULLIF(r.detail_json->>'tgtrDtlCn', ''),
+                            NULLIF(r.detail_json->>'slctCritCn', '')
+                        ) AS condition_text
+                    FROM policy_raw_import r
+                    JOIN policy p ON p.policy_code = r.serv_id
+                    WHERE r.list_json IS NOT NULL
+                      AND r.detail_json IS NOT NULL
+                      AND r.detail_status = 'COMPLETED'
+                ),
+                stage_source AS (
+                    SELECT
+                        policy_id,
+                        trim(tag_name) AS tag_name
+                    FROM raw
+                    CROSS JOIN LATERAL regexp_split_to_table(
+                        COALESCE(life_array, ''),
+                        ','
+                    ) AS tag_name
+                    WHERE trim(tag_name) <> ''
+                ),
+                stage_rules AS (
+                    SELECT DISTINCT
+                        policy_id,
+                        'AGE' AS rule_type,
+                        'IN' AS operator,
+                        'stage' AS field_name,
+                        CASE
+                            WHEN tag_name LIKE '%임신%' OR tag_name LIKE '%출산%'
+                                THEN '["pregnant"]'::jsonb
+                            WHEN tag_name LIKE '%영유아%'
+                                THEN '["newborn", "infant"]'::jsonb
+                            WHEN tag_name LIKE '%아동%'
+                                THEN '["child"]'::jsonb
+                            WHEN tag_name LIKE '%청소년%'
+                                THEN '["teen"]'::jsonb
+                            ELSE NULL
+                        END AS value_json,
+                        TRUE AS is_hard_filter,
+                        FALSE AS manual_check_required,
+                        NULL::text AS manual_check_reason,
+                        'lifeArray: ' || tag_name AS note
+                    FROM stage_source
+                ),
+                special_source AS (
+                    SELECT
+                        policy_id,
+                        trim(tag_name) AS tag_name
+                    FROM raw
+                    CROSS JOIN LATERAL regexp_split_to_table(
+                        COALESCE(special_array, ''),
+                        ','
+                    ) AS tag_name
+                    WHERE trim(tag_name) <> ''
+                ),
+                special_rules AS (
+                    SELECT DISTINCT
+                        policy_id,
+                        CASE
+                            WHEN tag_name LIKE '%저소득%' THEN 'INCOME'
+                            ELSE 'HOUSEHOLD'
+                        END AS rule_type,
+                        'IN' AS operator,
+                        'special' AS field_name,
+                        CASE
+                            WHEN tag_name LIKE '%한부모%' OR tag_name LIKE '%조손%'
+                                THEN '["single"]'::jsonb
+                            WHEN tag_name LIKE '%다문화%' OR tag_name LIKE '%탈북%'
+                                THEN '["multi"]'::jsonb
+                            WHEN tag_name LIKE '%장애%'
+                                THEN '["disabled"]'::jsonb
+                            WHEN tag_name LIKE '%다자녀%'
+                                THEN '["many"]'::jsonb
+                            WHEN tag_name LIKE '%저소득%'
+                                THEN '["low_income"]'::jsonb
+                            WHEN tag_name LIKE '%보훈%'
+                                THEN '["veteran"]'::jsonb
+                            ELSE NULL
+                        END AS value_json,
+                        TRUE AS is_hard_filter,
+                        FALSE AS manual_check_required,
+                        NULL::text AS manual_check_reason,
+                        'trgterIndvdlArray: ' || tag_name AS note
+                    FROM special_source
+                ),
+                income_rules AS (
+                    SELECT DISTINCT
+                        policy_id,
+                        'INCOME' AS rule_type,
+                        'LTE' AS operator,
+                        'income' AS field_name,
+                        jsonb_build_object(
+                            'value',
+                            COALESCE(
+                                substring(
+                                    condition_text
+                                    FROM '기준\\s*중위소득\\s*([0-9]{2,3})\\s*%?\\s*(이하|미만|이내|내)'
+                                ),
+                                substring(
+                                    condition_text
+                                    FROM '중위소득\\s*([0-9]{2,3})\\s*%?\\s*(이하|미만|이내|내)'
+                                )
+                            )::int
+                        ) AS value_json,
+                        TRUE AS is_hard_filter,
+                        FALSE AS manual_check_required,
+                        NULL::text AS manual_check_reason,
+                        concat(
+                            '중위소득 ',
+                            COALESCE(
+                                substring(
+                                    condition_text
+                                    FROM '기준\\s*중위소득\\s*([0-9]{2,3})\\s*%?\\s*(이하|미만|이내|내)'
+                                ),
+                                substring(
+                                    condition_text
+                                    FROM '중위소득\\s*([0-9]{2,3})\\s*%?\\s*(이하|미만|이내|내)'
+                                )
+                            ),
+                            '% 이하'
+                        ) AS note
+                    FROM raw
+                    WHERE COALESCE(
+                        substring(
+                            condition_text
+                            FROM '기준\\s*중위소득\\s*([0-9]{2,3})\\s*%?\\s*(이하|미만|이내|내)'
+                        ),
+                        substring(
+                            condition_text
+                            FROM '중위소득\\s*([0-9]{2,3})\\s*%?\\s*(이하|미만|이내|내)'
+                        )
+                    ) IS NOT NULL
+                ),
+                low_income_manual_rules AS (
+                    SELECT DISTINCT
+                        policy_id,
+                        'INCOME' AS rule_type,
+                        'EXISTS' AS operator,
+                        'income' AS field_name,
+                        jsonb_build_object('keyword', '저소득/수급 자격') AS value_json,
+                        FALSE AS is_hard_filter,
+                        TRUE AS manual_check_required,
+                        '저소득/수급 자격 문구는 있으나 정확한 중위소득 기준이 없습니다.' AS manual_check_reason,
+                        '저소득/수급 자격 관련 조건' AS note
+                    FROM raw
+                    WHERE COALESCE(
+                        substring(
+                            condition_text
+                            FROM '기준\\s*중위소득\\s*([0-9]{2,3})\\s*%?\\s*(이하|미만|이내|내)'
+                        ),
+                        substring(
+                            condition_text
+                            FROM '중위소득\\s*([0-9]{2,3})\\s*%?\\s*(이하|미만|이내|내)'
+                        )
+                    ) IS NULL
+                      AND (
+                        condition_text LIKE '%저소득%'
+                        OR condition_text LIKE '%기초생활%'
+                        OR condition_text LIKE '%차상위%'
+                        OR condition_text LIKE '%수급%'
+                        OR condition_text LIKE '%의료급여%'
+                      )
+                ),
+                child_age_rules AS (
+                    SELECT DISTINCT
+                        policy_id,
+                        'AGE' AS rule_type,
+                        'IN' AS operator,
+                        'childAge' AS field_name,
+                        CASE
+                            WHEN condition_text ~ '0\\s*[~\\-∼]\\s*5\\s*세'
+                                OR condition_text ~ '만\\s*5\\s*세\\s*(이하|미만)'
+                                OR condition_text LIKE '%영유아%'
+                                THEN '["0", "1", "2-5"]'::jsonb
+                            WHEN condition_text ~ '만\\s*0\\s*세'
+                                OR condition_text ~ '(^|[^0-9])0\\s*세'
+                                THEN '["0"]'::jsonb
+                            WHEN condition_text ~ '만\\s*1\\s*세'
+                                OR condition_text ~ '(^|[^0-9])1\\s*세'
+                                THEN '["1"]'::jsonb
+                            WHEN condition_text ~ '6\\s*[~\\-∼]\\s*12\\s*세'
+                                OR condition_text ~ '만\\s*12\\s*세\\s*(이하|미만)'
+                                OR condition_text LIKE '%아동%'
+                                THEN '["6-12"]'::jsonb
+                            WHEN condition_text ~ '만\\s*13\\s*세\\s*(이상|초과)'
+                                OR condition_text LIKE '%청소년%'
+                                THEN '["13+"]'::jsonb
+                            ELSE NULL
+                        END AS value_json,
+                        TRUE AS is_hard_filter,
+                        FALSE AS manual_check_required,
+                        NULL::text AS manual_check_reason,
+                        '대상/선정기준 연령 조건' AS note
+                    FROM raw
+                    WHERE condition_text IS NOT NULL
+                      AND btrim(condition_text) <> ''
+                ),
+                normalized_rules AS (
+                    SELECT * FROM stage_rules WHERE value_json IS NOT NULL
+                    UNION
+                    SELECT * FROM special_rules WHERE value_json IS NOT NULL
+                    UNION
+                    SELECT * FROM income_rules WHERE value_json IS NOT NULL
+                    UNION
+                    SELECT * FROM low_income_manual_rules WHERE value_json IS NOT NULL
+                    UNION
+                    SELECT * FROM child_age_rules WHERE value_json IS NOT NULL
+                ),
+                inserted AS (
+                    INSERT INTO policy_rule (
+                        policy_id,
+                        rule_type,
+                        operator,
+                        field_name,
+                        value_json,
+                        is_hard_filter,
+                        manual_check_required,
+                        manual_check_reason,
+                        note
+                    )
+                    SELECT
+                        policy_id,
+                        rule_type,
+                        operator,
+                        field_name,
+                        value_json,
+                        is_hard_filter,
+                        manual_check_required,
+                        manual_check_reason,
+                        note
+                    FROM normalized_rules
+                    RETURNING rule_id
+                )
+                SELECT COUNT(*) FROM inserted
+            """,
+        )
+
+    @classmethod
     async def replace_policy_checklist_templates(cls, conn) -> int:
         return await cls._fetch_count(
             conn,

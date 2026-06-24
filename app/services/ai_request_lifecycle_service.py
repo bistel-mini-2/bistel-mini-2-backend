@@ -34,6 +34,7 @@ from app.services.policy_assessment_service import (
     ASSESSMENT_TYPE_ELIGIBILITY,
     PolicyAssessmentService,
 )
+from app.services.policy_rule_filter_service import PolicyRuleFilterService
 from app.services.recommendation_result_normalizer import (
     normalize_recommendation_result_item,
     normalize_recommendation_result_json,
@@ -53,6 +54,7 @@ class AiRequestLifecycleService:
         condition_agent: ConditionAgent | None = None,
         recommendation_graph: RecommendationGraphRunner | None = None,
         recommendation_service: RecommendationService | None = None,
+        rule_filter_service: PolicyRuleFilterService | None = None,
     ) -> None:
         self.repository = repository or AiRequestRepository()
         self.assessment_repository = assessment_repository or PolicyAssessmentRepository()
@@ -60,6 +62,7 @@ class AiRequestLifecycleService:
         self.condition_agent = condition_agent or ConditionAgent()
         self.recommendation_graph = recommendation_graph
         self.recommendation_service = recommendation_service
+        self.rule_filter_service = rule_filter_service or PolicyRuleFilterService()
 
     async def create_request(
         self,
@@ -296,6 +299,15 @@ class AiRequestLifecycleService:
             "input_issues": input_issues_json,
             "profile_conflicts": profile_conflict_json,
         }
+        policy_rules = await self._find_policy_rules(db, policy_id)
+        rule_filter = self.rule_filter_service.filter(
+            condition=assessment_condition,
+            policy_rules=policy_rules,
+        )
+        assessment_condition = self._merge_rule_filter_result(
+            assessment_condition,
+            rule_filter,
+        )
         evidence_chunks = await self.assessment_repository.find_policy_evidence_chunks(
             db=db,
             policy_id=policy_id,
@@ -340,6 +352,54 @@ class AiRequestLifecycleService:
                 message=f"Policy not found: {policy_identifier}",
             )
         return int(policy_id)
+
+    async def _find_policy_rules(
+        self,
+        db: AsyncSession,
+        policy_id: int,
+    ) -> list[dict[str, Any]]:
+        finder = getattr(self.assessment_repository, "find_policy_rules", None)
+        if finder is None:
+            return []
+        return await finder(db=db, policy_id=policy_id)
+
+    def _merge_rule_filter_result(
+        self,
+        condition: dict[str, Any],
+        rule_filter: Any,
+    ) -> dict[str, Any]:
+        return {
+            **condition,
+            "matched_conditions": self._merge_string_values(
+                condition.get("matched_conditions"),
+                rule_filter.matched_conditions,
+            ),
+            "missing_conditions": self._merge_string_values(
+                condition.get("missing_conditions"),
+                rule_filter.missing_conditions,
+            ),
+            "rule_failures": self._merge_string_values(
+                condition.get("rule_failures"),
+                rule_filter.rule_failures,
+            ),
+            "manual_check_points": self._merge_string_values(
+                condition.get("manual_check_points"),
+                rule_filter.manual_check_points,
+            ),
+        }
+
+    @staticmethod
+    def _merge_string_values(
+        current_value: Any,
+        next_values: list[str],
+    ) -> list[str]:
+        values: list[str] = []
+        if isinstance(current_value, list):
+            values.extend(str(value) for value in current_value if value)
+        elif current_value:
+            values.append(str(current_value))
+        values.extend(str(value) for value in next_values if value)
+        return list(dict.fromkeys(values))
 
     async def _set_status(
         self,

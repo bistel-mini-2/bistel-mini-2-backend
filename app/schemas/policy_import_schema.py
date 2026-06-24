@@ -8,5 +8,6 @@ class PolicyImportResponse(BaseModel):
     imported_required_document_count: int
     imported_policy_document_count: int
     imported_tag_count: int
+    imported_policy_rule_count: int
     imported_checklist_template_count: int
     skipped_count: int
