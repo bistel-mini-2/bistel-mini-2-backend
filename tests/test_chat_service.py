@@ -113,6 +113,7 @@ def _patch_repo_for_send(monkeypatch, *, session: ChatSession) -> dict[str, Asyn
         "update_last_message_at": AsyncMock(),
         "bulk_save_message_policies": AsyncMock(),
         "bulk_save_message_evidences": AsyncMock(),
+        "update_session_slot": AsyncMock(),
     }
     for name, mock in mocks.items():
         monkeypatch.setattr(ChatRepository, name, mock)

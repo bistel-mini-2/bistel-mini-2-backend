@@ -93,6 +93,16 @@ class ChatRepository:
         )
 
     @staticmethod
+    async def update_session_slot(
+        db: AsyncSession, chat_session_id: int, slot: dict
+    ) -> None:
+        await db.execute(
+            update(ChatSession)
+            .where(ChatSession.chat_session_id == chat_session_id)
+            .values(slot_json=slot)
+        )
+
+    @staticmethod
     async def update_title(
         db: AsyncSession, chat_session_id: int, title: str
     ) -> datetime:

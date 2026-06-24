@@ -11,8 +11,10 @@ from sqlalchemy import text
 
 from app.ai.states.chat_state import (
     ChatGraphState,
+    ChatSlot,
     HistoryMessage,
     Intent,
+    SlotPolicy,
 )
 from app.common.ai_status import RequestStatus
 from app.common.exceptions import AppException, ErrorCode
@@ -36,7 +38,7 @@ def _lifecycle_service_class() -> type["AiRequestLifecycleService"]:
 logger = logging.getLogger(__name__)
 
 
-SUPERVISOR_SYSTEM = """당신은 임신·출산·육아 정책 챗봇의 Supervisor입니다.
+SUPERVISOR_SYSTEM_TEMPLATE = """당신은 임신·출산·육아 정책 챗봇의 Supervisor입니다.
 사용자 메시지를 다음 6개 intent 중 하나로 분류하세요.
 
 - recommend: 본인 상황에 맞는 정책 추천 요청 (예: "맞는 정책 알려줘")
@@ -47,6 +49,16 @@ SUPERVISOR_SYSTEM = """당신은 임신·출산·육아 정책 챗봇의 Supervi
 - unclear: 위에 명확히 속하지 않거나 정책과 무관
 
 직전 대화 맥락도 함께 고려해서 결정합니다.
+
+[직전 거론 정책]
+{slot_context}
+
+다음 중 하나에 해당하면 resolved_policy_slug 필드에 위 정책의 slug를 정확히 그대로 반환하세요:
+1. 사용자가 지시어로 직전 정책을 가리킴: "그 정책", "거기", "방금 그거", "이거" 등
+2. 주어가 생략된 후속 질문이 직전 정책 맥락의 연속으로 자연스럽게 해석됨: "신청 기간은?", "필요한 서류는?", "언제까지야?", "어디서 받아?"
+
+새 정책을 명시했거나 슬롯 정보가 비어있거나 정책과 무관한 메시지면 resolved_policy_slug는 null입니다.
+슬롯에 정책이 여러 개고 어느 것을 가리키는지 모호하면 첫 번째 정책의 slug를 선택하지 말고 null로 두세요.
 """
 
 
@@ -159,6 +171,10 @@ def _normalize_evidence_role(value: Any) -> str | None:
 
 class _IntentDecision(BaseModel):
     intent: Intent = Field(description="사용자 메시지의 의도 분류")
+    resolved_policy_slug: str | None = Field(
+        default=None,
+        description="사용자가 직전 거론 정책을 지시어로 가리키는 경우 그 정책의 slug. 그렇지 않으면 null.",
+    )
 
 
 def _llm() -> ChatOpenAI:
@@ -280,6 +296,30 @@ def _format_apply_card_context(apply_card: dict[str, Any]) -> str:
     return "\n".join(parts)
 
 
+def _format_slot_context(slot: ChatSlot | None) -> str:
+    if not slot:
+        return "(없음)"
+    recent = slot.get("recent_policies") or []
+    if not recent:
+        return "(없음)"
+    return "\n".join(
+        f"- {p.get('policy_name') or '(이름 없음)'} "
+        f"(slug={p.get('slug')}, action={p.get('last_action')})"
+        for p in recent
+    )
+
+
+def _find_slot_policy_by_slug(
+    slot: ChatSlot | None, slug: str
+) -> SlotPolicy | None:
+    if not slot or not slug:
+        return None
+    for p in slot.get("recent_policies") or []:
+        if p.get("slug") == slug:
+            return p  # type: ignore[return-value]
+    return None
+
+
 def _history_to_lc_messages(history: list[HistoryMessage]) -> list[BaseMessage]:
     messages: list[BaseMessage] = []
     for entry in history:
@@ -304,14 +344,21 @@ class ChatGraphNodes:
 
     async def supervisor(self, state: ChatGraphState) -> ChatGraphState:
         llm = _llm().with_structured_output(_IntentDecision)
-        messages: list[BaseMessage] = [SystemMessage(content=SUPERVISOR_SYSTEM)]
+        slot = state.get("slot")
+        slot_context = _format_slot_context(slot)
+        system_prompt = SUPERVISOR_SYSTEM_TEMPLATE.format(slot_context=slot_context)
+        messages: list[BaseMessage] = [SystemMessage(content=system_prompt)]
         messages.extend(_history_to_lc_messages(state["history"]))
         messages.append(HumanMessage(content=state["user_content"]))
 
+        resolved_slug: str | None = None
         try:
             decision = await llm.ainvoke(messages)
             intent: Intent = decision.intent
             raw = decision.model_dump_json()
+            candidate = decision.resolved_policy_slug
+            if candidate and _find_slot_policy_by_slug(slot, candidate):
+                resolved_slug = candidate
         except Exception as exc:
             logger.exception("Intent classification failed; falling back to unclear")
             intent = "unclear"
@@ -319,7 +366,11 @@ class ChatGraphNodes:
 
         return {
             **state,
-            "supervisor_decision": {"intent": intent, "raw": raw},
+            "supervisor_decision": {
+                "intent": intent,
+                "raw": raw,
+                "resolved_policy_slug": resolved_slug,
+            },
         }
 
     async def branch_recommend(self, state: ChatGraphState) -> ChatGraphState:
@@ -345,14 +396,39 @@ class ChatGraphNodes:
         }
 
     async def branch_eligibility(self, state: ChatGraphState) -> ChatGraphState:
+        decision = state.get("supervisor_decision") or {}
+        resolved_slug = decision.get("resolved_policy_slug")
+        if resolved_slug:
+            return await self._branch_with_slot("eligibility", state, resolved_slug)
+        logger.info(
+            "chat_slot_resolved",
+            extra={"intent": "eligibility", "slot_used": False, "rag_skipped": False},
+        )
         return await self._branch_with_rag("eligibility", state)
 
     async def branch_compare(self, state: ChatGraphState) -> ChatGraphState:
         return await self._branch_with_rag("compare", state)
 
     async def branch_apply(self, state: ChatGraphState) -> ChatGraphState:
-        policies, evidences = await self._rag_lookup(state["user_content"])
-        slug, policy_name = _pick_apply_target(policies)
+        decision = state.get("supervisor_decision") or {}
+        resolved_slug = decision.get("resolved_policy_slug")
+        slot_policy = _find_slot_policy_by_slug(state.get("slot"), resolved_slug or "")
+        if resolved_slug and slot_policy:
+            slug = resolved_slug
+            policy_name = slot_policy.get("policy_name") or None
+            evidences: list[dict[str, Any]] = []
+            logger.info(
+                "chat_slot_resolved",
+                extra={"intent": "apply", "slot_used": True, "rag_skipped": True},
+            )
+        else:
+            policies, evidences = await self._rag_lookup(state["user_content"])
+            slug, policy_name = _pick_apply_target(policies)
+            logger.info(
+                "chat_slot_resolved",
+                extra={"intent": "apply", "slot_used": False, "rag_skipped": False},
+            )
+
         if slug is None:
             content = await self._generate_branch_answer("apply", state, evidences)
             return {
@@ -380,7 +456,7 @@ class ChatGraphNodes:
         apply_card = _build_apply_card(apply_response, policy_name)
         apply_policies = [
             {
-                "policy_id": slug,
+                "policy_id": None,
                 "slug": slug,
                 "policy_name": policy_name or "",
                 "summary": None,
@@ -605,6 +681,36 @@ class ChatGraphNodes:
             "branch_content": content,
             "branch_policies": policies,
             "branch_evidences": evidences,
+        }
+
+    async def _branch_with_slot(
+        self,
+        intent: Intent,
+        state: ChatGraphState,
+        slug: str,
+    ) -> ChatGraphState:
+        slot_policy = _find_slot_policy_by_slug(state.get("slot"), slug)
+        policy_name = (slot_policy or {}).get("policy_name") or ""
+        policies = [
+            {
+                "policy_id": None,
+                "slug": slug,
+                "policy_name": policy_name,
+                "summary": None,
+                "tag": None,
+                "tagTone": None,
+            }
+        ]
+        content = await self._generate_branch_answer(intent, state, evidences=[])
+        logger.info(
+            "chat_slot_resolved",
+            extra={"intent": intent, "slot_used": True, "rag_skipped": True},
+        )
+        return {
+            **state,
+            "branch_content": content,
+            "branch_policies": policies,
+            "branch_evidences": [],
         }
 
     async def _rag_lookup(
