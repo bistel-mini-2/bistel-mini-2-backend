@@ -286,6 +286,19 @@ def _user_mentions_policy_name(user_content: str, policy_name: str | None) -> bo
     return normalized_policy_name in normalized_user_content
 
 
+_CONTEXT_DEPENDENT_APPLY_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"(이거|그거|그 정책|방금|위 정책|앞(?:에서)? 말한|아까|해당 정책)"),
+    re.compile(r"(신청|서류|준비|기간|어디서|어떻게|방법|절차|문의).*[?？]?$"),
+)
+
+
+def _is_context_dependent_apply_question(user_content: str) -> bool:
+    content = user_content.strip()
+    if not content:
+        return False
+    return any(pattern.search(content) for pattern in _CONTEXT_DEPENDENT_APPLY_PATTERNS)
+
+
 def _recent_assistant_policy_target(
     policy: RecentAssistantPolicy | None,
 ) -> tuple[str | None, str | None]:
@@ -464,19 +477,6 @@ class ChatGraphNodes:
                 "chat_slot_resolved",
                 extra={"intent": "apply", "slot_used": True, "rag_skipped": True},
             )
-        elif state.get("recent_assistant_policy"):
-            slug, policy_name = _recent_assistant_policy_target(
-                state.get("recent_assistant_policy")
-            )
-            evidences = []
-            logger.info(
-                "chat_recent_assistant_policy_resolved",
-                extra={
-                    "intent": "apply",
-                    "recent_policy_used": slug is not None,
-                    "rag_skipped": slug is not None,
-                },
-            )
         else:
             policies, evidences = await self._rag_lookup(state["user_content"])
             slug, policy_name = _pick_apply_target(
@@ -484,6 +484,22 @@ class ChatGraphNodes:
                 user_content=state["user_content"],
                 require_policy_name_mention=True,
             )
+            if slug is None and _is_context_dependent_apply_question(
+                state["user_content"]
+            ):
+                slug, policy_name = _recent_assistant_policy_target(
+                    state.get("recent_assistant_policy")
+                )
+                if slug is not None:
+                    evidences = []
+                logger.info(
+                    "chat_recent_assistant_policy_resolved",
+                    extra={
+                        "intent": "apply",
+                        "recent_policy_used": slug is not None,
+                        "rag_skipped": False,
+                    },
+                )
             logger.info(
                 "chat_slot_resolved",
                 extra={"intent": "apply", "slot_used": False, "rag_skipped": False},

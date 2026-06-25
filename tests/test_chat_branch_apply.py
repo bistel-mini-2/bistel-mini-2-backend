@@ -11,6 +11,7 @@ from app.ai.nodes.chat.chat_nodes import (
     ChatGraphNodes,
     _build_apply_card,
     _format_apply_card_context,
+    _is_context_dependent_apply_question,
     _pick_apply_target,
     _user_mentions_policy_name,
 )
@@ -138,6 +139,12 @@ def test_pick_apply_target_requires_policy_name_mention() -> None:
 
 def test_user_mentions_policy_name_ignores_spacing_and_symbols() -> None:
     assert _user_mentions_policy_name("임신 출산 진료비 신청 방법", "임신·출산 진료비")
+
+
+def test_context_dependent_apply_question_detects_follow_up_phrasing() -> None:
+    assert _is_context_dependent_apply_question("이거 어떻게 신청해?")
+    assert _is_context_dependent_apply_question("신청 방법은?")
+    assert not _is_context_dependent_apply_question("추천 정책 알려줘")
 
 
 def test_pick_apply_target_returns_none_when_empty() -> None:
@@ -268,7 +275,7 @@ def test_branch_apply_clarifies_when_rag_policy_name_not_mentioned(
     assert result["branch_content"].startswith("어떤 정책의 신청 방법")
 
 
-def test_branch_apply_uses_recent_assistant_policy_before_rag(
+def test_branch_apply_uses_recent_assistant_policy_for_contextual_follow_up(
     patched_session: None,
     patched_llm: AsyncMock,
     monkeypatch: pytest.MonkeyPatch,
@@ -294,11 +301,75 @@ def test_branch_apply_uses_recent_assistant_policy_before_rag(
         },
     }))
 
-    rag.search.assert_not_awaited()
+    rag.search.assert_awaited_once()
     apply_get.assert_awaited_once()
     assert apply_get.await_args.kwargs["policy_slug"] == "WLF1"
     assert result["branch_policies"][0]["slug"] == "WLF1"
     assert result["branch_apply_card"]["policy_name"] == "아이돌봄서비스"
+
+
+def test_branch_apply_prefers_explicit_rag_policy_over_recent_assistant_policy(
+    patched_session: None,
+    patched_llm: AsyncMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    rag = _FakeRagService(
+        [_rag_chunk(chunk_id=11, policy_code="WLF2", policy_name="산모신생아 건강관리")]
+    )
+    apply_get = AsyncMock(return_value=_apply_response())
+    monkeypatch.setattr(
+        chat_nodes.ApplyPreparationService, "get", apply_get
+    )
+
+    nodes = ChatGraphNodes(rag_service=rag)
+
+    result = asyncio.run(nodes.branch_apply({
+        **_state(),
+        "user_content": "산모신생아 건강관리 신청 방법 알려줘",
+        "recent_assistant_policy": {
+            "policy_id": 42,
+            "slug": "WLF1",
+            "policy_name": "아이돌봄서비스",
+            "action_type": "RECOMMENDED",
+        },
+    }))
+
+    rag.search.assert_awaited_once()
+    apply_get.assert_awaited_once()
+    assert apply_get.await_args.kwargs["policy_slug"] == "WLF2"
+    assert result["branch_policies"][0]["slug"] == "WLF2"
+
+
+def test_branch_apply_does_not_use_recent_policy_for_non_contextual_message(
+    patched_session: None,
+    patched_llm: AsyncMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    rag = _FakeRagService(
+        [_rag_chunk(chunk_id=11, policy_code="WLF2", policy_name="산모신생아 건강관리")]
+    )
+    apply_get = AsyncMock()
+    monkeypatch.setattr(
+        chat_nodes.ApplyPreparationService, "get", apply_get
+    )
+
+    nodes = ChatGraphNodes(rag_service=rag)
+
+    result = asyncio.run(nodes.branch_apply({
+        **_state(),
+        "user_content": "새로운 정책 찾아줘",
+        "recent_assistant_policy": {
+            "policy_id": 42,
+            "slug": "WLF1",
+            "policy_name": "아이돌봄서비스",
+            "action_type": "RECOMMENDED",
+        },
+    }))
+
+    rag.search.assert_awaited_once()
+    apply_get.assert_not_awaited()
+    assert result["branch_apply_card"] is None
+    assert result["branch_policies"] == []
 
 
 def test_branch_apply_falls_back_when_policy_not_found(
