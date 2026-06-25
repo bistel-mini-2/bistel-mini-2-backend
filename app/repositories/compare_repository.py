@@ -13,8 +13,6 @@ class CompareRepository:
                 CREATE TABLE IF NOT EXISTS compare_history (
                     compare_history_id bigserial PRIMARY KEY,
                     user_id bigint NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
-                    policy_a_id bigint REFERENCES policy(policy_id) ON DELETE SET NULL,
-                    policy_b_id bigint REFERENCES policy(policy_id) ON DELETE SET NULL,
                     title varchar(255),
                     compared_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     deleted_at timestamp
@@ -22,23 +20,49 @@ class CompareRepository:
                 """
             )
         )
+        await db.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS compare_history_item (
+                    compare_history_item_id bigserial PRIMARY KEY,
+                    compare_history_id bigint NOT NULL
+                        REFERENCES compare_history(compare_history_id)
+                        ON DELETE CASCADE,
+                    policy_id bigint NOT NULL REFERENCES policy(policy_id)
+                        ON DELETE CASCADE,
+                    added_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+        )
         alter_statements = [
-            "ALTER TABLE compare_history ADD COLUMN IF NOT EXISTS policy_a_id bigint",
-            "ALTER TABLE compare_history ADD COLUMN IF NOT EXISTS policy_b_id bigint",
             "ALTER TABLE compare_history ADD COLUMN IF NOT EXISTS title varchar(255)",
             (
                 "ALTER TABLE compare_history ADD COLUMN IF NOT EXISTS "
                 "compared_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP"
             ),
             "ALTER TABLE compare_history ADD COLUMN IF NOT EXISTS deleted_at timestamp",
+            (
+                "ALTER TABLE compare_history_item ADD COLUMN IF NOT EXISTS "
+                "added_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP"
+            ),
         ]
         for statement in alter_statements:
             await db.execute(text(statement))
         await db.execute(
             text(
                 """
-                CREATE INDEX IF NOT EXISTS compare_history_user_compared_idx
+                CREATE INDEX IF NOT EXISTS compare_history_user_id_compared_at_idx
                 ON compare_history(user_id, compared_at DESC)
+                """
+            )
+        )
+        await db.execute(
+            text(
+                """
+                CREATE UNIQUE INDEX IF NOT EXISTS
+                compare_history_item_compare_history_id_policy_id_idx
+                ON compare_history_item(compare_history_id, policy_id)
                 """
             )
         )
@@ -58,21 +82,36 @@ class CompareRepository:
                 """
                 INSERT INTO compare_history (
                     user_id,
-                    policy_a_id,
-                    policy_b_id,
                     compared_at
                 )
-                VALUES (:user_id, :policy_a_id, :policy_b_id, CURRENT_TIMESTAMP)
+                VALUES (:user_id, CURRENT_TIMESTAMP)
                 RETURNING compare_history_id
                 """
             ),
+            {"user_id": user_id},
+        )
+        compare_history_id = int(result.scalar_one())
+        await db.execute(
+            text(
+                """
+                INSERT INTO compare_history_item (
+                    compare_history_id,
+                    policy_id,
+                    added_at
+                )
+                VALUES
+                    (:compare_history_id, :policy_a_id, CURRENT_TIMESTAMP),
+                    (:compare_history_id, :policy_b_id, CURRENT_TIMESTAMP)
+                ON CONFLICT (compare_history_id, policy_id) DO NOTHING
+                """
+            ),
             {
-                "user_id": user_id,
+                "compare_history_id": compare_history_id,
                 "policy_a_id": policy_a_id,
                 "policy_b_id": policy_b_id,
             },
         )
-        return int(result.scalar_one())
+        return compare_history_id
 
     @classmethod
     async def find_compare_history(
@@ -88,11 +127,16 @@ class CompareRepository:
             text(
                 """
                 SELECT COUNT(*)
-                FROM compare_history ch
-                WHERE ch.user_id = :user_id
-                  AND ch.deleted_at IS NULL
-                  AND ch.policy_a_id IS NOT NULL
-                  AND ch.policy_b_id IS NOT NULL
+                FROM (
+                    SELECT ch.compare_history_id
+                    FROM compare_history ch
+                    JOIN compare_history_item chi
+                      ON chi.compare_history_id = ch.compare_history_id
+                    WHERE ch.user_id = :user_id
+                      AND ch.deleted_at IS NULL
+                    GROUP BY ch.compare_history_id
+                    HAVING COUNT(*) = 2
+                ) counted
                 """
             ),
             {"user_id": user_id},
@@ -102,21 +146,30 @@ class CompareRepository:
         result = await db.execute(
             text(
                 """
+                WITH ordered_history AS (
+                    SELECT
+                        ch.compare_history_id,
+                        ch.compared_at,
+                        array_agg(p.policy_name ORDER BY chi.added_at, chi.compare_history_item_id) AS policy_names,
+                        array_agg(p.policy_code ORDER BY chi.added_at, chi.compare_history_item_id) AS policy_slugs
+                    FROM compare_history ch
+                    JOIN compare_history_item chi
+                      ON chi.compare_history_id = ch.compare_history_id
+                    JOIN policy p ON p.policy_id = chi.policy_id
+                    WHERE ch.user_id = :user_id
+                      AND ch.deleted_at IS NULL
+                    GROUP BY ch.compare_history_id, ch.compared_at
+                    HAVING COUNT(*) = 2
+                )
                 SELECT
-                    ch.compare_history_id AS id,
-                    pa.policy_name AS policy_a_name,
-                    pb.policy_name AS policy_b_name,
-                    pa.policy_code AS policy_a_slug,
-                    pb.policy_code AS policy_b_slug,
-                    ch.compared_at
-                FROM compare_history ch
-                JOIN policy pa ON pa.policy_id = ch.policy_a_id
-                JOIN policy pb ON pb.policy_id = ch.policy_b_id
-                WHERE ch.user_id = :user_id
-                  AND ch.deleted_at IS NULL
-                  AND ch.policy_a_id IS NOT NULL
-                  AND ch.policy_b_id IS NOT NULL
-                ORDER BY ch.compared_at DESC, ch.compare_history_id DESC
+                    compare_history_id AS id,
+                    policy_names[1] AS policy_a_name,
+                    policy_names[2] AS policy_b_name,
+                    policy_slugs[1] AS policy_a_slug,
+                    policy_slugs[2] AS policy_b_slug,
+                    compared_at
+                FROM ordered_history
+                ORDER BY compared_at DESC, compare_history_id DESC
                 LIMIT :limit OFFSET :offset
                 """
             ),
