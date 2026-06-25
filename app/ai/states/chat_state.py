@@ -28,6 +28,13 @@ class ChatSlot(TypedDict, total=False):
     updated_at: str
 
 
+class RecentAssistantPolicy(TypedDict):
+    policy_id: int
+    slug: str
+    policy_name: str
+    action_type: str
+
+
 class SupervisorDecision(TypedDict):
     intent: Intent
     raw: str
@@ -39,6 +46,7 @@ class ChatGraphState(TypedDict):
     user_content: str
     history: list[HistoryMessage]
     slot: NotRequired[ChatSlot]
+    recent_assistant_policy: NotRequired[RecentAssistantPolicy | None]
     supervisor_decision: NotRequired[SupervisorDecision]
     branch_content: NotRequired[str]
     branch_policies: NotRequired[list[dict[str, Any]]]

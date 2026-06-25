@@ -319,6 +319,7 @@ def test_send_message_passes_slot_to_graph_and_updates_slot(monkeypatch) -> None
     update_slot_mock = AsyncMock()
     monkeypatch.setattr(ChatRepository, "find_session_by_id", AsyncMock(return_value=session))
     monkeypatch.setattr(ChatRepository, "find_recent_messages", AsyncMock(return_value=[]))
+    monkeypatch.setattr(ChatRepository, "find_recent_assistant_policy", AsyncMock(return_value=None))
     monkeypatch.setattr(ChatRepository, "next_sequence_no", AsyncMock(side_effect=[1, 2]))
     monkeypatch.setattr(ChatRepository, "save_message", AsyncMock(side_effect=fake_save_message))
     monkeypatch.setattr(ChatRepository, "update_last_message_at", AsyncMock())

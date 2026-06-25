@@ -111,6 +111,7 @@ def _patch_repo_for_send(monkeypatch, *, session: ChatSession) -> dict[str, Asyn
     mocks = {
         "find_session_by_id": AsyncMock(return_value=session),
         "find_recent_messages": AsyncMock(return_value=[]),
+        "find_recent_assistant_policy": AsyncMock(return_value=None),
         "next_sequence_no": AsyncMock(side_effect=[1, 2]),
         "save_message": AsyncMock(side_effect=fake_save_message),
         "update_last_message_at": AsyncMock(),
@@ -127,16 +128,24 @@ def _patch_repo_for_send(monkeypatch, *, session: ChatSession) -> dict[str, Asyn
 def test_send_message_persists_normalized_outputs(monkeypatch) -> None:
     session = _session()
     mocks = _patch_repo_for_send(monkeypatch, session=session)
+    recent_policy = {
+        "policy_id": 42,
+        "slug": "WLF1",
+        "policy_name": "정책1",
+        "action_type": "RECOMMENDED",
+    }
+    mocks["find_recent_assistant_policy"].return_value = recent_policy
 
     monkeypatch.setattr(
         PolicyRepository,
         "find_ids_by_codes",
         AsyncMock(return_value={"WLF1": 42}),
     )
+    run_graph = AsyncMock(return_value=_graph_result())
     monkeypatch.setattr(
         chat_service_module,
         "_run_supervisor_graph",
-        AsyncMock(return_value=_graph_result()),
+        run_graph,
     )
 
     response = asyncio.run(
@@ -172,6 +181,8 @@ def test_send_message_persists_normalized_outputs(monkeypatch) -> None:
     assert assistant.policies[0].action_type == "RECOMMENDED"
     assert assistant.policies[0].policy_id == "42"
     assert assistant.evidences[0].chunk_id == "101"
+    run_graph.assert_awaited_once()
+    assert run_graph.await_args.kwargs["recent_assistant_policy"] == recent_policy
 
     # structured_json에 policies/evidences 빠지고 메타만 보관
     assistant_msg_obj = mocks["_saved_messages"][1]
@@ -532,8 +543,10 @@ class _FakeGraph:
     def __init__(self, events: list[dict] | None = None, raise_after: int | None = None) -> None:
         self._events = events or []
         self._raise_after = raise_after
+        self.states: list[dict] = []
 
     def astream_events(self, state: dict, version: str = "v2"):
+        self.states.append(state)
         events = self._events
         raise_after = self._raise_after
 
@@ -575,6 +588,13 @@ def test_send_message_stream_emits_tokens_then_done(monkeypatch) -> None:
     session = _session()
     db = AsyncMock()
     mocks = _patch_repo_for_send(monkeypatch, session=session)
+    recent_policy = {
+        "policy_id": 42,
+        "slug": "WLF1",
+        "policy_name": "정책1",
+        "action_type": "RECOMMENDED",
+    }
+    mocks["find_recent_assistant_policy"].return_value = recent_policy
 
     monkeypatch.setattr(
         PolicyRepository,
@@ -590,11 +610,8 @@ def test_send_message_stream_emits_tokens_then_done(monkeypatch) -> None:
         _token_event("ignored", tags=["supervisor"]),
         _chain_end_event(graph_result),
     ]
-    monkeypatch.setattr(
-        chat_service_module,
-        "chat_supervisor_graph",
-        _FakeGraph(events=fake_events),
-    )
+    fake_graph = _FakeGraph(events=fake_events)
+    monkeypatch.setattr(chat_service_module, "chat_supervisor_graph", fake_graph)
 
     chunks = asyncio.run(_collect(
         ChatService.send_message_stream(db=db, session=session, content="추천해줘")
@@ -611,6 +628,7 @@ def test_send_message_stream_emits_tokens_then_done(monkeypatch) -> None:
     assert payload["chat_session_id"] == "10"
     assert payload["assistant_message"]["content"] == "테스트 답변"
     assert payload["assistant_message"]["policies"][0]["action_type"] == "RECOMMENDED"
+    assert fake_graph.states[0]["recent_assistant_policy"] == recent_policy
 
     # 정규화 INSERT가 한 번만 호출되었는지
     mocks["bulk_save_message_policies"].assert_awaited_once()
