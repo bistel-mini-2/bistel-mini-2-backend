@@ -7,12 +7,14 @@ from app.ai.graphs.recommendation_graph import (
     RecommendationGraphRunner,
 )
 from app.ai.states.chat_state import ChatGraphState
+from app.ai.states.eligibility_state import EligibilityGraphState
 from app.ai.states.recommendation_state import RecommendationGraphState
 
 
 __all__ = [
     "ChatGraphState",
     "ChatSupervisorGraphRunner",
+    "EligibilityGraphState",
     "RecommendationGraphRunner",
     "RecommendationGraphState",
     "chat_supervisor_graph",

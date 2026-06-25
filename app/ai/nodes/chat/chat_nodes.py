@@ -28,6 +28,7 @@ from app.services.apply_preparation_service import ApplyPreparationService
 from app.services.policy_rag_service import PolicyRagService
 
 if TYPE_CHECKING:
+    from app.ai.graphs.eligibility_graph import EligibilityGraphRunner
     from app.services.ai_request_lifecycle_service import AiRequestLifecycleService
 
 
@@ -155,6 +156,19 @@ _RECOMMEND_FALLBACK_FOLLOW_UP = (
 _RECOMMEND_FALLBACK_ERROR = (
     "맞춤 추천을 만드는 중에 문제가 발생했어요. 잠시 후 다시 시도해 주세요."
 )
+_ELIGIBILITY_SOURCE_TYPE = "CHAT"
+_ELIGIBILITY_LIFECYCLE_TIMEOUT_SECONDS = 60
+_ELIGIBILITY_LOCK_TIMEOUT = "5s"
+_ELIGIBILITY_STATEMENT_TIMEOUT = "60s"
+_ELIGIBILITY_CLARIFICATION_FALLBACK = (
+    "어떤 정책의 지원 가능성을 확인하고 싶으신가요? 정책명을 알려주시면 조건을 기준으로 분석해 드릴게요."
+)
+_ELIGIBILITY_FALLBACK_FOLLOW_UP = (
+    "지원 가능성을 판단하려면 정보가 조금 더 필요해요. 지원 가능성 분석 화면에서 추가 정보를 입력해 주세요."
+)
+_ELIGIBILITY_FALLBACK_ERROR = (
+    "지원 가능성을 분석하는 중 문제가 발생했어요. 잠시 후 다시 시도해 주세요."
+)
 _APPLY_CLARIFICATION_FALLBACK = (
     "어떤 정책의 신청 방법을 알고 싶으신가요? 정책명을 알려주시면 신청 방법과 준비서류를 안내해 드릴게요."
 )
@@ -251,6 +265,75 @@ def _adapt_recommendation_result(
             if len(evidences) >= _EVIDENCES_MAX:
                 return policies, evidences
     return policies, evidences
+
+
+def _adapt_eligibility_result(
+    result_json: dict[str, Any],
+    *,
+    fallback_slug: str,
+    fallback_policy_name: str | None,
+) -> tuple[str, str | None, list[dict[str, Any]], list[dict[str, Any]]]:
+    slug = str(result_json.get("slug") or fallback_slug)
+    policy_name = str(result_json.get("policy_name") or fallback_policy_name or "")
+    user_status = result_json.get("user_status")
+    summary = result_json.get("summary")
+    questions = result_json.get("follow_up_questions") or result_json.get("questions") or []
+
+    if result_json.get("status") == RequestStatus.FOLLOW_UP_REQUIRED.value:
+        if questions:
+            first_question = questions[0]
+            question_text = (
+                first_question.get("question_text")
+                if isinstance(first_question, dict)
+                else None
+            )
+            content = question_text or _ELIGIBILITY_FALLBACK_FOLLOW_UP
+        else:
+            content = _ELIGIBILITY_FALLBACK_FOLLOW_UP
+    elif summary:
+        content = str(summary)
+    elif user_status:
+        content = (
+            f"{policy_name} 지원 가능성 분석이 완료됐어요. "
+            "자세한 조건은 근거와 함께 확인해 주세요."
+        )
+    else:
+        content = _ELIGIBILITY_FALLBACK_ERROR
+
+    policies = [
+        {
+            "policy_id": result_json.get("policy_id") or slug,
+            "slug": slug,
+            "policy_name": policy_name,
+            "summary": summary,
+            "tag": None,
+            "tagTone": None,
+        }
+    ]
+    evidences: list[dict[str, Any]] = []
+    seen_chunks: set[Any] = set()
+    for evidence in result_json.get("evidences") or []:
+        if not isinstance(evidence, dict):
+            continue
+        chunk_id = evidence.get("chunk_id")
+        if chunk_id in (None, "") or chunk_id in seen_chunks:
+            continue
+        seen_chunks.add(chunk_id)
+        evidences.append(
+            {
+                "chunk_id": chunk_id,
+                "snippet": str(evidence.get("snippet") or "")[:_SNIPPET_LIMIT],
+                "source_title": evidence.get("source_title") or policy_name,
+                "source_url": evidence.get("source_url"),
+                "evidence_role": _normalize_evidence_role(
+                    evidence.get("evidence_role")
+                ),
+            }
+        )
+        if len(evidences) >= _EVIDENCES_MAX:
+            break
+
+    return content, user_status, policies, evidences
 
 
 def _pick_apply_target(
@@ -394,9 +477,11 @@ class ChatGraphNodes:
         self,
         rag_service: PolicyRagService | None = None,
         lifecycle_service: AiRequestLifecycleService | None = None,
+        eligibility_graph: EligibilityGraphRunner | None = None,
     ) -> None:
         self.rag_service = rag_service or PolicyRagService()
         self.lifecycle_service = lifecycle_service
+        self.eligibility_graph = eligibility_graph
 
     async def supervisor(self, state: ChatGraphState) -> ChatGraphState:
         llm = _llm().with_structured_output(_IntentDecision)
@@ -455,12 +540,45 @@ class ChatGraphNodes:
         decision = state.get("supervisor_decision") or {}
         resolved_slug = decision.get("resolved_policy_slug")
         if resolved_slug:
-            return await self._branch_with_slot("eligibility", state, resolved_slug)
+            slot_policy = _find_slot_policy_by_slug(state.get("slot"), resolved_slug)
+            logger.info(
+                "chat_slot_resolved",
+                extra={"intent": "eligibility", "slot_used": True, "rag_skipped": True},
+            )
+            return await self._run_eligibility_branch(
+                state=state,
+                policy_slug=resolved_slug,
+                policy_name=(slot_policy or {}).get("policy_name"),
+                evidences=[],
+            )
         logger.info(
             "chat_slot_resolved",
             extra={"intent": "eligibility", "slot_used": False, "rag_skipped": False},
         )
-        return await self._branch_with_rag("eligibility", state)
+        policies, evidences = await self._rag_lookup(state["user_content"])
+        slug, policy_name = _pick_apply_target(
+            policies,
+            user_content=state["user_content"],
+            require_policy_name_mention=True,
+        )
+        if slug is None:
+            slug, policy_name = _recent_assistant_policy_target(
+                state.get("recent_assistant_policy")
+            )
+        if slug is None:
+            return {
+                **state,
+                "branch_content": _ELIGIBILITY_CLARIFICATION_FALLBACK,
+                "branch_user_status": None,
+                "branch_policies": [],
+                "branch_evidences": evidences,
+            }
+        return await self._run_eligibility_branch(
+            state=state,
+            policy_slug=slug,
+            policy_name=policy_name,
+            evidences=evidences,
+        )
 
     async def branch_compare(self, state: ChatGraphState) -> ChatGraphState:
         return await self._branch_with_rag("compare", state)
@@ -574,7 +692,7 @@ class ChatGraphNodes:
                 )
         payload = {
             "content": content,
-            "user_status": None,
+            "user_status": state.get("branch_user_status"),
             "sources": [],
             "policies": state.get("branch_policies", []),
             "evidences": state.get("branch_evidences", []),
@@ -674,6 +792,87 @@ class ChatGraphNodes:
             "branch_policies": [],
             "branch_evidences": [],
         }
+
+    async def _run_eligibility_branch(
+        self,
+        *,
+        state: ChatGraphState,
+        policy_slug: str,
+        policy_name: str | None,
+        evidences: list[dict],
+    ) -> ChatGraphState:
+        result_json = await self._run_eligibility_lifecycle(
+            user_id=state["user_id"],
+            user_content=state["user_content"],
+            policy_slug=policy_slug,
+        )
+        if result_json is None:
+            return {
+                **state,
+                "branch_content": _ELIGIBILITY_FALLBACK_ERROR,
+                "branch_user_status": None,
+                "branch_policies": [],
+                "branch_evidences": evidences,
+            }
+
+        content, user_status, policies, result_evidences = _adapt_eligibility_result(
+            result_json,
+            fallback_slug=policy_slug,
+            fallback_policy_name=policy_name,
+        )
+        return {
+            **state,
+            "branch_content": content,
+            "branch_user_status": user_status,
+            "branch_policies": policies,
+            "branch_evidences": result_evidences or evidences,
+        }
+
+    async def _run_eligibility_lifecycle(
+        self,
+        user_id: int,
+        user_content: str,
+        policy_slug: str,
+    ) -> dict[str, Any] | None:
+        try:
+            async with AsyncSessionLocal() as db:
+                try:
+                    await db.execute(
+                        text(f"SET LOCAL lock_timeout = '{_ELIGIBILITY_LOCK_TIMEOUT}'")
+                    )
+                    await db.execute(
+                        text(
+                            f"SET LOCAL statement_timeout = "
+                            f"'{_ELIGIBILITY_STATEMENT_TIMEOUT}'"
+                        )
+                    )
+                    result_json = await asyncio.wait_for(
+                        self._eligibility_graph().run(
+                            db=db,
+                            user_id=user_id,
+                            policy_identifier=policy_slug,
+                            raw_query=user_content,
+                            source_type=_ELIGIBILITY_SOURCE_TYPE,
+                        ),
+                        timeout=_ELIGIBILITY_LIFECYCLE_TIMEOUT_SECONDS,
+                    )
+                    await db.commit()
+                    return result_json
+                except Exception:
+                    await db.rollback()
+                    raise
+        except Exception:
+            logger.exception("chat branch_eligibility lifecycle failed")
+            return None
+
+    def _eligibility_graph(self) -> EligibilityGraphRunner:
+        if self.eligibility_graph is None:
+            from app.ai.graphs.eligibility_graph import EligibilityGraphRunner
+
+            self.eligibility_graph = EligibilityGraphRunner(
+                lifecycle_service=self.lifecycle_service
+            )
+        return self.eligibility_graph
 
     async def _run_apply_preparation(
         self,
