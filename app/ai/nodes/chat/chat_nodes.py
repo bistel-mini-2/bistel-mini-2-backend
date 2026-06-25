@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from typing import TYPE_CHECKING, Any
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
@@ -14,6 +15,7 @@ from app.ai.states.chat_state import (
     ChatSlot,
     HistoryMessage,
     Intent,
+    RecentAssistantPolicy,
     SlotPolicy,
 )
 from app.common.ai_status import RequestStatus
@@ -153,6 +155,9 @@ _RECOMMEND_FALLBACK_FOLLOW_UP = (
 _RECOMMEND_FALLBACK_ERROR = (
     "맞춤 추천을 만드는 중에 문제가 발생했어요. 잠시 후 다시 시도해 주세요."
 )
+_APPLY_CLARIFICATION_FALLBACK = (
+    "어떤 정책의 신청 방법을 알고 싶으신가요? 정책명을 알려주시면 신청 방법과 준비서류를 안내해 드릴게요."
+)
 _APPLY_LIFECYCLE_TIMEOUT_SECONDS = 12
 _APPLY_LOCK_TIMEOUT = "5s"
 _APPLY_STATEMENT_TIMEOUT = "10s"
@@ -250,12 +255,59 @@ def _adapt_recommendation_result(
 
 def _pick_apply_target(
     policies: list[dict[str, Any]],
+    *,
+    user_content: str | None = None,
+    require_policy_name_mention: bool = False,
 ) -> tuple[str | None, str | None]:
     for policy in policies:
         slug = policy.get("slug")
-        if slug:
-            return str(slug), policy.get("policy_name") or None
+        if not slug:
+            continue
+        policy_name = policy.get("policy_name") or None
+        if require_policy_name_mention and not _user_mentions_policy_name(
+            user_content or "", policy_name
+        ):
+            continue
+        return str(slug), policy_name
     return None, None
+
+
+def _normalize_policy_mention_text(value: str | None) -> str:
+    if not value:
+        return ""
+    return re.sub(r"[^0-9A-Za-z가-힣]+", "", value).lower()
+
+
+def _user_mentions_policy_name(user_content: str, policy_name: str | None) -> bool:
+    normalized_policy_name = _normalize_policy_mention_text(policy_name)
+    if len(normalized_policy_name) < 2:
+        return False
+    normalized_user_content = _normalize_policy_mention_text(user_content)
+    return normalized_policy_name in normalized_user_content
+
+
+_CONTEXT_DEPENDENT_APPLY_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"(이거|그거|그 정책|방금|위 정책|앞(?:에서)? 말한|아까|해당 정책)"),
+    re.compile(r"(신청|서류|준비|기간|어디서|어떻게|방법|절차|문의).*[?？]?$"),
+)
+
+
+def _is_context_dependent_apply_question(user_content: str) -> bool:
+    content = user_content.strip()
+    if not content:
+        return False
+    return any(pattern.search(content) for pattern in _CONTEXT_DEPENDENT_APPLY_PATTERNS)
+
+
+def _recent_assistant_policy_target(
+    policy: RecentAssistantPolicy | None,
+) -> tuple[str | None, str | None]:
+    if not policy:
+        return None, None
+    slug = policy.get("slug")
+    if not slug:
+        return None, None
+    return str(slug), policy.get("policy_name") or None
 
 
 def _build_apply_card(
@@ -427,19 +479,38 @@ class ChatGraphNodes:
             )
         else:
             policies, evidences = await self._rag_lookup(state["user_content"])
-            slug, policy_name = _pick_apply_target(policies)
+            slug, policy_name = _pick_apply_target(
+                policies,
+                user_content=state["user_content"],
+                require_policy_name_mention=True,
+            )
+            if slug is None and _is_context_dependent_apply_question(
+                state["user_content"]
+            ):
+                slug, policy_name = _recent_assistant_policy_target(
+                    state.get("recent_assistant_policy")
+                )
+                if slug is not None:
+                    evidences = []
+                logger.info(
+                    "chat_recent_assistant_policy_resolved",
+                    extra={
+                        "intent": "apply",
+                        "recent_policy_used": slug is not None,
+                        "rag_skipped": False,
+                    },
+                )
             logger.info(
                 "chat_slot_resolved",
                 extra={"intent": "apply", "slot_used": False, "rag_skipped": False},
             )
 
         if slug is None:
-            content = await self._generate_branch_answer("apply", state, evidences)
             return {
                 **state,
-                "branch_content": content,
+                "branch_content": _APPLY_CLARIFICATION_FALLBACK,
                 "branch_policies": [],
-                "branch_evidences": evidences,
+                "branch_evidences": [],
                 "branch_apply_card": None,
             }
 

@@ -218,3 +218,44 @@ class ChatRepository:
                 }
             )
         return by_msg
+
+    @staticmethod
+    async def find_recent_assistant_policy(
+        db: AsyncSession, chat_session_id: int
+    ) -> dict | None:
+        result = await db.execute(
+            text(
+                """
+                WITH recent_assistant AS (
+                    SELECT chat_message_id
+                    FROM chat_message
+                    WHERE chat_session_id = :chat_session_id
+                      AND role = 'assistant'
+                    ORDER BY sequence_no DESC
+                    LIMIT 1
+                )
+                SELECT
+                    cmp.policy_id,
+                    cmp.action_type,
+                    p.policy_code AS slug,
+                    p.policy_name
+                FROM recent_assistant ra
+                JOIN chat_message_policy cmp
+                  ON cmp.chat_message_id = ra.chat_message_id
+                JOIN policy p
+                  ON p.policy_id = cmp.policy_id
+                ORDER BY cmp.chat_message_policy_id
+                """,
+            ),
+            {"chat_session_id": chat_session_id},
+        )
+        rows = result.all()
+        if len(rows) != 1:
+            return None
+        row = rows[0]
+        return {
+            "policy_id": int(row.policy_id),
+            "slug": row.slug,
+            "policy_name": row.policy_name,
+            "action_type": row.action_type,
+        }

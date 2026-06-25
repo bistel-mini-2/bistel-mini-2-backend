@@ -112,6 +112,9 @@ class ChatService:
 
         history = await _load_history(db, session.chat_session_id)
         is_first_message = not history and not session.title
+        recent_assistant_policy = await ChatRepository.find_recent_assistant_policy(
+            db, session.chat_session_id
+        )
         user_message = await _save_user_message(db, session.chat_session_id, content)
         await db.commit()
 
@@ -120,6 +123,7 @@ class ChatService:
             user_content=content,
             history=history,
             slot=session.slot_json or {},
+            recent_assistant_policy=recent_assistant_policy,
         )
 
         assistant_message, assistant_response = await _persist_assistant_outputs(
@@ -157,12 +161,16 @@ class ChatService:
     ) -> AsyncIterator[str]:
         history = await _load_history(db, session.chat_session_id)
         is_first_message = not history and not session.title
+        recent_assistant_policy = await ChatRepository.find_recent_assistant_policy(
+            db, session.chat_session_id
+        )
 
         graph_state = {
             "user_id": session.user_id,
             "user_content": content,
             "history": history,
             "slot": session.slot_json or {},
+            "recent_assistant_policy": recent_assistant_policy,
         }
 
         final_state: dict[str, Any] = {}
@@ -304,13 +312,19 @@ async def _save_user_message(
 
 
 async def _run_supervisor_graph(
-    *, user_id: int, user_content: str, history: list[dict], slot: dict | None = None
+    *,
+    user_id: int,
+    user_content: str,
+    history: list[dict],
+    slot: dict | None = None,
+    recent_assistant_policy: dict | None = None,
 ) -> dict:
     graph_state = {
         "user_id": user_id,
         "user_content": user_content,
         "history": history,
         "slot": slot or {},
+        "recent_assistant_policy": recent_assistant_policy,
     }
     try:
         return await chat_supervisor_graph.ainvoke(graph_state)
