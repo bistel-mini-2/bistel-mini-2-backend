@@ -154,3 +154,51 @@ def test_get_compare_history_requires_authentication() -> None:
 
     assert response.status_code == 401
     assert response.json()["error"]["code"] == "UNAUTHORIZED"
+
+
+def test_delete_compare_history_returns_deleted_count(monkeypatch) -> None:
+    async def fake_delete_history(self, db, *, user_id: int, history_id: int):
+        assert (user_id, history_id) == (7, 3)
+        return 1
+
+    monkeypatch.setattr(CompareService, "delete_compare_history", fake_delete_history)
+
+    with TestClient(create_app()) as client:
+        response = client.delete("/api/v1/users/me/compare-history/3")
+
+    assert response.status_code == 200
+    assert response.json()["data"] == {"deleted_count": 1}
+
+
+def test_delete_all_compare_history_returns_deleted_count(monkeypatch) -> None:
+    async def fake_delete_all_history(self, db, *, user_id: int):
+        assert user_id == 7
+        return 5
+
+    monkeypatch.setattr(
+        CompareService,
+        "delete_all_compare_history",
+        fake_delete_all_history,
+    )
+
+    with TestClient(create_app()) as client:
+        response = client.delete("/api/v1/users/me/compare-history")
+
+    assert response.status_code == 200
+    assert response.json()["data"] == {"deleted_count": 5}
+
+
+def test_delete_compare_history_requires_authentication() -> None:
+    with TestClient(create_app(authenticated=False)) as client:
+        response = client.delete("/api/v1/users/me/compare-history/3")
+
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == "UNAUTHORIZED"
+
+
+def test_delete_all_compare_history_requires_authentication() -> None:
+    with TestClient(create_app(authenticated=False)) as client:
+        response = client.delete("/api/v1/users/me/compare-history")
+
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == "UNAUTHORIZED"

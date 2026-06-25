@@ -113,6 +113,37 @@ class CompareService:
             for row in rows
         ], total
 
+    async def delete_compare_history(
+        self,
+        db: AsyncSession,
+        *,
+        user_id: int,
+        history_id: int,
+    ) -> int:
+        deleted = await CompareRepository.soft_delete_compare_history(
+            db,
+            user_id=user_id,
+            history_id=history_id,
+        )
+        if not deleted:
+            raise AppException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                code=ErrorCode.NOT_FOUND,
+                message="Compare history not found",
+            )
+        return 1
+
+    async def delete_all_compare_history(
+        self,
+        db: AsyncSession,
+        *,
+        user_id: int,
+    ) -> int:
+        return await CompareRepository.soft_delete_all_compare_history(
+            db,
+            user_id=user_id,
+        )
+
     @staticmethod
     def _normalize_slug(value: str) -> str:
         normalized = value.strip()

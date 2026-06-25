@@ -182,6 +182,55 @@ class CompareRepository:
         return [dict(row) for row in result.mappings().all()], total
 
     @classmethod
+    async def soft_delete_compare_history(
+        cls,
+        db: AsyncSession,
+        *,
+        user_id: int,
+        history_id: int,
+    ) -> bool:
+        await cls.ensure_compare_history_schema(db)
+        result = await db.execute(
+            text(
+                """
+                UPDATE compare_history
+                SET deleted_at = CURRENT_TIMESTAMP
+                WHERE compare_history_id = :history_id
+                  AND user_id = :user_id
+                  AND deleted_at IS NULL
+                RETURNING compare_history_id
+                """
+            ),
+            {
+                "history_id": history_id,
+                "user_id": user_id,
+            },
+        )
+        return result.scalar_one_or_none() is not None
+
+    @classmethod
+    async def soft_delete_all_compare_history(
+        cls,
+        db: AsyncSession,
+        *,
+        user_id: int,
+    ) -> int:
+        await cls.ensure_compare_history_schema(db)
+        result = await db.execute(
+            text(
+                """
+                UPDATE compare_history
+                SET deleted_at = CURRENT_TIMESTAMP
+                WHERE user_id = :user_id
+                  AND deleted_at IS NULL
+                RETURNING compare_history_id
+                """
+            ),
+            {"user_id": user_id},
+        )
+        return len(result.scalars().all())
+
+    @classmethod
     async def find_policies_by_slugs(
         cls,
         db: AsyncSession,

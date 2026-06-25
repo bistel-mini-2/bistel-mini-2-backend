@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Path, Query
 from fastapi.responses import JSONResponse
 
 from app.common.response import success_response
@@ -87,3 +87,31 @@ async def get_my_compare_history(
         data=CompareHistoryListResponse(items=items),
         meta=meta.model_dump(),
     )
+
+
+@history_router.delete("/{history_id}", response_model=ApiResponse[dict[str, int]])
+async def delete_my_compare_history(
+    db: DbSessionDep,
+    service: CompareServiceDep,
+    current_user: CurrentUserDep,
+    history_id: Annotated[int, Path(ge=1)],
+) -> JSONResponse:
+    deleted_count = await service.delete_compare_history(
+        db,
+        user_id=current_user.user_id,
+        history_id=history_id,
+    )
+    return success_response(data={"deleted_count": deleted_count})
+
+
+@history_router.delete("", response_model=ApiResponse[dict[str, int]])
+async def delete_all_my_compare_history(
+    db: DbSessionDep,
+    service: CompareServiceDep,
+    current_user: CurrentUserDep,
+) -> JSONResponse:
+    deleted_count = await service.delete_all_compare_history(
+        db,
+        user_id=current_user.user_id,
+    )
+    return success_response(data={"deleted_count": deleted_count})
