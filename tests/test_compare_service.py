@@ -195,3 +195,64 @@ def test_get_compare_history_returns_items_and_total(monkeypatch) -> None:
     assert items[0].id == "3"
     assert items[0].policy_a_slug == "WLF00000001"
     assert items[0].compared_at == compared_at
+
+
+def test_delete_compare_history_returns_deleted_count(monkeypatch) -> None:
+    soft_delete = AsyncMock(return_value=True)
+    monkeypatch.setattr(
+        CompareRepository,
+        "soft_delete_compare_history",
+        soft_delete,
+    )
+    fake_db = object()
+
+    deleted_count = asyncio.run(
+        CompareService().delete_compare_history(
+            fake_db,  # type: ignore[arg-type]
+            user_id=7,
+            history_id=3,
+        )
+    )
+
+    assert deleted_count == 1
+    soft_delete.assert_awaited_once_with(fake_db, user_id=7, history_id=3)
+
+
+def test_delete_compare_history_raises_404_when_not_found(monkeypatch) -> None:
+    monkeypatch.setattr(
+        CompareRepository,
+        "soft_delete_compare_history",
+        AsyncMock(return_value=False),
+    )
+
+    with pytest.raises(AppException) as exc_info:
+        asyncio.run(
+            CompareService().delete_compare_history(
+                object(),  # type: ignore[arg-type]
+                user_id=7,
+                history_id=999,
+            )
+        )
+
+    assert exc_info.value.status_code == 404
+    assert exc_info.value.code == ErrorCode.NOT_FOUND
+
+
+def test_delete_all_compare_history_returns_deleted_count(monkeypatch) -> None:
+    soft_delete_all = AsyncMock(return_value=4)
+    monkeypatch.setattr(
+        CompareRepository,
+        "soft_delete_all_compare_history",
+        soft_delete_all,
+    )
+    fake_db = object()
+
+    deleted_count = asyncio.run(
+        CompareService().delete_all_compare_history(
+            fake_db,  # type: ignore[arg-type]
+            user_id=7,
+        )
+    )
+
+    assert deleted_count == 4
+    soft_delete_all.assert_awaited_once_with(fake_db, user_id=7)
