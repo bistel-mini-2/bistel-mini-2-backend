@@ -65,3 +65,9 @@ class PolicyRule(Base):
         default=False,
         server_default="false",
     )
+    origin: Mapped[str] = mapped_column(
+        String(30),
+        nullable=False,
+        default="openapi",
+        server_default="openapi",
+    )

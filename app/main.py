@@ -30,6 +30,9 @@ from app.api.policy_controller import router as policy_router
 from app.api.policy_condition_profile_controller import (
     router as policy_condition_profile_router,
 )
+from app.api.policy_rule_ingest_controller import (
+    router as policy_rule_ingest_router,
+)
 from app.api.policy_data_controller import router as policy_data_router
 from app.api.policy_document_controller import router as policy_document_router
 from app.api.policy_import_controller import router as policy_import_router
@@ -78,6 +81,7 @@ app.include_router(favorites_router)
 app.include_router(user_favorites_router)
 app.include_router(policy_router)
 app.include_router(policy_condition_profile_router)
+app.include_router(policy_rule_ingest_router)
 app.include_router(policy_data_router)
 app.include_router(policy_import_router)
 app.include_router(policy_document_router)
