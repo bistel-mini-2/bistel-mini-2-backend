@@ -12,6 +12,19 @@ from app.repositories.recommendation_candidate_repository import (
     RecommendationCandidateRepository,
 )
 from app.services.policy_rag_service import PolicyRagService
+from app.services.policy_rule_grouping import (
+    INCOME_LEVEL_TO_PERCENT,
+    OUTCOME_FAIL,
+    OUTCOME_MANUAL,
+    OUTCOME_MATCH,
+    VERDICT_MATCH,
+    evaluate_or_group,
+    group_note,
+    partition_or_groups,
+    rule_matches,
+    rule_values,
+    to_number,
+)
 
 
 CANDIDATE_STATUS_CANDIDATE = "CANDIDATE"
@@ -26,13 +39,6 @@ SPECIAL_RECOMMENDATION_TERMS = {
     "dual": "맞벌이",
     "low_income": "저소득",
     "veteran": "보훈",
-}
-
-INCOME_LEVEL_TO_PERCENT = {
-    "low": 50,
-    "mid1": 100,
-    "mid2": 150,
-    "high": 200,
 }
 
 LOW_INCOME_POLICY_KEYWORDS = (
@@ -834,7 +840,11 @@ class RecommendationCandidateService:
         excluded_rules: list[dict[str, Any]],
     ) -> float:
         score = 0.0
-        for rule in policy_rules:
+        # 서로 다른 field의 OR(대안) 그룹은 별도 평가한다(개별 AND 누적으로는
+        # "특수상황=multi OR 생애주기=teen"에서 미충족 대안이 missing으로 잘못 잡힘).
+        flat_rules, or_groups = partition_or_groups(policy_rules)
+
+        for rule in flat_rules:
             field_name = str(rule.get("field_name") or "")
             condition_value = self._condition_value(condition, field_name)
             rule_value = rule.get("value_json")
@@ -894,48 +904,88 @@ class RecommendationCandidateService:
                         "reason": "policy_rule hard filter와 사용자 조건이 맞지 않습니다.",
                     }
                 )
+
+        for group_key, group_rules in or_groups:
+            score += self._apply_or_group(
+                condition,
+                group_key,
+                group_rules,
+                matched_rules,
+                uncertain_rules,
+                excluded_rules,
+            )
         return min(score, 0.2)
 
+    def _apply_or_group(
+        self,
+        condition: dict[str, Any],
+        group_key: str,
+        group_rules: list[dict[str, Any]],
+        matched_rules: list[dict[str, Any]],
+        uncertain_rules: list[dict[str, Any]],
+        excluded_rules: list[dict[str, Any]],
+    ) -> float:
+        outcome, verdicts = evaluate_or_group(
+            group_rules,
+            condition,
+            self._condition_value,
+            self._rule_matches,
+        )
+        if outcome == OUTCOME_MATCH:
+            score = 0.0
+            for rule, verdict, condition_value, rule_value in verdicts:
+                if verdict == VERDICT_MATCH:
+                    matched_rules.append(
+                        self._matched_rule(
+                            str(rule.get("field_name") or ""),
+                            condition_value,
+                            rule_value,
+                            0.05,
+                            "policy_rule OR 그룹 대안 조건 일치",
+                        )
+                    )
+                    score = 0.05
+            return score
+        if outcome == OUTCOME_MANUAL:
+            uncertain_rules.append(
+                {
+                    "field": group_key,
+                    "condition_value": None,
+                    "policy_value": None,
+                    "reason": (
+                        f"OR 그룹({group_note(group_rules, group_key)}) 중 "
+                        "확정 매칭이 없어 추가 확인 필요"
+                    ),
+                }
+            )
+            return 0.0
+        if outcome == OUTCOME_FAIL:
+            excluded_rules.append(
+                {
+                    "field": group_key,
+                    "condition_value": None,
+                    "policy_value": None,
+                    "result": "hard_rule_mismatch",
+                    "reason": (
+                        f"OR 그룹({group_note(group_rules, group_key)})의 "
+                        "모든 대안 조건이 사용자 조건과 맞지 않습니다."
+                    ),
+                }
+            )
+            return 0.0
+        return 0.0
+
+    # 매처는 PolicyRuleFilterService와 동일 동작을 보장하기 위해 공유 모듈에 위임한다.
     def _rule_matches(
         self,
         operator: str,
         condition_value: Any,
         rule_value: Any,
     ) -> bool | None:
-        values = self._rule_values(rule_value)
-        if operator == "EQ":
-            return str(condition_value) in {str(value) for value in values[:1]}
-        if operator == "IN":
-            if isinstance(condition_value, list):
-                return bool(
-                    {str(item) for item in condition_value}
-                    & {str(value) for value in values}
-                )
-            return str(condition_value) in {str(value) for value in values}
-        if operator in {"GTE", "LTE"}:
-            condition_number = self._to_number(condition_value)
-            rule_number = self._to_number(values[0] if values else None)
-            if condition_number is None or rule_number is None:
-                return None
-            if operator == "GTE":
-                return condition_number >= rule_number
-            return condition_number <= rule_number
-        if operator == "EXISTS":
-            return condition_value not in (None, "", [])
-        return None
+        return rule_matches(operator, condition_value, rule_value)
 
     def _rule_values(self, rule_value: Any) -> list[Any]:
-        if isinstance(rule_value, list):
-            return rule_value
-        if isinstance(rule_value, dict):
-            for key in ("value", "values", "allowed", "in"):
-                value = rule_value.get(key)
-                if isinstance(value, list):
-                    return value
-                if value is not None:
-                    return [value]
-            return list(rule_value.values())
-        return [rule_value]
+        return rule_values(rule_value)
 
     def _income_percent(self, value: Any) -> float | None:
         if value in (None, "", [], "unknown"):
@@ -1140,15 +1190,7 @@ class RecommendationCandidateService:
         return deduplicated
 
     def _to_number(self, value: Any) -> float | None:
-        if value in (None, "", []):
-            return None
-        income_percent = INCOME_LEVEL_TO_PERCENT.get(str(value).strip())
-        if income_percent is not None:
-            return float(income_percent)
-        try:
-            return float(str(value).replace("%", "").strip())
-        except ValueError:
-            return None
+        return to_number(value)
 
     def _policy_ids(self, rows: list[dict[str, Any]]) -> set[int]:
         return {int(row["policy_id"]) for row in rows}

@@ -1,13 +1,22 @@
 from dataclasses import dataclass, field
 from typing import Any
 
+from app.services.policy_rule_grouping import (
+    INCOME_LEVEL_TO_PERCENT,
+    OUTCOME_FAIL,
+    OUTCOME_MANUAL,
+    OUTCOME_MATCH,
+    VERDICT_MATCH,
+    evaluate_or_group,
+    group_note,
+    partition_or_groups,
+    rule_matches,
+    rule_values,
+    to_number,
+)
 
-INCOME_LEVEL_TO_PERCENT = {
-    "low": 50.0,
-    "mid1": 100.0,
-    "mid2": 150.0,
-    "high": 200.0,
-}
+# 하위 호환: 기존에 이 모듈에서 INCOME_LEVEL_TO_PERCENT를 import하던 코드 보존.
+__all__ = ["PolicyRuleFilterService", "PolicyRuleFilterResult", "INCOME_LEVEL_TO_PERCENT"]
 
 
 @dataclass
@@ -25,7 +34,11 @@ class PolicyRuleFilterService:
         policy_rules: list[dict[str, Any]],
     ) -> PolicyRuleFilterResult:
         result = PolicyRuleFilterResult()
-        for rule in self._merge_alternative_rules(policy_rules):
+        # 서로 다른 field의 OR(대안) 그룹은 별도로 묶어 평가한다(같은 field IN 병합만으로는
+        # "특수상황=multi OR 생애주기=teen"을 풀 수 없음).
+        flat_rules, or_groups = partition_or_groups(policy_rules)
+
+        for rule in self._merge_alternative_rules(flat_rules):
             field_name = str(rule.get("field_name") or "").strip()
             if not field_name:
                 continue
@@ -53,7 +66,35 @@ class PolicyRuleFilterService:
                 result.manual_check_points.append(note)
             elif rule.get("is_hard_filter") is True:
                 result.rule_failures.append(note)
+
+        for group_key, group_rules in or_groups:
+            self._apply_or_group(condition, group_key, group_rules, result)
         return result
+
+    def _apply_or_group(
+        self,
+        condition: dict[str, Any],
+        group_key: str,
+        group_rules: list[dict[str, Any]],
+        result: PolicyRuleFilterResult,
+    ) -> None:
+        outcome, verdicts = evaluate_or_group(
+            group_rules,
+            condition,
+            self._condition_value,
+            self._rule_matches,
+        )
+        if outcome == OUTCOME_MATCH:
+            # 충족된 대안만 matched로 보고한다(나머지 대안의 missing은 그룹이 통과했으므로 무시).
+            for rule, verdict, _, _ in verdicts:
+                if verdict == VERDICT_MATCH:
+                    result.matched_conditions.append(
+                        str(rule.get("note") or rule.get("field_name"))
+                    )
+        elif outcome == OUTCOME_MANUAL:
+            result.manual_check_points.append(group_note(group_rules, group_key))
+        elif outcome == OUTCOME_FAIL:
+            result.rule_failures.append(group_note(group_rules, group_key))
 
     def _merge_alternative_rules(
         self,
@@ -108,56 +149,17 @@ class PolicyRuleFilterService:
                 return value
         return None
 
+    # 매처는 RecommendationCandidateService와 동일 동작을 보장하기 위해 공유 모듈에 위임한다.
     def _rule_matches(
         self,
         operator: str,
         condition_value: Any,
         rule_value: Any,
     ) -> bool | None:
-        values = self._rule_values(rule_value)
-        if operator == "EQ":
-            return str(condition_value) == str(values[0]) if values else None
-        if operator == "IN":
-            condition_values = (
-                {str(item) for item in condition_value}
-                if isinstance(condition_value, list)
-                else {str(condition_value)}
-            )
-            return bool(condition_values & {str(value) for value in values})
-        if operator in {"GTE", "LTE"}:
-            condition_number = self._to_number(condition_value)
-            rule_number = self._to_number(values[0] if values else None)
-            if condition_number is None or rule_number is None:
-                return None
-            if operator == "GTE":
-                return condition_number >= rule_number
-            return condition_number <= rule_number
-        if operator == "EXISTS":
-            return condition_value not in (None, "", [])
-        return None
+        return rule_matches(operator, condition_value, rule_value)
 
     def _rule_values(self, rule_value: Any) -> list[Any]:
-        if isinstance(rule_value, list):
-            return rule_value
-        if isinstance(rule_value, dict):
-            for key in ("value", "values", "allowed", "in"):
-                value = rule_value.get(key)
-                if isinstance(value, list):
-                    return value
-                if value is not None:
-                    return [value]
-            return list(rule_value.values())
-        return [rule_value]
+        return rule_values(rule_value)
 
     def _to_number(self, value: Any) -> float | None:
-        if value is None:
-            return None
-        if isinstance(value, (int, float)):
-            return float(value)
-        mapped = INCOME_LEVEL_TO_PERCENT.get(str(value).strip())
-        if mapped is not None:
-            return mapped
-        try:
-            return float(str(value).strip().replace("%", ""))
-        except ValueError:
-            return None
+        return to_number(value)

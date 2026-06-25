@@ -26,6 +26,29 @@ _SPECIAL_CONDITION_VALUE_MAP = {
     "multicultural_or_defector": "multi",
 }
 
+# condition_json field_name → 두 필터(_condition_value)가 사용자 조건에서 해석하는 key.
+# 핵심 의미가 일치하는 경우만 rename한다.
+#   special_condition     → special (사용자 special 플래그)
+#   median_income_percent → income  (사용자 income 구간 %와 LTE/GTE 비교)
+# income_status(수급자격)는 income(중위소득 구간)과 축이 달라 rename하지 않는다.
+_FIELD_RENAME = {
+    "special_condition": "special",
+    "median_income_percent": "income",
+}
+
+# 두 필터가 사용자 입력에서 해석 가능한 field. 여기에 없는 hard 조건은 매칭이 불가하므로
+# manual_check로 강등해, 모든 사용자에게 "조건 없음/실패"로 빠지는 노이즈를 막는다.
+# (income_status·household_member_age·age 등은 대응 사용자 입력 필드가 아직 없음)
+_FILTER_RESOLVABLE_FIELDS = {
+    "stage",
+    "child_age",
+    "income",
+    "special",
+    "region",
+    "household_type",
+    "pregnancy_status",
+}
+
 # matching_strength → policy_rule 저장 속성.
 _STRENGTH_HARD = "hard"
 _STRENGTH_SOFT = "soft"
@@ -46,6 +69,7 @@ ORIGIN_CONDITION_PROFILE = "condition_profile"
 _REASON_SOURCE_NOT_FOUND = "source_text가 원문에서 확인되지 않음(환각 가능성)"
 _REASON_LOW_CONFIDENCE = "신뢰도가 낮아 수동 확인 필요"
 _REASON_NO_STRENGTH = "matching_strength 미상 - 수동 확인 필요"
+_REASON_UNRESOLVABLE_FIELD = "사용자 입력에 대응 field가 없어 자동 매칭 불가 - 수동 확인 필요"
 
 
 class PolicyRuleIngestService:
@@ -218,12 +242,14 @@ class PolicyRuleIngestService:
         group_operator: str,
         ctx: "_BuildContext",
     ) -> dict[str, Any] | None:
-        field_name = self._field_name(leaf.get("field"))
-        if not field_name:
+        raw_field = self._field_name(leaf.get("field"))
+        if not raw_field:
             return None
 
-        value = self._normalize_value(field_name, leaf.get("value"))
         operator = str(leaf.get("operator") or "UNKNOWN").strip().upper() or "UNKNOWN"
+        field_name, value, operator = self._map_field(
+            raw_field, leaf.get("value"), operator
+        )
         strength = str(leaf.get("matching_strength") or "").strip().lower()
         confidence = self._confidence(leaf.get("confidence"), ctx)
         source_text = leaf.get("source_text")
@@ -251,6 +277,12 @@ class PolicyRuleIngestService:
             review = True
             reasons.append(_REASON_SOURCE_NOT_FOUND)
 
+        # 두 필터가 해석할 수 없는 hard field는 자동 매칭이 불가하므로 manual로 강등한다.
+        if is_hard and field_name not in _FILTER_RESOLVABLE_FIELDS:
+            manual = True
+            review = True
+            reasons.append(_REASON_UNRESOLVABLE_FIELD)
+
         return self._rule(
             rule_type=self._rule_type(leaf.get("type"), field_name),
             operator=operator,
@@ -273,9 +305,11 @@ class PolicyRuleIngestService:
         exclusion: dict[str, Any],
         ctx: "_BuildContext",
     ) -> dict[str, Any] | None:
-        field_name = self._field_name(exclusion.get("field")) or "exclusion"
-        value = self._normalize_value(field_name, exclusion.get("value"))
+        raw_field = self._field_name(exclusion.get("field")) or "exclusion"
         operator = str(exclusion.get("operator") or "EQ").strip().upper() or "EQ"
+        field_name, value, operator = self._map_field(
+            raw_field, exclusion.get("value"), operator
+        )
         source_text = exclusion.get("source_text")
         # 제외 조건은 hard로 자동 탈락시키지 않고 수동 확인 대상으로 보존한다.
         return self._rule(
@@ -301,8 +335,8 @@ class PolicyRuleIngestService:
         group_key: str,
         ctx: "_BuildContext",
     ) -> dict[str, Any]:
-        field_name = self._field_name(item.get("field")) or group_key.lower()
-        value = self._normalize_value(field_name, item.get("value"))
+        raw_field = self._field_name(item.get("field")) or group_key.lower()
+        field_name, value, _ = self._map_field(raw_field, item.get("value"), "UNKNOWN")
         return self._rule(
             rule_type=group_key,
             operator="UNKNOWN",
@@ -371,17 +405,46 @@ class PolicyRuleIngestService:
         text = str(rule_type or "").strip()
         return (text or field_name).upper()[:50]
 
-    def _normalize_value(self, field_name: str, value: Any) -> Any:
-        mapping = None
-        if field_name == "stage":
-            mapping = _STAGE_VALUE_MAP
-        elif field_name == "special_condition":
-            mapping = _SPECIAL_CONDITION_VALUE_MAP
-        if mapping is None:
-            return value
+    def _map_field(
+        self, raw_field: str, value: Any, operator: str
+    ) -> tuple[str, Any, str]:
+        """condition_json field → 필터 key로 정규화하고 값/operator도 함께 보정한다.
+
+        operator를 함께 반환하는 이유: 사용자 special 값은 리스트(["disabled"])이므로
+        rule도 IN + 리스트 값이어야 필터의 포함 비교가 성립한다(EQ면 매칭 실패).
+        """
+        if raw_field == "stage":
+            return "stage", self._map_value(_STAGE_VALUE_MAP, value), operator
+        if raw_field == "special_condition":
+            mapped = self._map_value(_SPECIAL_CONDITION_VALUE_MAP, value)
+            as_list = mapped if isinstance(mapped, list) else [mapped]
+            return "special", as_list, "IN"
+        if raw_field == "median_income_percent":
+            # income 구간(%)과 비교 가능하도록 {"percent": n} → 숫자로 평탄화.
+            return "income", self._percent_number(value), operator
+        return _FIELD_RENAME.get(raw_field, raw_field), value, operator
+
+    def _map_value(self, mapping: dict[str, str], value: Any) -> Any:
         if isinstance(value, list):
             return [mapping.get(str(v), v) for v in value]
         return mapping.get(str(value), value)
+
+    def _percent_number(self, value: Any) -> Any:
+        if isinstance(value, dict):
+            for key in ("percent", "median_income_percent", "value"):
+                if value.get(key) is not None:
+                    value = value[key]
+                    break
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)):
+            return int(value)
+        if isinstance(value, str):
+            try:
+                return int(float(value.replace("%", "").strip()))
+            except ValueError:
+                return value
+        return value
 
     def _confidence(self, value: Any, ctx: "_BuildContext") -> float | None:
         if value is None:
