@@ -135,6 +135,30 @@ class _FakeRagService:
         self.search = AsyncMock(return_value=_FakeRagResult([]))
 
 
+class _FakeEligibilityGraph:
+    def __init__(self) -> None:
+        self.run = AsyncMock(
+            return_value={
+                "request_id": "123",
+                "status": "COMPLETED",
+                "policy_id": "42",
+                "slug": "WLF1",
+                "policy_name": "아이돌봄서비스",
+                "user_status": "NEEDS_CONFIRMATION",
+                "summary": "조건 일부는 맞지만 추가 확인이 필요해요.",
+                "evidences": [
+                    {
+                        "chunk_id": "9",
+                        "snippet": "지원 대상 근거",
+                        "source_title": "아이돌봄서비스",
+                        "source_url": "https://example.test",
+                        "evidence_role": "target",
+                    }
+                ],
+            }
+        )
+
+
 class _FakeSession:
     async def __aenter__(self) -> "_FakeSession":
         return self
@@ -465,7 +489,8 @@ def test_branch_eligibility_skips_rag_when_slot_resolved(
     monkeypatch: pytest.MonkeyPatch, patched_session: None, patched_llm: AsyncMock
 ) -> None:
     rag = _FakeRagService()
-    nodes = ChatGraphNodes(rag_service=rag)
+    eligibility_graph = _FakeEligibilityGraph()
+    nodes = ChatGraphNodes(rag_service=rag, eligibility_graph=eligibility_graph)
 
     state = _state_with_slot("WLF1")
     state["supervisor_decision"] = {
@@ -478,6 +503,10 @@ def test_branch_eligibility_skips_rag_when_slot_resolved(
     out = asyncio.run(nodes.branch_eligibility(state))
 
     rag.search.assert_not_called()
+    eligibility_graph.run.assert_awaited_once()
+    assert eligibility_graph.run.await_args.kwargs["policy_identifier"] == "WLF1"
     assert out["branch_policies"][0]["slug"] == "WLF1"
-    assert out["branch_policies"][0]["policy_id"] is None
-    assert out["branch_evidences"] == []
+    assert out["branch_policies"][0]["policy_id"] == "42"
+    assert out["branch_user_status"] == "NEEDS_CONFIRMATION"
+    assert out["branch_evidences"][0]["chunk_id"] == "9"
+    assert out["branch_evidences"][0]["evidence_role"] == "TARGET"
