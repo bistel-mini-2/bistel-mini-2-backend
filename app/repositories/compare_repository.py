@@ -6,6 +6,129 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 class CompareRepository:
     @classmethod
+    async def ensure_compare_history_schema(cls, db: AsyncSession) -> None:
+        await db.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS compare_history (
+                    compare_history_id bigserial PRIMARY KEY,
+                    user_id bigint NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+                    policy_a_id bigint REFERENCES policy(policy_id) ON DELETE SET NULL,
+                    policy_b_id bigint REFERENCES policy(policy_id) ON DELETE SET NULL,
+                    title varchar(255),
+                    compared_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    deleted_at timestamp
+                )
+                """
+            )
+        )
+        alter_statements = [
+            "ALTER TABLE compare_history ADD COLUMN IF NOT EXISTS policy_a_id bigint",
+            "ALTER TABLE compare_history ADD COLUMN IF NOT EXISTS policy_b_id bigint",
+            "ALTER TABLE compare_history ADD COLUMN IF NOT EXISTS title varchar(255)",
+            (
+                "ALTER TABLE compare_history ADD COLUMN IF NOT EXISTS "
+                "compared_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP"
+            ),
+            "ALTER TABLE compare_history ADD COLUMN IF NOT EXISTS deleted_at timestamp",
+        ]
+        for statement in alter_statements:
+            await db.execute(text(statement))
+        await db.execute(
+            text(
+                """
+                CREATE INDEX IF NOT EXISTS compare_history_user_compared_idx
+                ON compare_history(user_id, compared_at DESC)
+                """
+            )
+        )
+
+    @classmethod
+    async def save_compare_history(
+        cls,
+        db: AsyncSession,
+        *,
+        user_id: int,
+        policy_a_id: int,
+        policy_b_id: int,
+    ) -> int:
+        await cls.ensure_compare_history_schema(db)
+        result = await db.execute(
+            text(
+                """
+                INSERT INTO compare_history (
+                    user_id,
+                    policy_a_id,
+                    policy_b_id,
+                    compared_at
+                )
+                VALUES (:user_id, :policy_a_id, :policy_b_id, CURRENT_TIMESTAMP)
+                RETURNING compare_history_id
+                """
+            ),
+            {
+                "user_id": user_id,
+                "policy_a_id": policy_a_id,
+                "policy_b_id": policy_b_id,
+            },
+        )
+        return int(result.scalar_one())
+
+    @classmethod
+    async def find_compare_history(
+        cls,
+        db: AsyncSession,
+        *,
+        user_id: int,
+        page: int,
+        size: int,
+    ) -> tuple[list[dict[str, Any]], int]:
+        await cls.ensure_compare_history_schema(db)
+        count_result = await db.execute(
+            text(
+                """
+                SELECT COUNT(*)
+                FROM compare_history ch
+                WHERE ch.user_id = :user_id
+                  AND ch.deleted_at IS NULL
+                  AND ch.policy_a_id IS NOT NULL
+                  AND ch.policy_b_id IS NOT NULL
+                """
+            ),
+            {"user_id": user_id},
+        )
+        total = int(count_result.scalar_one() or 0)
+
+        result = await db.execute(
+            text(
+                """
+                SELECT
+                    ch.compare_history_id AS id,
+                    pa.policy_name AS policy_a_name,
+                    pb.policy_name AS policy_b_name,
+                    pa.policy_code AS policy_a_slug,
+                    pb.policy_code AS policy_b_slug,
+                    ch.compared_at
+                FROM compare_history ch
+                JOIN policy pa ON pa.policy_id = ch.policy_a_id
+                JOIN policy pb ON pb.policy_id = ch.policy_b_id
+                WHERE ch.user_id = :user_id
+                  AND ch.deleted_at IS NULL
+                  AND ch.policy_a_id IS NOT NULL
+                  AND ch.policy_b_id IS NOT NULL
+                ORDER BY ch.compared_at DESC, ch.compare_history_id DESC
+                LIMIT :limit OFFSET :offset
+                """
+            ),
+            {
+                "user_id": user_id,
+                "limit": size,
+                "offset": (page - 1) * size,
+            },
+        )
+        return [dict(row) for row in result.mappings().all()], total
+
+    @classmethod
     async def find_policies_by_slugs(
         cls,
         db: AsyncSession,

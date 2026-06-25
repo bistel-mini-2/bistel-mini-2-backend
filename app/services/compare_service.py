@@ -7,6 +7,7 @@ from app.common.exceptions import AppException, ErrorCode
 from app.repositories.compare_repository import CompareRepository
 from app.schemas.compare_schema import (
     CompareDiffItem,
+    CompareHistoryItem,
     ComparePolicySummary,
     CompareRelatedPolicy,
     PolicyCompareResponse,
@@ -33,6 +34,7 @@ class CompareService:
         *,
         slug_a: str,
         slug_b: str,
+        user_id: int | None = None,
     ) -> PolicyCompareResponse:
         normalized_a = self._normalize_slug(slug_a)
         normalized_b = self._normalize_slug(slug_b)
@@ -62,6 +64,13 @@ class CompareService:
             category=policy_a.get("category") or policy_b.get("category"),
             tags=self._combined_tags(policy_a, policy_b),
         )
+        if user_id is not None:
+            await CompareRepository.save_compare_history(
+                db,
+                user_id=user_id,
+                policy_a_id=int(policy_a["policy_id"]),
+                policy_b_id=int(policy_b["policy_id"]),
+            )
 
         return PolicyCompareResponse(
             policy_a=self._to_policy_summary(policy_a),
@@ -77,6 +86,32 @@ class CompareService:
                 for row in related
             ],
         )
+
+    async def get_compare_history(
+        self,
+        db: AsyncSession,
+        *,
+        user_id: int,
+        page: int,
+        size: int,
+    ) -> tuple[list[CompareHistoryItem], int]:
+        rows, total = await CompareRepository.find_compare_history(
+            db,
+            user_id=user_id,
+            page=page,
+            size=size,
+        )
+        return [
+            CompareHistoryItem(
+                id=str(row["id"]),
+                policy_a_name=str(row["policy_a_name"]),
+                policy_b_name=str(row["policy_b_name"]),
+                policy_a_slug=str(row["policy_a_slug"]),
+                policy_b_slug=str(row["policy_b_slug"]),
+                compared_at=row["compared_at"],
+            )
+            for row in rows
+        ], total
 
     @staticmethod
     def _normalize_slug(value: str) -> str:
