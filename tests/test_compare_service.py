@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime
 from unittest.mock import AsyncMock
 
 import pytest
@@ -77,6 +78,64 @@ def test_compare_policies_returns_diff_and_related(monkeypatch) -> None:
     assert response.related_policies[0].slug == "WLF00000003"
 
 
+def test_compare_policies_saves_history_when_user_exists(monkeypatch) -> None:
+    policy_a = make_policy(policy_id=1, slug="WLF00000001", name="A 정책")
+    policy_b = make_policy(policy_id=2, slug="WLF00000002", name="B 정책")
+    save_history = AsyncMock(return_value=10)
+    monkeypatch.setattr(
+        CompareRepository,
+        "find_policies_by_slugs",
+        AsyncMock(return_value=[policy_a, policy_b]),
+    )
+    monkeypatch.setattr(
+        CompareRepository,
+        "find_related_policies",
+        AsyncMock(return_value=[]),
+    )
+    monkeypatch.setattr(CompareRepository, "save_compare_history", save_history)
+    fake_db = object()
+
+    asyncio.run(
+        CompareService().compare_policies(
+            fake_db,  # type: ignore[arg-type]
+            slug_a="WLF00000001",
+            slug_b="WLF00000002",
+            user_id=7,
+        )
+    )
+
+    save_history.assert_awaited_once_with(
+        fake_db, user_id=7, policy_a_id=1, policy_b_id=2
+    )
+
+
+def test_compare_policies_skips_history_when_user_missing(monkeypatch) -> None:
+    policy_a = make_policy(policy_id=1, slug="WLF00000001", name="A 정책")
+    policy_b = make_policy(policy_id=2, slug="WLF00000002", name="B 정책")
+    save_history = AsyncMock(return_value=10)
+    monkeypatch.setattr(
+        CompareRepository,
+        "find_policies_by_slugs",
+        AsyncMock(return_value=[policy_a, policy_b]),
+    )
+    monkeypatch.setattr(
+        CompareRepository,
+        "find_related_policies",
+        AsyncMock(return_value=[]),
+    )
+    monkeypatch.setattr(CompareRepository, "save_compare_history", save_history)
+
+    asyncio.run(
+        CompareService().compare_policies(
+            object(),  # type: ignore[arg-type]
+            slug_a="WLF00000001",
+            slug_b="WLF00000002",
+        )
+    )
+
+    save_history.assert_not_awaited()
+
+
 def test_compare_policies_raises_404_when_slug_missing(monkeypatch) -> None:
     monkeypatch.setattr(
         CompareRepository,
@@ -99,3 +158,40 @@ def test_compare_policies_raises_404_when_slug_missing(monkeypatch) -> None:
 
     assert exc_info.value.status_code == 404
     assert exc_info.value.code == ErrorCode.POLICY_NOT_FOUND
+
+
+def test_get_compare_history_returns_items_and_total(monkeypatch) -> None:
+    compared_at = datetime(2026, 6, 25, 10, 30, 0)
+    monkeypatch.setattr(
+        CompareRepository,
+        "find_compare_history",
+        AsyncMock(
+            return_value=(
+                [
+                    {
+                        "id": 3,
+                        "policy_a_name": "A 정책",
+                        "policy_b_name": "B 정책",
+                        "policy_a_slug": "WLF00000001",
+                        "policy_b_slug": "WLF00000002",
+                        "compared_at": compared_at,
+                    }
+                ],
+                1,
+            )
+        ),
+    )
+
+    items, total = asyncio.run(
+        CompareService().get_compare_history(
+            object(),  # type: ignore[arg-type]
+            user_id=7,
+            page=1,
+            size=20,
+        )
+    )
+
+    assert total == 1
+    assert items[0].id == "3"
+    assert items[0].policy_a_slug == "WLF00000001"
+    assert items[0].compared_at == compared_at

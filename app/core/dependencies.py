@@ -53,6 +53,45 @@ async def get_current_user(
     return await AuthService.get_current_user_by_id(db, user_id)
 
 
-CurrentUserDep = Annotated[User, Depends(get_current_user)]
+async def get_optional_current_user(
+    db: DbSessionDep,
+    credentials: Annotated[
+        HTTPAuthorizationCredentials | None,
+        Depends(bearer_scheme),
+    ],
+) -> User | None:
+    if credentials is None:
+        return None
 
-__all__ = ["DbSessionDep", "CurrentUserDep", "get_current_user"]
+    payload = decode_access_token(credentials.credentials)
+    subject = payload.get("sub")
+
+    if subject is None:
+        raise AppException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            code=ErrorCode.UNAUTHORIZED,
+            message="Invalid authentication credentials",
+        )
+
+    try:
+        user_id = int(subject)
+    except ValueError as exc:
+        raise AppException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            code=ErrorCode.UNAUTHORIZED,
+            message="Invalid authentication credentials",
+        ) from exc
+
+    return await AuthService.get_current_user_by_id(db, user_id)
+
+
+CurrentUserDep = Annotated[User, Depends(get_current_user)]
+OptionalCurrentUserDep = Annotated[User | None, Depends(get_optional_current_user)]
+
+__all__ = [
+    "DbSessionDep",
+    "CurrentUserDep",
+    "OptionalCurrentUserDep",
+    "get_current_user",
+    "get_optional_current_user",
+]
