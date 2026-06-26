@@ -72,6 +72,38 @@ SPECIAL_ALIASES = {
     "기초생활": "low_income",
     "차상위": "low_income",
     "보훈": "veteran",
+    # condition_profile / policy_rule enum이 입력으로 들어와도 표준값으로 정규화.
+    "disabled_household": "disabled",
+    "single_parent_or_grandparent": "single",
+    "multichild": "many",
+    "multicultural_or_defector": "multi",
+}
+
+# income_status는 EQ/IN exact 비교용 enum이므로, 한글/오타가 그대로 matcher까지 가면
+# hard rule mismatch로 잘못 탈락한다. 허용값으로 정규화하고 모르는 값은 input issue로 남긴다.
+ALLOWED_INCOME_STATUS = {
+    "basic_livelihood_recipient",
+    "livelihood_benefit_recipient",
+    "medical_benefit_recipient",
+    "housing_benefit_recipient",
+    "education_benefit_recipient",
+    "near_poverty_class",
+}
+INCOME_STATUS_ALIASES = {
+    "기초생활수급자": "basic_livelihood_recipient",
+    "기초생활수급": "basic_livelihood_recipient",
+    "기초수급자": "basic_livelihood_recipient",
+    "수급자": "basic_livelihood_recipient",
+    "생계급여": "livelihood_benefit_recipient",
+    "생계급여수급자": "livelihood_benefit_recipient",
+    "의료급여": "medical_benefit_recipient",
+    "의료급여수급자": "medical_benefit_recipient",
+    "주거급여": "housing_benefit_recipient",
+    "주거급여수급자": "housing_benefit_recipient",
+    "교육급여": "education_benefit_recipient",
+    "교육급여수급자": "education_benefit_recipient",
+    "차상위": "near_poverty_class",
+    "차상위계층": "near_poverty_class",
 }
 
 
@@ -82,6 +114,9 @@ class NaturalLanguageConditionExtraction(BaseModel):
     region: str | None = None
     special: list[str] = Field(default_factory=list)
     needs: list[str] = Field(default_factory=list)
+    income_status: str | list[str] | None = None
+    age: int | None = None
+    household_member_age: int | list[int] | None = None
 
 
 class ConditionExtractor(Protocol):
@@ -153,6 +188,21 @@ class LangChainConditionExtractor:
                     - dual: 맞벌이
                     - low_income: 저소득
                     - veteran: 보훈
+
+                    income_status (수급 자격을 명확히 말한 경우에만 채운다):
+                    - basic_livelihood_recipient: "기초생활수급자"라고만 하고 급여 종류가 불명확
+                    - livelihood_benefit_recipient: 생계급여 수급
+                    - medical_benefit_recipient: 의료급여 수급
+                    - housing_benefit_recipient: 주거급여 수급
+                    - education_benefit_recipient: 교육급여 수급
+                    - near_poverty_class: 차상위계층
+                    급여 종류를 명확히 말하면 해당 세부값을, 단순히 "기초생활수급자"면
+                    basic_livelihood_recipient를 쓴다. 여러 개면 배열로, 없으면 null로 둔다.
+
+                    age: 신청자 본인 나이(정수). 예: "저는 70세" → 70. 없으면 null.
+
+                    household_member_age: 가구원의 나이(정수) 또는 나이 목록(정수 배열).
+                    예: "65세 부모님과 5살 아이가 있어요" → [65, 5]. 본인 나이는 age에 둔다. 없으면 null.
 
                     사용자가 명확히 말하지 않은 스칼라 필드는 null로, 리스트 필드(special, needs)는 빈 배열로 둔다.
                     사용자의 관심사나 원하는 지원 내용은 needs에 한국어 키워드로 담는다.
@@ -254,11 +304,76 @@ class ConditionAgent:
         )
         self._copy_special(source, normalized, issues)
 
+        # income_status는 EQ/IN exact 비교 enum이라 검증/정규화 후 보존(모르는 값은 issue).
+        self._copy_income_status(source, normalized, issues)
+        # age/household_member_age는 수치라 비숫자면 matcher가 None(manual)로 안전 처리 → 무검증 보존.
+        self._copy_raw(source, normalized, ("age", "user_age"), "age")
+        self._copy_raw(
+            source,
+            normalized,
+            ("household_member_age", "household_member_ages", "household_ages"),
+            "household_member_age",
+        )
+
         needs = source.get("needs") or source.get("user_needs")
         if isinstance(needs, list) and needs:
             normalized["needs"] = [str(item)
                                    for item in needs if item not in (None, "")]
         return normalized, issues
+
+    def _copy_raw(
+        self,
+        source: dict[str, Any],
+        target: dict[str, Any],
+        source_keys: tuple[str, ...],
+        target_key: str,
+    ) -> None:
+        """별칭 중 먼저 존재하는 값을 검증 없이 그대로 표준 키로 보존한다."""
+        source_key = next((key for key in source_keys if key in source), None)
+        if source_key is None:
+            return
+        value = source[source_key]
+        if value in (None, "", []):
+            return
+        target[target_key] = value
+
+    def _copy_income_status(
+        self,
+        source: dict[str, Any],
+        target: dict[str, Any],
+        issues: list[InputIssue],
+    ) -> None:
+        """income_status를 허용 enum으로 정규화한다. 모르는 값은 버리고 issue로 남긴다."""
+        source_key = next(
+            (key for key in ("income_status", "benefit_status") if key in source),
+            None,
+        )
+        if source_key is None:
+            return
+        raw = source[source_key]
+        if raw in (None, "", []):
+            return
+        items = raw if isinstance(raw, list) else [raw]
+
+        valid: list[str] = []
+        for item in items:
+            if item in (None, ""):
+                continue
+            value = self._normalize_code(str(item), INCOME_STATUS_ALIASES)
+            if value in ALLOWED_INCOME_STATUS:
+                valid.append(value)
+            else:
+                issues.append(
+                    InputIssue(
+                        field_name="income_status",
+                        issue_type="invalid",
+                        message=f"Unsupported income_status: {item}",
+                        priority=2,
+                    )
+                )
+        if valid:
+            deduped = list(dict.fromkeys(valid))
+            target["income_status"] = deduped[0] if len(deduped) == 1 else deduped
 
     def _copy_scalar(
         self,
@@ -308,7 +423,12 @@ class ConditionAgent:
         target: dict[str, Any],
         issues: list[InputIssue],
     ) -> None:
-        special = source.get("special", source.get("special_flags", []))
+        special: Any = []
+        for key in ("special", "special_flags", "special_conditions", "special_condition"):
+            candidate = source.get(key)
+            if candidate not in (None, "", []):
+                special = candidate
+                break
         if special in (None, ""):
             special = []
         if isinstance(special, str):

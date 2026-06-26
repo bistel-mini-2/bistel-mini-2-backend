@@ -1020,10 +1020,19 @@ class RecommendationCandidateService:
             "stage": ("stage", "life_stage", "target_stage"),
             "income_level": ("income", "income_level", "income_bracket"),
             "income": ("income", "income_level", "income_bracket"),
+            "income_status": ("income_status", "benefit_status"),
+            "childAge": ("childAge", "child_age", "child_age_range"),
             "child_age": ("childAge", "child_age", "child_age_range"),
             "child_age_range": ("childAge", "child_age", "child_age_range"),
-            "special": ("special", "special_flags"),
-            "special_flags": ("special", "special_flags"),
+            "special": ("special", "special_flags", "special_conditions", "special_condition"),
+            "special_flags": ("special", "special_flags", "special_conditions", "special_condition"),
+            "special_condition": ("special", "special_flags", "special_conditions", "special_condition"),
+            "age": ("age", "user_age"),
+            "household_member_age": (
+                "household_member_age",
+                "household_member_ages",
+                "household_ages",
+            ),
         }
         return self._first(condition, *(aliases.get(field_name, (field_name,))))
 
