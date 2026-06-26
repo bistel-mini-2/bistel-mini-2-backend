@@ -368,7 +368,7 @@ class RecommendationCandidateService:
         )
         self._apply_special_target_rule(
             policy=policy,
-            target_description=row.get("target_description"),
+            target_description=self._target_text(row),
             condition=condition,
             uncertain_rules=uncertain_rules,
             excluded_rules=excluded_rules,
@@ -1125,10 +1125,24 @@ class RecommendationCandidateService:
             row.get("benefit_type"),
             row.get("easy_summary"),
             row.get("target_description"),
+            row.get("condition_profile_target_summary"),
+            row.get("condition_profile_source_text"),
             row.get("benefit_description"),
             row.get("application_method"),
             row.get("caution"),
             *self._string_list(row.get("tags")),
+        ]
+        return " ".join(
+            str(cleaned)
+            for value in values
+            if (cleaned := self._none_if_null(value)) is not None
+        )
+
+    def _target_text(self, row: dict[str, Any]) -> str:
+        values = [
+            row.get("target_description"),
+            row.get("condition_profile_target_summary"),
+            row.get("condition_profile_source_text"),
         ]
         return " ".join(
             str(cleaned)

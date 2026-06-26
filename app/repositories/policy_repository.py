@@ -28,6 +28,67 @@ class PolicyRepository:
         return {row.policy_code: row.policy_id for row in result.all()}
 
     @classmethod
+    async def find_policy_detail(
+        cls,
+        db: AsyncSession,
+        *,
+        policy_slug: str,
+    ) -> dict[str, Any] | None:
+        result = await db.execute(
+            text(
+                """
+                SELECT
+                    p.policy_id,
+                    p.policy_code AS slug,
+                    p.policy_name AS name,
+                    p.main_category AS category,
+                    p.sub_category,
+                    COALESCE(
+                        (
+                            SELECT jsonb_agg(pt.tag_name ORDER BY pt.tag_name)
+                            FROM policy_tag pt
+                            WHERE pt.policy_id = p.policy_id
+                        ),
+                        '[]'::jsonb
+                    ) AS tags,
+                    pd.easy_summary AS summary,
+                    pd.benefit_description AS benefit_summary,
+                    p.provider_name AS agency,
+                    p.benefit_type,
+                    p.application_status,
+                    p.application_start_date,
+                    p.application_end_date,
+                    pd.application_period_text,
+                    p.region_scope,
+                    p.region_code,
+                    p.official_url,
+                    p.contact,
+                    pd.easy_summary,
+                    pd.target_description,
+                    pd.benefit_description,
+                    pd.application_method,
+                    pd.caution,
+                    cp.condition_json AS condition_profile_json,
+                    cp.target_summary AS condition_profile_target_summary,
+                    cp.confidence AS condition_profile_confidence,
+                    cp.review_required AS condition_profile_review_required,
+                    cp.quality_flags AS condition_profile_quality_flags,
+                    cp.source_text AS condition_profile_source_text,
+                    cp.source_fields AS condition_profile_source_fields
+                FROM policy p
+                LEFT JOIN policy_detail pd ON pd.policy_id = p.policy_id
+                LEFT JOIN policy_condition_profile cp
+                    ON cp.policy_id = p.policy_id
+                WHERE p.policy_code = :policy_slug
+                  AND p.is_active = TRUE
+                """,
+            ),
+            {"policy_slug": policy_slug},
+        )
+        row = result.mappings().one_or_none()
+        return dict(row) if row is not None else None
+
+    @classmethod
     async def find_policy_list(
         cls,
         db: AsyncSession,
@@ -38,6 +99,7 @@ class PolicyRepository:
         tags: list[str],
         region_code: str | None,
         stage_tags: list[str],
+        stage: str | None,
         sort: PolicySort,
         page: int,
         size: int,
@@ -48,6 +110,7 @@ class PolicyRepository:
             tags=tags,
             region_code=region_code,
             stage_tags=stage_tags,
+            stage=stage,
         )
 
         count_result = await db.execute(
@@ -56,6 +119,8 @@ class PolicyRepository:
                 SELECT COUNT(*)
                 FROM policy p
                 LEFT JOIN policy_detail pd ON pd.policy_id = p.policy_id
+                LEFT JOIN policy_condition_profile cp
+                    ON cp.policy_id = p.policy_id
                 WHERE {where_sql}
                 """,
             ),
@@ -95,9 +160,12 @@ class PolicyRepository:
                     p.region_scope,
                     p.region_code,
                     p.official_url,
+                    cp.condition_json AS condition_profile_json,
                     {cls._build_relevance_sql(query=query)} AS relevance_score
                 FROM policy p
                 LEFT JOIN policy_detail pd ON pd.policy_id = p.policy_id
+                LEFT JOIN policy_condition_profile cp
+                    ON cp.policy_id = p.policy_id
                 WHERE {where_sql}
                 ORDER BY {cls._build_sort_sql(sort=sort, has_query=query is not None)}
                 LIMIT :limit
@@ -136,6 +204,22 @@ class PolicyRepository:
                 ON policy_tag (LOWER(tag_name))
                 """
             )
+            await cur.execute(
+                """
+                CREATE INDEX IF NOT EXISTS
+                    ix_policy_condition_profile_target_summary_trgm
+                ON policy_condition_profile
+                    USING gin (target_summary gin_trgm_ops)
+                """
+            )
+            await cur.execute(
+                """
+                CREATE INDEX IF NOT EXISTS
+                    ix_policy_condition_profile_source_text_trgm
+                ON policy_condition_profile
+                    USING gin (source_text gin_trgm_ops)
+                """
+            )
 
     @classmethod
     def _build_filters(
@@ -146,6 +230,7 @@ class PolicyRepository:
         tags: list[str],
         region_code: str | None,
         stage_tags: list[str],
+        stage: str | None,
     ) -> tuple[str, dict[str, Any]]:
         conditions = ["p.is_active = TRUE"]
         params: dict[str, Any] = {}
@@ -173,7 +258,7 @@ class PolicyRepository:
             )
             params[param_name] = tag
 
-        if stage_tags:
+        if stage or stage_tags:
             stage_conditions: list[str] = []
             for index, stage_tag in enumerate(stage_tags):
                 param_name = f"stage_tag_{index}"
@@ -181,13 +266,35 @@ class PolicyRepository:
                     f"LOWER(stage_tag.tag_name) = LOWER(:{param_name})"
                 )
                 params[param_name] = stage_tag
+            params["stage_value"] = stage or ""
+            params["stage_json_pattern"] = cls._json_text_like_pattern(stage)
             conditions.append(
                 f"""
-                EXISTS (
-                    SELECT 1
-                    FROM policy_tag stage_tag
-                    WHERE stage_tag.policy_id = p.policy_id
-                      AND ({" OR ".join(stage_conditions)})
+                (
+                    EXISTS (
+                        SELECT 1
+                        FROM policy_rule stage_rule
+                        WHERE stage_rule.policy_id = p.policy_id
+                          AND stage_rule.origin = 'condition_profile'
+                          AND stage_rule.field_name = 'stage'
+                          AND stage_rule.manual_check_required = FALSE
+                          AND stage_rule.is_exclusion = FALSE
+                          AND stage_rule.rule_type != 'UNSUPPORTED'
+                          AND (
+                              stage_rule.value_json =
+                                  to_jsonb(CAST(:stage_value AS text))
+                              OR (
+                                  jsonb_typeof(stage_rule.value_json) = 'array'
+                                  AND stage_rule.value_json ? :stage_value
+                              )
+                          )
+                    )
+                    OR (
+                        cp.condition_json IS NOT NULL
+                        AND cp.condition_json::text
+                            ILIKE :stage_json_pattern ESCAPE '\\'
+                    )
+                    {cls._stage_tag_fallback_sql(stage_conditions)}
                 )
                 """
             )
@@ -211,6 +318,8 @@ class PolicyRepository:
                 OR pd.target_description ILIKE :query_pattern ESCAPE '\\'
                 OR pd.benefit_description ILIKE :query_pattern ESCAPE '\\'
                 OR pd.application_method ILIKE :query_pattern ESCAPE '\\'
+                OR cp.target_summary ILIKE :query_pattern ESCAPE '\\'
+                OR cp.source_text ILIKE :query_pattern ESCAPE '\\'
                 OR EXISTS (
                     SELECT 1
                     FROM policy_tag search_tag
@@ -234,6 +343,8 @@ class PolicyRepository:
             "OR pd.target_description ILIKE :query_pattern ESCAPE '\\' "
             "OR pd.benefit_description ILIKE :query_pattern ESCAPE '\\' "
             "OR pd.application_method ILIKE :query_pattern ESCAPE '\\' "
+            "OR cp.target_summary ILIKE :query_pattern ESCAPE '\\' "
+            "OR cp.source_text ILIKE :query_pattern ESCAPE '\\' "
             "THEN 20 ELSE 0 END"
         )
 
@@ -249,3 +360,27 @@ class PolicyRepository:
         if sort == PolicySort.RELEVANCE and has_query:
             return "relevance_score DESC, p.updated_at DESC, p.policy_id DESC"
         return "p.updated_at DESC, p.policy_id DESC"
+
+    @staticmethod
+    def _json_text_like_pattern(value: str | None) -> str:
+        if not value:
+            return "__no_stage_filter__"
+        escaped = (
+            value.replace("\\", "\\\\")
+            .replace("%", "\\%")
+            .replace("_", "\\_")
+        )
+        return f'%"{escaped}"%'
+
+    @staticmethod
+    def _stage_tag_fallback_sql(stage_conditions: list[str]) -> str:
+        if not stage_conditions:
+            return ""
+        return f"""
+                    OR EXISTS (
+                        SELECT 1
+                        FROM policy_tag stage_tag
+                        WHERE stage_tag.policy_id = p.policy_id
+                          AND ({" OR ".join(stage_conditions)})
+                    )
+        """

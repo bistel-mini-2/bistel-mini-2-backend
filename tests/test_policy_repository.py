@@ -6,50 +6,60 @@ from app.schemas.policy_schema import PolicySort
 
 def test_build_filters_matches_documented_contract() -> None:
     where_sql, params = PolicyRepository._build_filters(
-        query_pattern="%출산%",
-        category="임신·출산",
-        tags=["영유아", "아동"],
+        query_pattern="%birth%",
+        category="pregnancy",
+        tags=["infant", "child"],
         region_code="national",
         stage_tags=[],
+        stage=None,
     )
 
     assert "p.policy_name ILIKE" in where_sql
     assert "p.main_category ILIKE" in where_sql
     assert "pd.application_method ILIKE" in where_sql
+    assert "cp.target_summary ILIKE" in where_sql
+    assert "cp.source_text ILIKE" in where_sql
     assert "LOWER(p.main_category) = LOWER(:category)" in where_sql
     assert where_sql.count("EXISTS") == 3
     assert "p.region_scope = 'NATIONAL'" in where_sql
     assert params == {
-        "query_pattern": "%출산%",
-        "category": "임신·출산",
-        "tag_0": "영유아",
-        "tag_1": "아동",
+        "query_pattern": "%birth%",
+        "category": "pregnancy",
+        "tag_0": "infant",
+        "tag_1": "child",
     }
 
 
-def test_build_filters_supports_stage_tag_variants() -> None:
+def test_build_filters_supports_condition_profile_stage_filter() -> None:
     where_sql, params = PolicyRepository._build_filters(
         query_pattern=None,
         category=None,
         tags=[],
         region_code=None,
-        stage_tags=["임신 · 출산", "임신·출산"],
+        stage_tags=["pregnancy"],
+        stage="pregnant",
     )
 
+    assert "FROM policy_rule stage_rule" in where_sql
+    assert "stage_rule.origin = 'condition_profile'" in where_sql
+    assert "cp.condition_json::text" in where_sql
     assert "FROM policy_tag stage_tag" in where_sql
     assert params == {
-        "stage_tag_0": "임신 · 출산",
-        "stage_tag_1": "임신·출산",
+        "stage_tag_0": "pregnancy",
+        "stage_value": "pregnant",
+        "stage_json_pattern": '%"pregnant"%',
     }
 
 
 def test_relevance_weights_title_above_category_and_detail() -> None:
-    sql = PolicyRepository._build_relevance_sql(query="출산")
+    sql = PolicyRepository._build_relevance_sql(query="birth")
 
     assert "THEN 400" in sql
     assert "THEN 200" in sql
     assert "THEN 100" in sql
     assert "THEN 20" in sql
+    assert "cp.target_summary ILIKE" in sql
+    assert "cp.source_text ILIKE" in sql
 
 
 def test_sort_sql_uses_allowlisted_columns() -> None:
@@ -92,3 +102,5 @@ def test_ensure_search_indexes_creates_issue_29_indexes() -> None:
     assert "main_category gin_trgm_ops" in combined_sql
     assert "ON policy (region_code)" in combined_sql
     assert "ON policy_tag (LOWER(tag_name))" in combined_sql
+    assert "policy_condition_profile_target_summary_trgm" in combined_sql
+    assert "policy_condition_profile_source_text_trgm" in combined_sql
