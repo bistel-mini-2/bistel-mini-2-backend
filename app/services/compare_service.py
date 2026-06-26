@@ -18,7 +18,6 @@ class CompareService:
     DIFF_FIELDS = (
         ("지원 금액", "benefit_description"),
         ("지원 대상", "target_description"),
-        ("신청 기간", "application_period_text"),
         ("신청 방법", "application_method"),
         ("제출 서류", "required_documents"),
         ("지원 유형", "benefit_type"),
@@ -204,10 +203,10 @@ class CompareService:
         if benefit_a != benefit_b:
             return (
                 "지원 대상 조건이 비슷하다면 실제 받을 수 있는 지원 내용과 "
-                "신청 기간을 기준으로 더 유리한 정책을 선택하세요."
+                "신청 방법을 기준으로 더 유리한 정책을 선택하세요."
             )
         return (
-            "두 정책의 핵심 조건이 비슷합니다. 신청 기간, 제출 서류, 담당 기관을 "
+            "두 정책의 핵심 조건이 비슷합니다. 제출 서류, 담당 기관, 신청 방법을 "
             "함께 확인해 준비 부담이 적은 정책부터 진행하세요."
         )
 

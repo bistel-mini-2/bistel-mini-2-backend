@@ -136,3 +136,44 @@ def test_ensure_search_indexes_creates_issue_29_indexes() -> None:
     assert "ON policy_tag (LOWER(tag_name))" in combined_sql
     assert "policy_condition_profile_target_summary_trgm" in combined_sql
     assert "policy_condition_profile_source_text_trgm" in combined_sql
+
+
+def test_related_policy_conditions_use_category_stage_and_tags() -> None:
+    params: dict[str, object] = {}
+    stage_sql = PolicyRepository._related_stage_condition(
+        ["pregnant", "pregnant"],
+        params,
+    )
+    tag_sql = PolicyRepository._related_tag_condition(
+        ["pregnancy", "Pregnancy", "child"],
+        params,
+    )
+
+    assert "FROM policy_rule related_stage_rule_0" in stage_sql
+    assert "cp.condition_json::text" in stage_sql
+    assert params["related_stage_0"] == "pregnant"
+    assert params["related_stage_json_0"] == '%"pregnant"%'
+    assert "related_stage_1" not in params
+
+    assert "FROM policy_tag related_tag" in tag_sql
+    assert "related_tag_0" in params
+    assert "related_tag_2" in params
+    assert "related_tag_1" not in params
+
+
+def test_related_policy_region_condition_prefers_scope_then_code() -> None:
+    params: dict[str, object] = {}
+
+    assert (
+        PolicyRepository._related_region_condition("NATIONAL", "seoul", params)
+        == "p.region_scope = 'NATIONAL'"
+    )
+
+    local_sql = PolicyRepository._related_region_condition(
+        "LOCAL",
+        "seoul",
+        params,
+    )
+
+    assert local_sql == "p.region_code = :related_region_code"
+    assert params["related_region_code"] == "seoul"

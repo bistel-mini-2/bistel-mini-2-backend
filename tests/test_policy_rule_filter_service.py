@@ -16,7 +16,7 @@ def test_policy_rule_filter_matches_income_limit() -> None:
         ],
     )
 
-    assert result.matched_conditions == ["중위소득 100% 이하"]
+    assert result.matched_conditions == ["중위소득 100% 이하 충족"]
     assert result.rule_failures == []
 
 
@@ -36,7 +36,7 @@ def test_policy_rule_filter_excludes_hard_rule_mismatch() -> None:
     )
 
     assert result.matched_conditions == []
-    assert result.rule_failures == ["중위소득 100% 이하"]
+    assert result.rule_failures == ["중위소득 100% 이하 미충족"]
 
 
 def test_policy_rule_filter_marks_missing_hard_rule_field() -> None:
@@ -54,7 +54,7 @@ def test_policy_rule_filter_marks_missing_hard_rule_field() -> None:
         ],
     )
 
-    assert result.missing_conditions == ["special"]
+    assert result.missing_conditions == ["다자녀 가구 대상 확인 필요"]
 
 
 def test_policy_rule_filter_preserves_manual_check_rule() -> None:
@@ -100,7 +100,9 @@ def test_policy_rule_filter_merges_alternative_in_rules() -> None:
     )
 
     assert result.rule_failures == []
-    assert result.matched_conditions == ["lifeArray: 임신 · 출산, lifeArray: 영유아"]
+    assert result.matched_conditions == [
+        "lifeArray: 임신 · 출산, lifeArray: 영유아 충족"
+    ]
 
 
 def test_policy_rule_filter_reports_missing_alternative_rule_once() -> None:
@@ -126,4 +128,4 @@ def test_policy_rule_filter_reports_missing_alternative_rule_once() -> None:
         ],
     )
 
-    assert result.missing_conditions == ["special"]
+    assert result.missing_conditions == ["한부모, 다자녀 확인 필요"]
