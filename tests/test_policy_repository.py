@@ -48,7 +48,39 @@ def test_build_filters_supports_condition_profile_stage_filter() -> None:
         "stage_tag_0": "pregnancy",
         "stage_value": "pregnant",
         "stage_json_pattern": '%"pregnant"%',
+        "stage_json_alias_pattern": "__no_stage_filter__",
     }
+
+
+def test_build_filters_searches_youth_profile_alias_for_teen_stage() -> None:
+    where_sql, params = PolicyRepository._build_filters(
+        query_pattern=None,
+        category=None,
+        tags=[],
+        region_code=None,
+        stage_tags=[],
+        stage="teen",
+    )
+
+    assert "stage_json_alias_pattern" in where_sql
+    assert params["stage_value"] == "teen"
+    assert params["stage_json_pattern"] == '%"teen"%'
+    assert params["stage_json_alias_pattern"] == '%"youth"%'
+
+
+def test_build_filters_searches_youth_profile_alias_for_young_adult_stage() -> None:
+    _, params = PolicyRepository._build_filters(
+        query_pattern=None,
+        category=None,
+        tags=[],
+        region_code=None,
+        stage_tags=[],
+        stage="young_adult",
+    )
+
+    assert params["stage_value"] == "young_adult"
+    assert params["stage_json_pattern"] == '%"young\\_adult"%'
+    assert params["stage_json_alias_pattern"] == '%"youth"%'
 
 
 def test_relevance_weights_title_above_category_and_detail() -> None:

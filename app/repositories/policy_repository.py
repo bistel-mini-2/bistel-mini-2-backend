@@ -268,6 +268,9 @@ class PolicyRepository:
                 params[param_name] = stage_tag
             params["stage_value"] = stage or ""
             params["stage_json_pattern"] = cls._json_text_like_pattern(stage)
+            params["stage_json_alias_pattern"] = cls._stage_json_alias_pattern(
+                stage
+            )
             conditions.append(
                 f"""
                 (
@@ -291,8 +294,12 @@ class PolicyRepository:
                     )
                     OR (
                         cp.condition_json IS NOT NULL
-                        AND cp.condition_json::text
-                            ILIKE :stage_json_pattern ESCAPE '\\'
+                        AND (
+                            cp.condition_json::text
+                                ILIKE :stage_json_pattern ESCAPE '\\'
+                            OR cp.condition_json::text
+                                ILIKE :stage_json_alias_pattern ESCAPE '\\'
+                        )
                     )
                     {cls._stage_tag_fallback_sql(stage_conditions)}
                 )
@@ -371,6 +378,14 @@ class PolicyRepository:
             .replace("_", "\\_")
         )
         return f'%"{escaped}"%'
+
+    @classmethod
+    def _stage_json_alias_pattern(cls, value: str | None) -> str:
+        aliases = {
+            "teen": "youth",
+            "young_adult": "youth",
+        }
+        return cls._json_text_like_pattern(aliases.get(value or ""))
 
     @staticmethod
     def _stage_tag_fallback_sql(stage_conditions: list[str]) -> str:
