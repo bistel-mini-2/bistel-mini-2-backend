@@ -16,9 +16,6 @@ from app.schemas.apply_schema import (
 )
 
 
-_APPLY_PERIOD_FALLBACK = "별도 확인 필요"
-
-
 class ApplyPreparationService:
     @staticmethod
     async def create(
@@ -149,7 +146,6 @@ async def _build_response(
         saved=progress is not None,
         policy_id=policy.policy_code,
         how_to_apply=detail.application_method if detail else None,
-        apply_period=_resolve_apply_period(detail, policy),
         contact=policy.contact,
         official_url=policy.official_url,
         checklist=checklist,
@@ -178,11 +174,3 @@ async def _ensure_checklist_items(
     ]
     if missing_items:
         await ApplyPreparationRepository.bulk_create_checklist_items(db, missing_items)
-
-
-def _resolve_apply_period(detail: PolicyDetail | None, policy: Policy) -> str:
-    if detail and detail.application_period_text:
-        return detail.application_period_text
-    if policy.application_start_date and policy.application_end_date:
-        return f"{policy.application_start_date} ~ {policy.application_end_date}"
-    return _APPLY_PERIOD_FALLBACK

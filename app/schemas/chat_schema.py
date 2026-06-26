@@ -76,7 +76,6 @@ class ApplyCard(BaseModel):
     policy_id: str
     policy_name: str
     how_to_apply: str | None = None
-    apply_period: str | None = None
     contact: str | None = None
     official_url: str | None = None
     checklist: list[ChecklistItem] = Field(default_factory=list)

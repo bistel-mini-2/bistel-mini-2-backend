@@ -70,6 +70,13 @@ _COMMON_SAFETY_RULES = """[안전 안내 — 모든 답변에 적용]
 - 답변 본문에 면책 문구를 직접 넣지 마세요 (별도 disclaimer 필드로 노출됩니다).
 - 정확한 판단·신청 가능 여부는 공식기관(주민센터·복지로 등) 확인이 필요함을 자연스럽게 안내하세요."""
 
+_APPLICATION_PERIOD_CONTEXT_RULES = """[신청 기간 판단 규칙]
+- 신청기간 정보가 명확하고 신뢰 가능할 때만 안내하세요.
+- 신청기간 정보가 없거나 불명확하면 "공식 안내에서 확인해 주세요."라고 답하세요.
+- 날짜 파싱이 애매하면 현재 신청 가능 여부를 단정하지 마세요.
+- source_text에 신청기간 관련 문구가 있으면 그 문구를 우선 근거로 삼으세요.
+- application_status와 신청기간 정보가 충돌하면 단정하지 말고 공식 안내 확인을 유도하세요."""
+
 
 _BASE_BRANCH_PROMPTS: dict[Intent, str] = {
     "policy_summary": """당신은 임신·출산·육아 정책을 안내하는 챗봇입니다.
@@ -404,7 +411,6 @@ def _build_apply_card(
         "policy_id": apply_response.policy_id,
         "policy_name": policy_name or apply_response.policy_id,
         "how_to_apply": apply_response.how_to_apply,
-        "apply_period": apply_response.apply_period,
         "contact": apply_response.contact,
         "official_url": apply_response.official_url,
         "checklist": checklist,
@@ -419,8 +425,6 @@ def _format_apply_card_context(apply_card: dict[str, Any]) -> str:
         parts.append(f"- 정책명: {name}")
     if apply_card.get("how_to_apply"):
         parts.append(f"- 신청 방법: {apply_card['how_to_apply']}")
-    if apply_card.get("apply_period"):
-        parts.append(f"- 신청 기간: {apply_card['apply_period']}")
     if apply_card.get("contact"):
         parts.append(f"- 문의처: {apply_card['contact']}")
     if apply_card.get("official_url"):
@@ -432,6 +436,31 @@ def _format_apply_card_context(apply_card: dict[str, Any]) -> str:
             parts.append(f"- 체크리스트: {items}")
     if apply_card.get("caution"):
         parts.append(f"- 주의사항: {apply_card['caution']}")
+    return "\n".join(parts)
+
+
+def _format_application_period_context(context: dict[str, Any] | None) -> str:
+    if not context:
+        return ""
+
+    parts: list[str] = []
+    field_labels = {
+        "application_status": "신청 상태",
+        "application_period_text": "신청 기간 텍스트",
+        "application_start_date": "신청 시작일",
+        "application_end_date": "신청 종료일",
+        "deadline": "마감일",
+        "source_text": "조건/원문 source_text",
+        "source_fields": "source_fields",
+    }
+    for field, label in field_labels.items():
+        value = context.get(field)
+        if value in (None, "", []):
+            continue
+        if isinstance(value, list):
+            value = ", ".join(str(item) for item in value if item)
+        parts.append(f"- {label}: {value}")
+
     return "\n".join(parts)
 
 
@@ -647,6 +676,7 @@ class ChatGraphNodes:
             }
 
         apply_card = _build_apply_card(apply_response, policy_name)
+        application_period_context = await self._load_application_period_context(slug)
         apply_policies = [
             {
                 "policy_id": None,
@@ -657,7 +687,12 @@ class ChatGraphNodes:
                 "tagTone": None,
             }
         ]
-        content = await self._generate_apply_answer(state, evidences, apply_card)
+        content = await self._generate_apply_answer(
+            state,
+            evidences,
+            apply_card,
+            application_period_context,
+        )
         return {
             **state,
             "branch_content": content,
@@ -915,16 +950,69 @@ class ChatGraphNodes:
             logger.exception("chat branch_apply preview failed")
             return None
 
+    async def _load_application_period_context(
+        self,
+        policy_slug: str,
+    ) -> dict[str, Any] | None:
+        try:
+            async with AsyncSessionLocal() as db:
+                result = await db.execute(
+                    text(
+                        """
+                        SELECT
+                            p.application_status,
+                            p.application_start_date,
+                            p.application_end_date,
+                            p.application_end_date AS deadline,
+                            pd.application_period_text,
+                            cp.source_text,
+                            cp.source_fields
+                        FROM policy p
+                        LEFT JOIN policy_detail pd ON pd.policy_id = p.policy_id
+                        LEFT JOIN policy_condition_profile cp
+                            ON cp.policy_id = p.policy_id
+                        WHERE p.policy_code = :policy_slug
+                          AND p.is_active = TRUE
+                        """
+                    ),
+                    {"policy_slug": policy_slug},
+                )
+                row = result.mappings().one_or_none()
+                if row is None:
+                    return None
+                return {
+                    "application_status": row.get("application_status"),
+                    "application_start_date": row.get("application_start_date"),
+                    "application_end_date": row.get("application_end_date"),
+                    "deadline": row.get("deadline"),
+                    "application_period_text": row.get("application_period_text"),
+                    "source_text": row.get("source_text"),
+                    "source_fields": row.get("source_fields"),
+                }
+        except Exception:
+            logger.exception("chat application period context lookup failed")
+            return None
+
     async def _generate_apply_answer(
         self,
         state: ChatGraphState,
         evidences: list[dict],
         apply_card: dict,
+        application_period_context: dict[str, Any] | None = None,
     ) -> str:
         system = _BRANCH_SYSTEM_PROMPTS["apply"]
         apply_context = _format_apply_card_context(apply_card)
         if apply_context:
             system = f"{system}\n\n신청 정보:\n{apply_context}"
+        period_context = _format_application_period_context(
+            application_period_context
+        )
+        if period_context:
+            system = (
+                f"{system}\n\n{_APPLICATION_PERIOD_CONTEXT_RULES}"
+                f"\n\n신청 기간 내부 참고 정보(사용자 카드에는 표시하지 않음):\n"
+                f"{period_context}"
+            )
         if evidences:
             rag_context = "\n\n".join(
                 f"[{evidence.get('source_title') or '정책'}] {evidence.get('snippet', '')}"

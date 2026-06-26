@@ -10,6 +10,7 @@ from app.ai.nodes.chat import chat_nodes
 from app.ai.nodes.chat.chat_nodes import (
     ChatGraphNodes,
     _build_apply_card,
+    _format_application_period_context,
     _format_apply_card_context,
     _is_context_dependent_apply_question,
     _pick_apply_target,
@@ -25,7 +26,6 @@ def _apply_response() -> ApplyPreparationResponse:
         saved=False,
         policy_id="WLF1",
         how_to_apply="복지로 온라인 신청",
-        apply_period="2026-01-01 ~ 2026-12-31",
         contact="129",
         official_url="https://www.bokjiro.go.kr",
         checklist=[
@@ -157,7 +157,6 @@ def test_build_apply_card_maps_fields_and_limits_checklist() -> None:
         saved=False,
         policy_id="WLF1",
         how_to_apply="온라인",
-        apply_period="상시",
         contact="129",
         official_url="https://example.com",
         checklist=[
@@ -173,8 +172,26 @@ def test_build_apply_card_maps_fields_and_limits_checklist() -> None:
     assert card["policy_id"] == "WLF1"
     assert card["policy_name"] == "테스트 정책"
     assert card["how_to_apply"] == "온라인"
+    assert "apply_period" not in card
     assert len(card["checklist"]) == 5
     assert card["checklist"][0] == {"id": "1", "label": "항목1", "done": False}
+
+
+def test_application_period_context_is_internal_only() -> None:
+    context = _format_application_period_context(
+        {
+            "application_status": "AVAILABLE",
+            "application_period_text": "상시 신청",
+            "application_start_date": "2026-01-01",
+            "application_end_date": None,
+            "source_text": "신청기간은 별도 공지합니다.",
+            "source_fields": ["application_period_text", "source_text"],
+        }
+    )
+
+    assert "신청 기간 텍스트: 상시 신청" in context
+    assert "조건/원문 source_text: 신청기간은 별도 공지합니다." in context
+    assert "source_fields: application_period_text, source_text" in context
 
 
 def test_format_apply_card_context_lists_known_fields() -> None:
@@ -182,7 +199,6 @@ def test_format_apply_card_context_lists_known_fields() -> None:
     text = _format_apply_card_context(card)
     assert "임신·출산 진료비" in text
     assert "복지로" in text
-    assert "신청 기간" in text
     assert "129" in text
     assert "신분증" in text
 

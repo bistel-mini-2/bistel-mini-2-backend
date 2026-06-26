@@ -12,7 +12,6 @@ class ApplyPreparationResponse(BaseModel):
     saved: bool
     policy_id: str
     how_to_apply: str | None
-    apply_period: str | None
     contact: str | None
     official_url: str | None
     checklist: list[ChecklistItem]

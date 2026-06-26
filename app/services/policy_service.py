@@ -39,7 +39,25 @@ class PolicyService:
                 code=ErrorCode.POLICY_NOT_FOUND,
                 message="Policy not found",
             )
-        return self._to_detail_response(row)
+        detail = self._to_detail_response(row)
+        related_rows = await PolicyRepository.find_related_policies(
+            db,
+            excluded_policy_ids=[int(row["policy_id"])],
+            category=row["category"],
+            region_scope=row["region_scope"],
+            region_code=row["region_code"],
+            target_stages=detail.target_stage,
+            tags=list(row["tags"] or []),
+            limit=3,
+        )
+        return detail.model_copy(
+            update={
+                "related_policies": [
+                    self._to_response(related_row)
+                    for related_row in related_rows
+                ],
+            },
+        )
 
     async def get_policy_list(
         self,
@@ -127,10 +145,6 @@ class PolicyService:
             agency=row["agency"],
             benefit_type=row["benefit_type"],
             application_status=row["application_status"],
-            application_start_date=row["application_start_date"],
-            application_end_date=row["application_end_date"],
-            deadline=row["application_end_date"],
-            application_period_text=row["application_period_text"],
             region_scope=row["region_scope"],
             region_code=row["region_code"],
             region=(
@@ -144,15 +158,33 @@ class PolicyService:
     @staticmethod
     def _to_detail_response(row: dict[str, Any]) -> PolicyDetailResponse:
         list_response = PolicyService._to_response(row)
+        condition_profile = PolicyService._to_condition_profile(row)
         return PolicyDetailResponse(
             **list_response.model_dump(),
             contact=row["contact"],
+            benefit=row["benefit_description"],
+            conditions=PolicyService._conditions_from_profile(
+                condition_profile,
+            )
+            or row["target_description"],
+            how_to_apply=row["application_method"],
             easy_summary=row["easy_summary"],
             target_description=row["target_description"],
             benefit_description=row["benefit_description"],
             application_method=row["application_method"],
             caution=row["caution"],
-            condition_profile=PolicyService._to_condition_profile(row),
+            condition_profile=condition_profile,
+        )
+
+    @staticmethod
+    def _conditions_from_profile(
+        condition_profile: PolicyConditionProfileResponse | None,
+    ) -> str | None:
+        if condition_profile is None:
+            return None
+        return (
+            condition_profile.target_summary
+            or condition_profile.source_text
         )
 
     @staticmethod

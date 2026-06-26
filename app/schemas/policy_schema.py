@@ -1,4 +1,3 @@
-from datetime import date
 from enum import StrEnum
 from typing import Any
 
@@ -25,10 +24,6 @@ class PolicyListItemResponse(BaseModel):
     agency: str | None = None
     benefit_type: str | None = None
     application_status: str | None = None
-    application_start_date: date | None = None
-    application_end_date: date | None = None
-    deadline: date | None = None
-    application_period_text: str | None = None
     region_scope: str | None = None
     region_code: str | None = None
     region: str | None = None
@@ -47,9 +42,13 @@ class PolicyConditionProfileResponse(BaseModel):
 
 class PolicyDetailResponse(PolicyListItemResponse):
     contact: str | None = None
+    benefit: str | None = None
+    conditions: str | None = None
+    how_to_apply: str | None = None
     easy_summary: str | None = None
     target_description: str | None = None
     benefit_description: str | None = None
     application_method: str | None = None
     caution: str | None = None
     condition_profile: PolicyConditionProfileResponse | None = None
+    related_policies: list[PolicyListItemResponse] = Field(default_factory=list)

@@ -73,7 +73,6 @@ def test_to_response_adds_issue_29_compatible_fields() -> None:
     response = PolicyService._to_response(row)
 
     assert response.target_stage == ["newborn", "infant"]
-    assert response.deadline is None
     assert response.region == "national"
 
 
@@ -148,6 +147,11 @@ def test_get_policy_detail_returns_detail_fields(monkeypatch) -> None:
         "find_policy_detail",
         find_policy_detail,
     )
+    monkeypatch.setattr(
+        PolicyRepository,
+        "find_related_policies",
+        AsyncMock(return_value=[]),
+    )
 
     response = asyncio.run(
         PolicyService().get_policy_detail(
@@ -213,6 +217,83 @@ def test_to_detail_response_includes_condition_profile() -> None:
         "pregnant"
     )
     assert response.condition_profile.source_text == "source text"
+    assert response.conditions == "profile target"
+
+
+def test_get_policy_detail_includes_related_policies(monkeypatch) -> None:
+    db = object()
+    row = {
+        "policy_id": 1,
+        "slug": "WLF00000024",
+        "name": "test policy",
+        "category": "support",
+        "sub_category": None,
+        "tags": ["pregnancy"],
+        "summary": "summary",
+        "benefit_summary": "benefit",
+        "agency": "agency",
+        "benefit_type": "cash",
+        "application_status": "AVAILABLE",
+        "application_start_date": None,
+        "application_end_date": None,
+        "application_period_text": "always",
+        "region_scope": "NATIONAL",
+        "region_code": None,
+        "official_url": "https://example.com",
+        "contact": "129",
+        "easy_summary": "easy",
+        "target_description": "target",
+        "benefit_description": "benefit",
+        "application_method": "online",
+        "caution": None,
+        "condition_profile_json": {
+            "condition_tree": {
+                "field": "stage",
+                "operator": "EQ",
+                "value": "pregnant",
+            }
+        },
+    }
+    related_row = {
+        **row,
+        "policy_id": 2,
+        "slug": "WLF00000025",
+        "name": "related policy",
+    }
+    find_policy_detail = AsyncMock(return_value=row)
+    find_related_policies = AsyncMock(return_value=[related_row])
+    monkeypatch.setattr(
+        PolicyRepository,
+        "find_policy_detail",
+        find_policy_detail,
+    )
+    monkeypatch.setattr(
+        PolicyRepository,
+        "find_related_policies",
+        find_related_policies,
+    )
+
+    response = asyncio.run(
+        PolicyService().get_policy_detail(
+            db,  # type: ignore[arg-type]
+            policy_slug="WLF00000024",
+        )
+    )
+
+    assert response.benefit == "benefit"
+    assert response.conditions == "target"
+    assert response.how_to_apply == "online"
+    assert response.related_policies[0].slug == "WLF00000025"
+    find_related_policies.assert_awaited_once_with(
+        db,
+        excluded_policy_ids=[1],
+        category="support",
+        region_scope="NATIONAL",
+        region_code=None,
+        target_stages=["pregnant"],
+        tags=["pregnancy"],
+        limit=3,
+    )
 
 
 def test_get_policy_detail_rejects_unknown_policy(monkeypatch) -> None:
