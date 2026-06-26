@@ -6,7 +6,11 @@ from fastapi.testclient import TestClient
 from app.api.policy_controller import router
 from app.common.exceptions import register_exception_handlers
 from app.db.session import get_db_session
-from app.schemas.policy_schema import PolicyListItemResponse, PolicySort
+from app.schemas.policy_schema import (
+    PolicyDetailResponse,
+    PolicyListItemResponse,
+    PolicySort,
+)
 from app.services.policy_service import PolicyService
 
 
@@ -176,3 +180,43 @@ def test_policy_list_rejects_invalid_parameters() -> None:
 
     assert response.status_code == 422
     assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+
+
+def test_policy_detail_returns_policy(monkeypatch) -> None:
+    async def fake_db() -> AsyncGenerator[object, None]:
+        yield object()
+
+    async def fake_get_policy_detail(self, db, *, policy_slug: str):
+        assert policy_slug == "WLF00000024"
+        return PolicyDetailResponse(
+            policy_id="1",
+            slug=policy_slug,
+            name="테스트 정책",
+            category="생활지원",
+            tags=["영유아"],
+            summary="쉬운 요약",
+            agency="보건복지부",
+            target_description="지원 대상",
+            benefit_description="지원 내용",
+            application_method="온라인 신청",
+            application_period_text="상시 신청",
+            contact="129",
+        )
+
+    monkeypatch.setattr(
+        PolicyService,
+        "get_policy_detail",
+        fake_get_policy_detail,
+    )
+
+    app = FastAPI()
+    app.include_router(router)
+    app.dependency_overrides[get_db_session] = fake_db
+
+    with TestClient(app) as client:
+        response = client.get("/api/v1/policies/WLF00000024")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["data"]["slug"] == "WLF00000024"
+    assert body["data"]["target_description"] == "지원 대상"

@@ -368,7 +368,7 @@ class RecommendationCandidateService:
         )
         self._apply_special_target_rule(
             policy=policy,
-            target_description=row.get("target_description"),
+            target_description=self._target_text(row),
             condition=condition,
             uncertain_rules=uncertain_rules,
             excluded_rules=excluded_rules,
@@ -1020,10 +1020,19 @@ class RecommendationCandidateService:
             "stage": ("stage", "life_stage", "target_stage"),
             "income_level": ("income", "income_level", "income_bracket"),
             "income": ("income", "income_level", "income_bracket"),
+            "income_status": ("income_status", "benefit_status"),
+            "childAge": ("childAge", "child_age", "child_age_range"),
             "child_age": ("childAge", "child_age", "child_age_range"),
             "child_age_range": ("childAge", "child_age", "child_age_range"),
-            "special": ("special", "special_flags"),
-            "special_flags": ("special", "special_flags"),
+            "special": ("special", "special_flags", "special_conditions", "special_condition"),
+            "special_flags": ("special", "special_flags", "special_conditions", "special_condition"),
+            "special_condition": ("special", "special_flags", "special_conditions", "special_condition"),
+            "age": ("age", "user_age"),
+            "household_member_age": (
+                "household_member_age",
+                "household_member_ages",
+                "household_ages",
+            ),
         }
         return self._first(condition, *(aliases.get(field_name, (field_name,))))
 
@@ -1116,10 +1125,24 @@ class RecommendationCandidateService:
             row.get("benefit_type"),
             row.get("easy_summary"),
             row.get("target_description"),
+            row.get("condition_profile_target_summary"),
+            row.get("condition_profile_source_text"),
             row.get("benefit_description"),
             row.get("application_method"),
             row.get("caution"),
             *self._string_list(row.get("tags")),
+        ]
+        return " ".join(
+            str(cleaned)
+            for value in values
+            if (cleaned := self._none_if_null(value)) is not None
+        )
+
+    def _target_text(self, row: dict[str, Any]) -> str:
+        values = [
+            row.get("target_description"),
+            row.get("condition_profile_target_summary"),
+            row.get("condition_profile_source_text"),
         ]
         return " ".join(
             str(cleaned)

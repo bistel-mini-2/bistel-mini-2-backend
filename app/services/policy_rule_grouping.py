@@ -31,6 +31,24 @@ INCOME_LEVEL_RANGE: dict[str, tuple[float, float]] = {
     "high": (150.0, float("inf")),
 }
 
+# income_status 계층: 세부 급여 수급자격(medical/housing/education/livelihood)은
+# basic_livelihood_recipient(기초생활수급)의 하위 범주다. 세부값 보유자는 merge에서
+# [세부값, basic]으로 확장되므로 세부/광의 정책 모두 match된다. 반대로 사용자가 광의(basic)
+# 만 가진 경우 세부값을 요구하는 정책은 "확정 불가"이므로 False(탈락)가 아니라 None(수동 확인).
+INCOME_STATUS_BASIC = "basic_livelihood_recipient"
+INCOME_STATUS_SPECIFIC = {
+    "medical_benefit_recipient",
+    "housing_benefit_recipient",
+    "education_benefit_recipient",
+    "livelihood_benefit_recipient",
+}
+
+
+def _as_str_set(value: Any) -> set[str]:
+    if isinstance(value, list):
+        return {str(item) for item in value}
+    return {str(value)}
+
 
 def _income_bucket_match(
     operator: str,
@@ -68,6 +86,115 @@ def _income_bucket_match(
     if upper <= threshold:
         return False
     return None
+
+
+# 사용자 child_age 버킷(ChildAge enum) → 만 나이 [최소, 최대] 정수 범위(포함).
+# 정책 룰의 숫자 연령 기준(child_age LT/LTE/GT/GTE n)과 보수적으로 비교한다.
+# "preborn"은 임신 전 단계라 나이 비교 대상이 아니므로 제외 → to_number=None → manual.
+CHILD_AGE_RANGE: dict[str, tuple[float, float]] = {
+    "0": (0.0, 0.0),
+    "1": (1.0, 1.0),
+    "2-5": (2.0, 5.0),
+    "6-12": (6.0, 12.0),
+    "13+": (13.0, float("inf")),
+}
+
+
+def _child_age_bucket_match(
+    operator: str,
+    lower: float,
+    upper: float,
+    threshold: float,
+) -> "bool | None":
+    """child_age 버킷 [lower, upper](포함)를 정책 기준값과 비교한다.
+
+    - 버킷 전체가 조건 만족 → True
+    - 버킷 전체가 불만족 → False
+    - 버킷이 기준을 가로지름 → None(수동 확인, 잘못 탈락 방지)
+    """
+    if operator == "LTE":
+        if upper <= threshold:
+            return True
+        if lower > threshold:
+            return False
+        return None
+    if operator == "LT":
+        if upper < threshold:
+            return True
+        if lower >= threshold:
+            return False
+        return None
+    if operator == "GTE":
+        if lower >= threshold:
+            return True
+        if upper < threshold:
+            return False
+        return None
+    # GT
+    if lower > threshold:
+        return True
+    if upper <= threshold:
+        return False
+    return None
+
+
+def _numeric_compare(operator: str, value: Any, threshold: float) -> "bool | None":
+    """단일 사용자 값을 정책 수치 기준과 비교. income/child_age 버킷은 범위 비교."""
+    key = str(value).strip()
+    income_bucket = INCOME_LEVEL_RANGE.get(key)
+    if income_bucket is not None:
+        return _income_bucket_match(operator, income_bucket[0], income_bucket[1], threshold)
+    child_bucket = CHILD_AGE_RANGE.get(key)
+    if child_bucket is not None:
+        return _child_age_bucket_match(operator, child_bucket[0], child_bucket[1], threshold)
+    number = to_number(value)
+    if number is None:
+        return None
+    if operator == "GTE":
+        return number >= threshold
+    if operator == "LTE":
+        return number <= threshold
+    if operator == "GT":
+        return number > threshold
+    return number < threshold
+
+
+def _numeric_any_of(operator: str, values: list[Any], threshold: float) -> "bool | None":
+    """가구원 연령 리스트처럼 여러 값 중 하나라도 만족하면 True(any-of).
+
+    하나라도 만족 → True / 전부 확정 불만족 → False / 일부 평가 불가 → None.
+    """
+    results = [_numeric_compare(operator, item, threshold) for item in values]
+    if any(result is True for result in results):
+        return True
+    if any(result is None for result in results):
+        return None
+    return False
+
+
+def _child_age_in_set(
+    lower: float,
+    upper: float,
+    allowed_numbers: list[float],
+) -> "bool | None":
+    """child_age 버킷 [lower, upper](포함)를 정책 IN 정수 집합과 비교.
+
+    연속 범위가 아닌 비연속 집합(예: [2, 5])도 정확히 처리한다.
+    - 버킷의 모든 나이가 집합에 포함 → True
+    - 일부만 겹침 → None(수동 확인) / 겹침 없음 → False
+    - "13+"처럼 상한이 무한이면 전체 포함은 불가 → 겹치면 None, 아니면 False
+    """
+    allowed = {int(number) for number in allowed_numbers}
+    if not allowed:
+        return None
+    if upper == float("inf"):
+        return None if any(number >= lower for number in allowed) else False
+    bucket = set(range(int(lower), int(upper) + 1))
+    if bucket <= allowed:
+        return True
+    if bucket & allowed:
+        return None
+    return False
 
 
 def rule_values(rule_value: Any) -> list[Any]:
@@ -114,31 +241,40 @@ def rule_matches(
     if operator == "EQ":
         if not values:
             return None
-        return str(condition_value) == str(values[0])
+        # 사용자 값이 리스트(예: income_status 복수 수급자격)면 any-of로 비교.
+        target = str(values[0])
+        user_set = _as_str_set(condition_value)
+        if target in user_set:
+            return True
+        # income_status 계층: 세부값 요구인데 사용자는 광의(basic)만 → 확정 불가(None).
+        if target in INCOME_STATUS_SPECIFIC and INCOME_STATUS_BASIC in user_set:
+            return None
+        return False
     if operator == "IN":
+        # 정책이 child_age IN [3,4,5]처럼 숫자 집합이고 사용자가 버킷("2-5")이면
+        # 문자열 exact match가 아니라 정수 집합 포함으로 비교한다(잘못 탈락 방지).
+        child_bucket = CHILD_AGE_RANGE.get(str(condition_value).strip())
+        if child_bucket is not None:
+            numbers = [to_number(value) for value in values]
+            if numbers and all(number is not None for number in numbers):
+                return _child_age_in_set(child_bucket[0], child_bucket[1], numbers)
         targets = {str(value) for value in values}
-        if isinstance(condition_value, list):
-            return bool({str(item) for item in condition_value} & targets)
-        return str(condition_value) in targets
+        user_set = _as_str_set(condition_value)
+        if user_set & targets:
+            return True
+        # income_status 계층: 세부값을 요구하는데 사용자는 광의(basic)만 → None.
+        if (targets & INCOME_STATUS_SPECIFIC) and INCOME_STATUS_BASIC in user_set:
+            return None
+        return False
     if operator in {"GTE", "LTE", "GT", "LT"}:
         rule_number = to_number(values[0] if values else None)
         if rule_number is None:
             return None
-        # 사용자 income은 구간(버킷)이라 점 비교 대신 범위 비교한다. 기준이 구간을
-        # 가로지르면 None(수동 확인) → 저소득층이 32% 같은 기준에서 통째로 빠지지 않게.
-        bucket = INCOME_LEVEL_RANGE.get(str(condition_value).strip())
-        if bucket is not None:
-            return _income_bucket_match(operator, bucket[0], bucket[1], rule_number)
-        condition_number = to_number(condition_value)
-        if condition_number is None:
-            return None
-        if operator == "GTE":
-            return condition_number >= rule_number
-        if operator == "LTE":
-            return condition_number <= rule_number
-        if operator == "GT":
-            return condition_number > rule_number
-        return condition_number < rule_number
+        # 가구원 연령 등 리스트 입력은 any-of, 단일 값은 income/child_age 버킷 범위 비교.
+        # 버킷이 기준을 가로지르면 None(수동 확인) → 잘못 탈락 방지.
+        if isinstance(condition_value, list):
+            return _numeric_any_of(operator, condition_value, rule_number)
+        return _numeric_compare(operator, condition_value, rule_number)
     if operator == "EXISTS":
         return condition_value not in (None, "", [])
     return None

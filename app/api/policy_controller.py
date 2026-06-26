@@ -4,10 +4,14 @@ from fastapi import APIRouter, Query
 from fastapi.responses import JSONResponse
 
 from app.common.policy_types import LifeStage, RegionCode
-from app.common.response import paginated_response
+from app.common.response import paginated_response, success_response
 from app.common.schemas import ApiResponse
 from app.core.dependencies import DbSessionDep
-from app.schemas.policy_schema import PolicyListItemResponse, PolicySort
+from app.schemas.policy_schema import (
+    PolicyDetailResponse,
+    PolicyListItemResponse,
+    PolicySort,
+)
 from app.services.policy_service import PolicyServiceDep
 
 
@@ -54,3 +58,20 @@ async def get_policy_list(
         size=size,
         total=total,
     )
+
+
+@router.get(
+    "/{policy_slug}",
+    response_model=ApiResponse[PolicyDetailResponse],
+    summary="정책 상세 조회",
+)
+async def get_policy_detail(
+    policy_slug: str,
+    db: DbSessionDep,
+    service: PolicyServiceDep,
+) -> JSONResponse:
+    policy = await service.get_policy_detail(
+        db,
+        policy_slug=policy_slug,
+    )
+    return success_response(data=policy)

@@ -1,5 +1,6 @@
 from datetime import date
 from enum import StrEnum
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -32,3 +33,23 @@ class PolicyListItemResponse(BaseModel):
     region_code: str | None = None
     region: str | None = None
     official_url: str | None = None
+
+
+class PolicyConditionProfileResponse(BaseModel):
+    condition_json: dict[str, Any] = Field(default_factory=dict)
+    target_summary: str | None = None
+    confidence: float | None = None
+    review_required: bool = False
+    quality_flags: list[Any] = Field(default_factory=list)
+    source_text: str | None = None
+    source_fields: list[str] = Field(default_factory=list)
+
+
+class PolicyDetailResponse(PolicyListItemResponse):
+    contact: str | None = None
+    easy_summary: str | None = None
+    target_description: str | None = None
+    benefit_description: str | None = None
+    application_method: str | None = None
+    caution: str | None = None
+    condition_profile: PolicyConditionProfileResponse | None = None
