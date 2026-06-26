@@ -21,6 +21,7 @@ def test_build_metadata_adds_policy_and_reference_fields():
             "source_url": "https://example.com/file.pdf",
             "source_type": "POLICY_REFERENCE",
             "policy_id": 100,
+            "condition_profile_id": 500,
             "policy_code": "WLF00000001",
             "policy_name": "테스트 정책",
             "main_category": "임신·출산",
@@ -57,6 +58,8 @@ def test_build_metadata_adds_detail_semantic_section():
             "metadata_json": {
                 "section": "지원 대상",
                 "evidence_role": "target",
+                "condition_profile_id": 500,
+                "source_basis": "policy_condition_profile",
             },
             "source_title": "테스트 정책 상세 데이터",
             "source_url": "https://example.com/policy",
@@ -80,6 +83,8 @@ def test_build_metadata_adds_detail_semantic_section():
 
     assert metadata["semantic_section"] == "TARGET"
     assert metadata["evidence_role"] == "target"
+    assert metadata["condition_profile_id"] == 500
+    assert metadata["source_basis"] == "policy_condition_profile"
     assert "reference_document_type" not in metadata
 
 
@@ -91,6 +96,7 @@ def test_to_search_result_preserves_metadata_fields():
             "chunk_id": 1,
             "document_id": 10,
             "policy_id": 100,
+            "condition_profile_id": 500,
             "policy_code": "WLF00000001",
             "policy_name": "테스트 정책",
             "section": "관련 문서",
@@ -106,6 +112,7 @@ def test_to_search_result_preserves_metadata_fields():
     result = service._to_search_result(document, 0.25)
 
     assert result.source_title == "신청서.pdf"
+    assert result.condition_profile_id == 500
     assert result.evidence_role == "application"
     assert result.semantic_section == "DOCUMENT"
     assert result.metadata["metadata_version"] == POLICY_RAG_METADATA_VERSION

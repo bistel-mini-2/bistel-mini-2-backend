@@ -17,9 +17,13 @@ router = APIRouter(prefix="/admin/policies/documents", tags=["Policy Documents"]
 async def ingest_policy_detail_chunks(
     service: PolicyDocumentServiceDep,
     limit: Annotated[int, Query(ge=1, le=100)] = 10,
+    rebuild: bool = False,
 ) -> JSONResponse:
     logger.info("정책 상세 chunk 생성 시작")
-    result = await service.ingest_policy_detail_chunks(limit=limit)
+    result = await service.ingest_policy_detail_chunks(
+        limit=limit,
+        rebuild=rebuild,
+    )
     return success_response(data=result)
 
 

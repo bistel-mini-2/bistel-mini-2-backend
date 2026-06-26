@@ -93,10 +93,15 @@ class PolicyRagService:
                     chunk_id=target["chunk_id"],
                     document_id=target["document_id"],
                     policy_id=target["policy_id"],
+                    condition_profile_id=metadatas[index].get(
+                        "condition_profile_id"
+                    ),
                     policy_code=target["policy_code"],
-                    policy_name=target["policy_name"],
+                    policy_name=str(
+                        metadatas[index].get("policy_name") or target["policy_name"]
+                    ),
                 )
-                for target in targets
+                for index, target in enumerate(targets)
             ],
         )
 
@@ -207,7 +212,7 @@ class PolicyRagService:
                 "chunk_index": target["chunk_index"],
                 "policy_id": target["policy_id"],
                 "policy_code": target["policy_code"],
-                "policy_name": target["policy_name"],
+                "policy_name": metadata.get("policy_name") or target["policy_name"],
                 "main_category": target.get("main_category"),
                 "sub_category": target.get("sub_category"),
                 "provider_name": target.get("provider_name"),
@@ -243,6 +248,7 @@ class PolicyRagService:
             chunk_id=self._to_int(metadata.get("chunk_id")),
             document_id=self._to_int(metadata.get("document_id")),
             policy_id=self._to_int(metadata.get("policy_id")),
+            condition_profile_id=self._to_int(metadata.get("condition_profile_id")),
             policy_code=self._to_str(metadata.get("policy_code")),
             policy_name=self._to_str(metadata.get("policy_name")),
             section=self._to_str(metadata.get("section")),
@@ -277,10 +283,15 @@ class PolicyRagService:
         section_map = {
             "기본 정보": "SUMMARY",
             "요약": "SUMMARY",
+            "정리된 지원 조건": "TARGET",
+            "조건 구조": "TARGET",
             "지원 대상": "TARGET",
+            "공식 지원대상 원문": "TARGET",
             "지원 내용": "BENEFIT",
             "신청 방법": "APPLICATION",
             "신청 기간": "APPLICATION",
+            "제외 조건": "CAUTION",
+            "추가 확인 조건": "CAUTION",
             "유의 사항": "CAUTION",
         }
         return section_map.get(section)
