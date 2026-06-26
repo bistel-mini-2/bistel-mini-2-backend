@@ -1,7 +1,7 @@
 from typing import Any
 
 
-POLICY_RAG_METADATA_VERSION = "2026-06-24.1"
+POLICY_RAG_METADATA_VERSION = "2026-06-26.1"
 
 
 class PolicyRagRepository:

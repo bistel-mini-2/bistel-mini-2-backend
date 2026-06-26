@@ -3,11 +3,13 @@ from pydantic import BaseModel
 
 class PolicyDocumentChunkIngestItem(BaseModel):
     policy_id: int
+    condition_profile_id: int | None = None
     document_id: int
     policy_code: str
     policy_name: str
     raw_text_length: int
     chunk_count: int
+    deleted_embedding_count: int = 0
 
 
 class PolicyDocumentChunkSkipItem(BaseModel):

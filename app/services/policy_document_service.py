@@ -1,4 +1,5 @@
 import base64
+import json
 import logging
 from collections import defaultdict
 from io import BytesIO
@@ -35,6 +36,7 @@ class PolicyDocumentService:
     async def ingest_policy_detail_chunks(
         self,
         limit: int = 10,
+        rebuild: bool = False,
     ) -> PolicyDocumentChunkIngestResponse:
         items: list[PolicyDocumentChunkIngestItem] = []
         skipped: list[PolicyDocumentChunkSkipItem] = []
@@ -44,6 +46,7 @@ class PolicyDocumentService:
             sources = await PolicyDocumentRepository.find_policy_detail_sources(
                 conn,
                 limit,
+                rebuild=rebuild,
             )
 
             for source in sources:
@@ -62,15 +65,26 @@ class PolicyDocumentService:
                         )
                         continue
 
-                    chunk_documents = self.split_documents(section_documents)
+                    chunk_documents = self.split_policy_detail_documents(
+                        section_documents
+                    )
                     async with conn.transaction():
                         document_id = (
                             await PolicyDocumentRepository.upsert_policy_detail_document(
                                 conn=conn,
                                 policy_id=source["policy_id"],
+                                condition_profile_id=source.get(
+                                    "condition_profile_id"
+                                ),
                                 source_title=self._source_title(source),
                                 source_url=source.get("official_url"),
                                 raw_text=raw_text,
+                            )
+                        )
+                        deleted_embedding_count = (
+                            await PolicyDocumentRepository.delete_policy_detail_embeddings_for_document(
+                                conn=conn,
+                                document_id=document_id,
                             )
                         )
                         chunk_count = (
@@ -84,11 +98,13 @@ class PolicyDocumentService:
                     items.append(
                         PolicyDocumentChunkIngestItem(
                             policy_id=source["policy_id"],
+                            condition_profile_id=source.get("condition_profile_id"),
                             document_id=document_id,
                             policy_code=source["policy_code"],
                             policy_name=source["policy_name"],
                             raw_text_length=len(raw_text),
                             chunk_count=chunk_count,
+                            deleted_embedding_count=deleted_embedding_count,
                         )
                     )
                 except Exception as exc:
@@ -368,6 +384,37 @@ class PolicyDocumentService:
         )
         return text_splitter.split_documents(documents)
 
+    def split_policy_detail_documents(self, documents: list[Document]) -> list[Document]:
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=1200,
+            chunk_overlap=100,
+            length_function=len,
+        )
+
+        split_documents: list[Document] = []
+        for document in documents:
+            if document.metadata.get("preserve_chunk"):
+                metadata = dict(document.metadata)
+                metadata.pop("preserve_chunk", None)
+                split_documents.append(
+                    Document(
+                        page_content=document.page_content,
+                        metadata=metadata,
+                    )
+                )
+                continue
+
+            for split_document in text_splitter.split_documents([document]):
+                metadata = dict(split_document.metadata)
+                metadata.pop("preserve_chunk", None)
+                split_documents.append(
+                    Document(
+                        page_content=split_document.page_content,
+                        metadata=metadata,
+                    )
+                )
+        return split_documents
+
     def split_reference_documents(self, documents: list[Document]) -> list[Document]:
         text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=2000,
@@ -520,55 +567,258 @@ class PolicyDocumentService:
         source: dict[str, Any],
     ) -> tuple[str, list[Document]]:
         section_documents: list[Document] = []
-        for section, evidence_role, content in self._section_values(source):
-            cleaned_content = self._clean_text(content)
+        for section_value in self._section_values(source):
+            cleaned_content = self._clean_text(section_value["content"])
             if not cleaned_content:
                 continue
 
+            metadata = self._policy_detail_metadata(source, section_value)
             section_documents.append(
                 Document(
                     page_content=self._format_section_text(
                         policy_name=source["policy_name"],
-                        section=section,
+                        section=section_value["section"],
                         content=cleaned_content,
                     ),
-                    metadata={
-                        "policy_id": source["policy_id"],
-                        "policy_code": source["policy_code"],
-                        "source_type": "POLICY_DETAIL",
-                        "source_title": self._source_title(source),
-                        "source_url": source.get("official_url"),
-                        "section": section,
-                        "evidence_role": evidence_role,
-                    },
+                    metadata=metadata,
                 )
             )
 
         raw_text = "\n\n".join(document.page_content for document in section_documents)
         return raw_text, section_documents
 
-    def _section_values(self, source: dict[str, Any]) -> list[tuple[str, str, Any]]:
-        return [
-            (
-                "기본 정보",
-                "summary",
-                self._join_lines(
-                    [
-                        ("정책명", source.get("policy_name")),
-                        ("대분류", source.get("main_category")),
-                        ("소분류", source.get("sub_category")),
-                        ("제공기관", source.get("provider_name")),
-                        ("급여유형", source.get("benefit_type")),
-                    ]
+    def _section_values(self, source: dict[str, Any]) -> list[dict[str, Any]]:
+        condition_json = self._dict_value(source.get("condition_json"))
+        sections: list[dict[str, Any]] = [
+            {
+                "section": "정리된 지원 조건",
+                "evidence_role": "target",
+                "content": source.get("target_summary")
+                or condition_json.get("target_summary"),
+                "condition_group": "target_summary",
+                "condition_operator": None,
+                "preserve_chunk": True,
+            },
+            {
+                "section": "조건 구조",
+                "evidence_role": "target",
+                "content": self._format_condition_tree(
+                    condition_json.get("condition_tree")
                 ),
-            ),
-            ("요약", "summary", source.get("easy_summary")),
-            ("지원 대상", "target", source.get("target_description")),
-            ("지원 내용", "benefit", source.get("benefit_description")),
-            ("신청 방법", "application", source.get("application_method")),
-            ("신청 기간", "application", source.get("application_period_text")),
-            ("유의 사항", "caution", source.get("caution")),
+                "condition_group": "condition_tree",
+                "condition_operator": self._node_operator(
+                    condition_json.get("condition_tree")
+                ),
+                "preserve_chunk": True,
+            },
+            {
+                "section": "제외 조건",
+                "evidence_role": "caution",
+                "content": self._format_condition_items(
+                    condition_json.get("exclusions")
+                ),
+                "condition_group": "exclusions",
+                "condition_operator": "NOT",
+                "preserve_chunk": True,
+            },
+            {
+                "section": "추가 확인 조건",
+                "evidence_role": "caution",
+                "content": self._format_condition_items(
+                    self._list_value(condition_json.get("unknowns"))
+                    + self._list_value(
+                        condition_json.get("unsupported_conditions")
+                    )
+                    + self._list_value(condition_json.get("special_notes"))
+                ),
+                "condition_group": "manual_check",
+                "condition_operator": None,
+                "preserve_chunk": True,
+            },
+            {
+                "section": "공식 지원대상 원문",
+                "evidence_role": "target",
+                "content": source.get("source_text")
+                or source.get("target_description"),
+                "condition_group": "official_target_text",
+                "condition_operator": None,
+                "source_basis": "policy_detail",
+            },
+            {
+                "section": "지원 내용",
+                "evidence_role": "benefit",
+                "content": source.get("benefit_description"),
+                "condition_group": None,
+                "condition_operator": None,
+                "source_basis": "policy_detail",
+            },
+            {
+                "section": "신청 방법",
+                "evidence_role": "application",
+                "content": source.get("application_method"),
+                "condition_group": None,
+                "condition_operator": None,
+                "source_basis": "policy_detail",
+            },
+            {
+                "section": "신청 기간",
+                "evidence_role": "application",
+                "content": source.get("application_period_text"),
+                "condition_group": None,
+                "condition_operator": None,
+                "source_basis": "policy_detail",
+            },
+            {
+                "section": "유의 사항",
+                "evidence_role": "caution",
+                "content": source.get("caution"),
+                "condition_group": None,
+                "condition_operator": None,
+                "source_basis": "policy_detail",
+            },
         ]
+        return sections
+
+    def _policy_detail_metadata(
+        self,
+        source: dict[str, Any],
+        section_value: dict[str, Any],
+    ) -> dict[str, Any]:
+        metadata = {
+            "policy_id": source["policy_id"],
+            "policy_code": source["policy_code"],
+            "policy_name": source["policy_name"],
+            "condition_profile_id": source.get("condition_profile_id"),
+            "condition_profile_updated_at": self._to_metadata_value(
+                source.get("condition_profile_updated_at")
+            ),
+            "condition_profile_confidence": self._to_metadata_value(
+                source.get("confidence")
+            ),
+            "review_required": source.get("review_required"),
+            "quality_flags": source.get("quality_flags"),
+            "source_fields": source.get("source_fields"),
+            "source_type": "POLICY_DETAIL",
+            "source_basis": section_value.get(
+                "source_basis",
+                "policy_condition_profile",
+            ),
+            "source_title": self._source_title(source),
+            "source_url": source.get("official_url"),
+            "section": section_value["section"],
+            "evidence_role": section_value["evidence_role"],
+            "condition_group": section_value.get("condition_group"),
+            "condition_operator": section_value.get("condition_operator"),
+            "preserve_chunk": section_value.get("preserve_chunk", False),
+        }
+        return {key: value for key, value in metadata.items() if value is not None}
+
+    def _format_condition_tree(self, node: Any, depth: int = 0) -> str:
+        if not node:
+            return ""
+        if not isinstance(node, dict):
+            return self._clean_text(node)
+
+        indent = "  " * depth
+        children = self._node_children(node)
+        operator = self._node_operator(node)
+        if children:
+            header = f"{indent}- 조건 그룹: {operator or 'AND'}"
+            lines = [header]
+            for child in children:
+                child_text = self._format_condition_tree(child, depth + 1)
+                if child_text:
+                    lines.append(child_text)
+            return "\n".join(lines)
+
+        return f"{indent}- {self._format_condition_leaf(node)}"
+
+    def _format_condition_items(self, items: Any) -> str:
+        if not items:
+            return ""
+        if isinstance(items, dict):
+            items = [items]
+        if not isinstance(items, list):
+            return self._clean_text(items)
+
+        lines = []
+        for item in items:
+            if isinstance(item, dict):
+                lines.append(f"- {self._format_condition_leaf(item)}")
+            else:
+                cleaned = self._clean_text(item)
+                if cleaned:
+                    lines.append(f"- {cleaned}")
+        return "\n".join(lines)
+
+    def _format_condition_leaf(self, node: dict[str, Any]) -> str:
+        label_values = [
+            ("field", node.get("field") or node.get("field_name")),
+            ("operator", node.get("operator")),
+            (
+                "value",
+                node.get("value")
+                if "value" in node
+                else node.get("value_json"),
+            ),
+            ("matching_strength", node.get("matching_strength")),
+            ("source_text", node.get("source_text")),
+            ("confidence", node.get("confidence")),
+            ("note", node.get("note")),
+            ("reason", node.get("reason")),
+        ]
+        return self._join_lines(label_values).replace("\n", ", ")
+
+    def _node_children(self, node: dict[str, Any]) -> list[Any]:
+        for key in ("children", "conditions", "items", "rules"):
+            value = node.get(key)
+            if isinstance(value, list):
+                return value
+        return []
+
+    def _node_operator(self, node: Any) -> str | None:
+        if not isinstance(node, dict):
+            return None
+        operator = (
+            node.get("operator")
+            or node.get("condition_operator")
+            or node.get("group_operator")
+            or node.get("logic")
+            or node.get("type")
+        )
+        if operator is None:
+            return None
+        return str(operator).upper()
+
+    def _dict_value(self, value: Any) -> dict[str, Any]:
+        if isinstance(value, dict):
+            return value
+        if isinstance(value, str):
+            try:
+                parsed = json.loads(value)
+            except json.JSONDecodeError:
+                return {}
+            return parsed if isinstance(parsed, dict) else {}
+        return {}
+
+    def _list_value(self, value: Any) -> list[Any]:
+        if not value:
+            return []
+        if isinstance(value, list):
+            return value
+        return [value]
+
+    def _to_metadata_value(self, value: Any) -> Any:
+        if value is None:
+            return None
+        if hasattr(value, "isoformat"):
+            return value.isoformat()
+        if isinstance(value, (str, int, float, bool, list, dict)):
+            return value
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return str(value)
 
     def _join_lines(self, values: list[tuple[str, Any]]) -> str:
         lines = [
@@ -592,6 +842,8 @@ class PolicyDocumentService:
     def _clean_text(self, value: Any) -> str:
         if value is None:
             return ""
+        if isinstance(value, (dict, list)):
+            return json.dumps(value, ensure_ascii=False, default=str)
         return str(value).replace("\x00", "").strip()
 
 

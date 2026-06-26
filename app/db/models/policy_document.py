@@ -19,6 +19,11 @@ class PolicyDocument(Base):
         ForeignKey("policy.policy_id", ondelete="CASCADE"),
         nullable=False,
     )
+    condition_profile_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("policy_condition_profile.condition_profile_id", ondelete="SET NULL"),
+        nullable=True,
+    )
     source_title: Mapped[str | None] = mapped_column(String(255), nullable=True)
     source_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     source_type: Mapped[str | None] = mapped_column(String(50), nullable=True)

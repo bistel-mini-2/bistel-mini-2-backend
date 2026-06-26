@@ -7,6 +7,7 @@ class PolicyRagEmbeddingItem(BaseModel):
     chunk_id: int
     document_id: int
     policy_id: int
+    condition_profile_id: int | None = None
     policy_code: str
     policy_name: str
 
@@ -22,6 +23,7 @@ class PolicyRagSearchResult(BaseModel):
     chunk_id: int | None = None
     document_id: int | None = None
     policy_id: int | None = None
+    condition_profile_id: int | None = None
     policy_code: str | None = None
     policy_name: str | None = None
     section: str | None = None
