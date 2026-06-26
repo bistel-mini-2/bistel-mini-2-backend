@@ -205,6 +205,9 @@ class RecommendationService:
             "filter_match_json": candidate.filter_match_json,
             "reason": reason,
             "reason_summary": reason,
+            "reasons": candidate.filter_match_json.get(
+                "reasons", {"matched": [], "uncertain": [], "excluded": []}
+            ),
             "evidence": card_evidence_items,
             "evidences": card_evidence_items,
             "raw_evidences": raw_evidence_items,

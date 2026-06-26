@@ -19,12 +19,20 @@ from app.services.policy_rule_grouping import (
     OUTCOME_MATCH,
     VERDICT_MATCH,
     evaluate_or_group,
-    group_note,
     partition_or_groups,
     rule_matches,
     rule_values,
     to_number,
 )
+from app.services.rule_explanation_service import (
+    VERDICT_EXCLUDED,
+    VERDICT_MATCHED,
+    VERDICT_UNCERTAIN,
+    RuleExplanationService,
+)
+
+# 사유 설명기는 상태가 없어 모듈 단일 인스턴스로 공유한다.
+_EXPLANATION = RuleExplanationService()
 
 
 CANDIDATE_STATUS_CANDIDATE = "CANDIDATE"
@@ -384,6 +392,14 @@ class RecommendationCandidateService:
                 uncertain_rules,
                 excluded_rules,
             ),
+            # 사용자 노출용 사유 목록(기존 score_reason/reason은 유지, 추가만).
+            "reasons": {
+                "matched": _EXPLANATION.explain_each(matched_rules, VERDICT_MATCHED),
+                "uncertain": _EXPLANATION.explain_each(
+                    uncertain_rules, VERDICT_UNCERTAIN
+                ),
+                "excluded": _EXPLANATION.explain_each(excluded_rules, VERDICT_EXCLUDED),
+            },
             "query_terms": query_terms,
             "candidate_search": candidate_search,
         }
@@ -859,6 +875,7 @@ class RecommendationCandidateService:
                             rule.get("manual_check_reason")
                             or "정책 룰 수동 확인 필요"
                         ),
+                        **self._rule_meta(rule),
                     }
                 )
                 continue
@@ -870,19 +887,23 @@ class RecommendationCandidateService:
                             "condition_value": condition_value,
                             "policy_value": rule_value,
                             "reason": "사용자 조건이 없어 hard rule은 추가 확인 필요",
+                            **self._rule_meta(rule),
                         }
                     )
                 continue
             match_result = self._rule_matches(operator, condition_value, rule_value)
             if match_result is True:
                 matched_rules.append(
-                    self._matched_rule(
-                        field_name,
-                        condition_value,
-                        rule_value,
-                        0.05,
-                        "policy_rule 조건과 일치",
-                    )
+                    {
+                        **self._matched_rule(
+                            field_name,
+                            condition_value,
+                            rule_value,
+                            0.05,
+                            "policy_rule 조건과 일치",
+                        ),
+                        **self._rule_meta(rule),
+                    }
                 )
                 score += 0.05
             elif match_result is None:
@@ -892,6 +913,7 @@ class RecommendationCandidateService:
                         "condition_value": condition_value,
                         "policy_value": rule_value,
                         "reason": "policy_rule 비교 방식이 모호해 추가 확인 필요",
+                        **self._rule_meta(rule),
                     }
                 )
             elif rule.get("is_hard_filter") is True:
@@ -902,6 +924,7 @@ class RecommendationCandidateService:
                         "policy_value": rule_value,
                         "result": "hard_rule_mismatch",
                         "reason": "policy_rule hard filter와 사용자 조건이 맞지 않습니다.",
+                        **self._rule_meta(rule),
                     }
                 )
 
@@ -936,13 +959,16 @@ class RecommendationCandidateService:
             for rule, verdict, condition_value, rule_value in verdicts:
                 if verdict == VERDICT_MATCH:
                     matched_rules.append(
-                        self._matched_rule(
-                            str(rule.get("field_name") or ""),
-                            condition_value,
-                            rule_value,
-                            0.05,
-                            "policy_rule OR 그룹 대안 조건 일치",
-                        )
+                        {
+                            **self._matched_rule(
+                                str(rule.get("field_name") or ""),
+                                condition_value,
+                                rule_value,
+                                0.05,
+                                "policy_rule OR 그룹 대안 조건 일치",
+                            ),
+                            **self._rule_meta(rule),
+                        }
                     )
                     score = 0.05
             return score
@@ -952,9 +978,8 @@ class RecommendationCandidateService:
                     "field": group_key,
                     "condition_value": None,
                     "policy_value": None,
-                    "reason": (
-                        f"OR 그룹({group_note(group_rules, group_key)}) 중 "
-                        "확정 매칭이 없어 추가 확인 필요"
+                    "reason": _EXPLANATION.explain_group(
+                        group_rules, VERDICT_UNCERTAIN
                     ),
                 }
             )
@@ -966,9 +991,8 @@ class RecommendationCandidateService:
                     "condition_value": None,
                     "policy_value": None,
                     "result": "hard_rule_mismatch",
-                    "reason": (
-                        f"OR 그룹({group_note(group_rules, group_key)})의 "
-                        "모든 대안 조건이 사용자 조건과 맞지 않습니다."
+                    "reason": _EXPLANATION.explain_group(
+                        group_rules, VERDICT_EXCLUDED
                     ),
                 }
             )
@@ -1089,6 +1113,15 @@ class RecommendationCandidateService:
             "result": "match",
             "score_delta": score_delta,
             "reason": reason,
+        }
+
+    def _rule_meta(self, rule: dict[str, Any]) -> dict[str, Any]:
+        """판정 항목에 설명 생성용 메타(note/source_text/operator/사유)를 덧붙인다."""
+        return {
+            "note": rule.get("note"),
+            "source_text": rule.get("source_text"),
+            "operator": rule.get("operator"),
+            "manual_check_reason": rule.get("manual_check_reason"),
         }
 
     def _policy_namespace(self, row: dict[str, Any]) -> SimpleNamespace:

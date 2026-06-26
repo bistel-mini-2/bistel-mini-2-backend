@@ -8,11 +8,16 @@ from app.services.policy_rule_grouping import (
     OUTCOME_MATCH,
     VERDICT_MATCH,
     evaluate_or_group,
-    group_note,
     partition_or_groups,
     rule_matches,
     rule_values,
     to_number,
+)
+from app.services.rule_explanation_service import (
+    VERDICT_EXCLUDED,
+    VERDICT_MATCHED,
+    VERDICT_UNCERTAIN,
+    RuleExplanationService,
 )
 
 # 하위 호환: 기존에 이 모듈에서 INCOME_LEVEL_TO_PERCENT를 import하던 코드 보존.
@@ -28,6 +33,9 @@ class PolicyRuleFilterResult:
 
 
 class PolicyRuleFilterService:
+    def __init__(self, explanation: RuleExplanationService | None = None) -> None:
+        self.explanation = explanation or RuleExplanationService()
+
     def filter(
         self,
         condition: dict[str, Any],
@@ -46,26 +54,33 @@ class PolicyRuleFilterService:
             condition_value = self._condition_value(condition, field_name)
             rule_value = rule.get("value_json")
             operator = str(rule.get("operator") or "").upper()
-            note = str(rule.get("note") or field_name)
 
             if rule.get("manual_check_required") is True:
                 result.manual_check_points.append(
-                    str(rule.get("manual_check_reason") or note)
+                    self.explanation.explain(rule, VERDICT_UNCERTAIN)
                 )
                 continue
 
             if condition_value in (None, "", []):
                 if rule.get("is_hard_filter") is True:
-                    result.missing_conditions.append(field_name)
+                    result.missing_conditions.append(
+                        self.explanation.explain(rule, VERDICT_UNCERTAIN)
+                    )
                 continue
 
             match_result = self._rule_matches(operator, condition_value, rule_value)
             if match_result is True:
-                result.matched_conditions.append(note)
+                result.matched_conditions.append(
+                    self.explanation.explain(rule, VERDICT_MATCHED)
+                )
             elif match_result is None:
-                result.manual_check_points.append(note)
+                result.manual_check_points.append(
+                    self.explanation.explain(rule, VERDICT_UNCERTAIN)
+                )
             elif rule.get("is_hard_filter") is True:
-                result.rule_failures.append(note)
+                result.rule_failures.append(
+                    self.explanation.explain(rule, VERDICT_EXCLUDED)
+                )
 
         for group_key, group_rules in or_groups:
             self._apply_or_group(condition, group_key, group_rules, result)
@@ -89,12 +104,16 @@ class PolicyRuleFilterService:
             for rule, verdict, _, _ in verdicts:
                 if verdict == VERDICT_MATCH:
                     result.matched_conditions.append(
-                        str(rule.get("note") or rule.get("field_name"))
+                        self.explanation.explain(rule, VERDICT_MATCHED)
                     )
         elif outcome == OUTCOME_MANUAL:
-            result.manual_check_points.append(group_note(group_rules, group_key))
+            result.manual_check_points.append(
+                self.explanation.explain_group(group_rules, VERDICT_UNCERTAIN)
+            )
         elif outcome == OUTCOME_FAIL:
-            result.rule_failures.append(group_note(group_rules, group_key))
+            result.rule_failures.append(
+                self.explanation.explain_group(group_rules, VERDICT_EXCLUDED)
+            )
 
     def _merge_alternative_rules(
         self,
