@@ -98,6 +98,29 @@ SPECIAL_TARGET_LABELS = {
     "low_income": "저소득/수급 자격",
 }
 
+# policy_rule field_name → semantic domain. policy_rule이 해당 domain을 커버하면
+# 동일 domain의 텍스트/메타데이터 휴리스틱은 skip한다(이중 가산·판정 충돌 제거).
+FIELD_DOMAIN = {
+    "stage": "stage",
+    "life_stage": "stage",
+    "target_stage": "stage",
+    "childAge": "child_age",
+    "child_age": "child_age",
+    "child_age_range": "child_age",
+    "income": "income",
+    "income_level": "income",
+    "income_bracket": "income",
+    "income_status": "income",
+    "benefit_status": "income",
+    "median_income_percent": "income",
+    "special": "special",
+    "special_flags": "special",
+    "special_conditions": "special",
+    "special_condition": "special",
+    "region": "region",
+    "region_code": "region",
+}
+
 
 @dataclass
 class PolicyCandidate:
@@ -349,23 +372,35 @@ class RecommendationCandidateService:
         score = self._candidate_search_score(candidate_search)
         self._apply_candidate_search_rule(candidate_search, matched_rules)
 
-        score += self._apply_stage_rule(condition, text_value, tags, matched_rules)
-        score += self._apply_child_age_rule(condition, text_value, matched_rules)
-        score += self._apply_region_rule(
-            policy,
-            condition,
-            matched_rules,
-            uncertain_rules,
-            excluded_rules,
-        )
-        score += self._apply_income_rule(
-            condition,
-            text_value,
-            matched_rules,
-            uncertain_rules,
-            excluded_rules,
-        )
-        score += self._apply_special_rule(condition, text_value, tags, matched_rules)
+        # policy_rule이 커버하는 semantic domain은 휴리스틱을 skip한다(이중 가산·충돌 제거).
+        # 단 policy_rule이 없는 정책/도메인은 휴리스틱을 fallback으로 유지.
+        covered_domains = self._covered_domains(policy_rules)
+
+        if "stage" not in covered_domains:
+            score += self._apply_stage_rule(condition, text_value, tags, matched_rules)
+        if "child_age" not in covered_domains:
+            score += self._apply_child_age_rule(condition, text_value, matched_rules)
+        if "region" not in covered_domains:
+            score += self._apply_region_rule(
+                policy,
+                condition,
+                matched_rules,
+                uncertain_rules,
+                excluded_rules,
+            )
+        if "income" not in covered_domains:
+            score += self._apply_income_rule(
+                condition,
+                text_value,
+                matched_rules,
+                uncertain_rules,
+                excluded_rules,
+            )
+        if "special" not in covered_domains:
+            score += self._apply_special_rule(
+                condition, text_value, tags, matched_rules
+            )
+        # needs/candidate_search는 policy_rule 비대상 신호라 항상 적용.
         score += self._apply_needs_rule(condition, text_value, matched_rules)
         score += self._apply_policy_rules(
             condition=condition,
@@ -374,13 +409,23 @@ class RecommendationCandidateService:
             uncertain_rules=uncertain_rules,
             excluded_rules=excluded_rules,
         )
-        self._apply_special_target_rule(
-            policy=policy,
-            target_description=self._target_text(row),
-            condition=condition,
-            uncertain_rules=uncertain_rules,
-            excluded_rules=excluded_rules,
-        )
+        if "special" not in covered_domains:
+            self._apply_special_target_rule(
+                policy=policy,
+                target_description=self._target_text(row),
+                condition=condition,
+                uncertain_rules=uncertain_rules,
+                excluded_rules=excluded_rules,
+            )
+        # 저소득/수급 자격 target 휴리스틱은 income 도메인 → income으로 별도 게이팅.
+        if "income" not in covered_domains:
+            self._apply_low_income_target_rule(
+                policy=policy,
+                target_description=self._target_text(row),
+                condition=condition,
+                uncertain_rules=uncertain_rules,
+                excluded_rules=excluded_rules,
+            )
 
         candidate_status = self._candidate_status(uncertain_rules, excluded_rules)
         filter_match_json = {
@@ -706,7 +751,7 @@ class RecommendationCandidateService:
         matched_rules: list[dict[str, Any]],
     ) -> float:
         score = 0.0
-        for item in self._string_list(condition.get("special")):
+        for item in self._special_values(condition):
             label = SPECIAL_RECOMMENDATION_TERMS.get(item)
             if label and (label in text_value or label in tags):
                 matched_rules.append(
@@ -733,7 +778,7 @@ class RecommendationCandidateService:
         # 정책명에 강하게 드러나면 제외, 지원대상 본문에만 있으면 추가확인.
         policy_name = str(self._none_if_null(policy.policy_name) or "")
         target_text = str(self._none_if_null(target_description) or "")
-        user_special = set(self._string_list(condition.get("special")))
+        user_special = set(self._special_values(condition))
 
         for flag, keywords in SPECIAL_TARGET_NAME_KEYWORDS.items():
             if flag in user_special:
@@ -768,24 +813,18 @@ class RecommendationCandidateService:
                     }
                 )
 
-        self._apply_low_income_target_rule(
-            policy_name=policy_name,
-            target_text=target_text,
-            condition=condition,
-            user_special=user_special,
-            uncertain_rules=uncertain_rules,
-            excluded_rules=excluded_rules,
-        )
-
     def _apply_low_income_target_rule(
         self,
-        policy_name: str,
-        target_text: str,
+        policy: Any,
+        target_description: Any,
         condition: dict[str, Any],
-        user_special: set[str],
         uncertain_rules: list[dict[str, Any]],
         excluded_rules: list[dict[str, Any]],
     ) -> None:
+        # income 도메인 휴리스틱. special_target과 분리되어 caller에서 income 도메인으로 게이팅.
+        policy_name = str(self._none_if_null(policy.policy_name) or "")
+        target_text = str(self._none_if_null(target_description) or "")
+        user_special = set(self._special_values(condition))
         income = self._first(condition, "income", "income_level", "income_bracket")
         if "low_income" in user_special or income == "low":
             return  # 저소득/수급 자격이 있으면 강등하지 않는다.
@@ -1044,12 +1083,16 @@ class RecommendationCandidateService:
             "stage": ("stage", "life_stage", "target_stage"),
             "income_level": ("income", "income_level", "income_bracket"),
             "income": ("income", "income_level", "income_bracket"),
+            "income_bracket": ("income", "income_level", "income_bracket"),
+            "median_income_percent": ("income", "income_level", "income_bracket"),
             "income_status": ("income_status", "benefit_status"),
+            "benefit_status": ("income_status", "benefit_status"),
             "childAge": ("childAge", "child_age", "child_age_range"),
             "child_age": ("childAge", "child_age", "child_age_range"),
             "child_age_range": ("childAge", "child_age", "child_age_range"),
             "special": ("special", "special_flags", "special_conditions", "special_condition"),
             "special_flags": ("special", "special_flags", "special_conditions", "special_condition"),
+            "special_conditions": ("special", "special_flags", "special_conditions", "special_condition"),
             "special_condition": ("special", "special_flags", "special_conditions", "special_condition"),
             "age": ("age", "user_age"),
             "household_member_age": (
@@ -1114,6 +1157,27 @@ class RecommendationCandidateService:
             "score_delta": score_delta,
             "reason": reason,
         }
+
+    def _special_values(self, condition: dict[str, Any]) -> list[str]:
+        """special 도메인 입력을 alias 전체에서 읽는다(special/_flags/_conditions/_condition).
+
+        merge 경로는 special로 정규화하지만, special_condition 등만 든 직접 호출도
+        휴리스틱/검색에서 동일하게 읽도록 parity를 맞춘다.
+        """
+        values: list[str] = []
+        for key in ("special", "special_flags", "special_conditions", "special_condition"):
+            values.extend(self._string_list(condition.get(key)))
+        return list(dict.fromkeys(values))
+
+    def _covered_domains(self, policy_rules: list[dict[str, Any]]) -> set[str]:
+        """policy_rule이 다루는 semantic domain 집합. 입력 누락으로 uncertain이 될
+        rule도 '커버'로 본다(field가 존재하면 domain 포함)."""
+        domains: set[str] = set()
+        for rule in policy_rules:
+            domain = FIELD_DOMAIN.get(str(rule.get("field_name") or "").strip())
+            if domain:
+                domains.add(domain)
+        return domains
 
     def _rule_meta(self, rule: dict[str, Any]) -> dict[str, Any]:
         """판정 항목에 설명 생성용 메타(note/source_text/operator/사유)를 덧붙인다."""
@@ -1192,7 +1256,7 @@ class RecommendationCandidateService:
         child_age = self._first(condition, "childAge", "child_age", "child_age_range")
         if child_age:
             terms.extend(self._child_age_terms(str(child_age)))
-        for item in self._string_list(condition.get("special")):
+        for item in self._special_values(condition):
             label = SPECIAL_RECOMMENDATION_TERMS.get(item)
             if label:
                 terms.append(label)
