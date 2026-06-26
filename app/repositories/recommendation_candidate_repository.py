@@ -70,6 +70,8 @@ class RecommendationCandidateRepository:
                         OR pd.target_description ILIKE :{param_name}
                         OR pd.benefit_description ILIKE :{param_name}
                         OR pd.caution ILIKE :{param_name}
+                        OR cp.target_summary ILIKE :{param_name}
+                        OR cp.source_text ILIKE :{param_name}
                         OR EXISTS (
                             SELECT 1
                             FROM policy_tag pt
@@ -100,6 +102,9 @@ class RecommendationCandidateRepository:
                     pd.application_method,
                     pd.application_period_text,
                     pd.caution,
+                    cp.condition_json AS condition_profile_json,
+                    cp.target_summary AS condition_profile_target_summary,
+                    cp.source_text AS condition_profile_source_text,
                     COALESCE(
                         (
                             SELECT jsonb_agg(pt.tag_name ORDER BY pt.tag_name)
@@ -110,6 +115,8 @@ class RecommendationCandidateRepository:
                     ) AS tags
                 FROM policy p
                 LEFT JOIN policy_detail pd ON pd.policy_id = p.policy_id
+                LEFT JOIN policy_condition_profile cp
+                    ON cp.policy_id = p.policy_id
                 WHERE {' AND '.join(conditions)}
                 ORDER BY p.policy_id
                 LIMIT :limit
@@ -145,6 +152,9 @@ class RecommendationCandidateRepository:
                 pd.application_method,
                 pd.application_period_text,
                 pd.caution,
+                cp.condition_json AS condition_profile_json,
+                cp.target_summary AS condition_profile_target_summary,
+                cp.source_text AS condition_profile_source_text,
                 COALESCE(
                     (
                         SELECT jsonb_agg(pt.tag_name ORDER BY pt.tag_name)
@@ -155,6 +165,8 @@ class RecommendationCandidateRepository:
                 ) AS tags
             FROM policy p
             LEFT JOIN policy_detail pd ON pd.policy_id = p.policy_id
+            LEFT JOIN policy_condition_profile cp
+                ON cp.policy_id = p.policy_id
             WHERE p.is_active = TRUE
               AND p.policy_id IN :policy_ids
             ORDER BY p.policy_id
