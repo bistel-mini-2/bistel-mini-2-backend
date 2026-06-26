@@ -134,14 +134,33 @@ class PolicyRuleFilterService:
         return passthrough + normalized
 
     def _condition_value(self, condition: dict[str, Any], field_name: str) -> Any:
+        stage_keys = ("stage", "target_stage", "life_stage")
+        child_age_keys = ("childAge", "child_age", "child_age_range")
+        income_keys = ("income", "income_level", "income_bracket")
+        region_keys = ("region", "region_code")
+        special_keys = ("special", "special_conditions", "special_flags", "special_condition")
+        # RecommendationCandidateService._condition_value와 동일한 alias 키 집합을 유지한다.
         key_groups = {
-            "stage": ("stage", "target_stage", "life_stage"),
-            "childAge": ("childAge", "child_age", "child_age_range"),
-            "child_age": ("childAge", "child_age", "child_age_range"),
-            "income": ("income", "income_level", "income_bracket"),
-            "income_level": ("income", "income_level", "income_bracket"),
-            "region": ("region", "region_code"),
-            "special": ("special", "special_conditions"),
+            "stage": stage_keys,
+            "life_stage": stage_keys,
+            "target_stage": stage_keys,
+            "childAge": child_age_keys,
+            "child_age": child_age_keys,
+            "child_age_range": child_age_keys,
+            "income": income_keys,
+            "income_level": income_keys,
+            "income_status": ("income_status", "benefit_status"),
+            "region": region_keys,
+            "region_code": region_keys,
+            "special": special_keys,
+            "special_flags": special_keys,
+            "special_condition": special_keys,
+            "age": ("age", "user_age"),
+            "household_member_age": (
+                "household_member_age",
+                "household_member_ages",
+                "household_ages",
+            ),
         }
         for key in key_groups.get(field_name, (field_name,)):
             value = condition.get(key)
