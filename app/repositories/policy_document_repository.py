@@ -88,6 +88,7 @@ class PolicyDocumentRepository:
     async def find_policy_reference_download_targets(
         conn,
         limit: int,
+        rebuild: bool = False,
     ) -> list[dict[str, Any]]:
         async with conn.cursor() as cur:
             await cur.execute(
@@ -99,7 +100,11 @@ class PolicyDocumentRepository:
                           AND d.source_url IS NOT NULL
                           AND btrim(d.source_url) <> ''
                           AND lower(d.source_title) LIKE '%%.pdf%%'
-                          AND (d.raw_text IS NULL OR btrim(d.raw_text) = '')
+                          AND (
+                            %s::boolean = TRUE
+                            OR d.raw_text IS NULL
+                            OR btrim(d.raw_text) = ''
+                          )
                         GROUP BY d.source_url
                         ORDER BY MIN(d.document_id)
                         LIMIT %s
@@ -115,10 +120,14 @@ class PolicyDocumentRepository:
                     JOIN policy_document d ON d.source_url = u.source_url
                     JOIN policy p ON p.policy_id = d.policy_id
                     WHERE d.source_type = 'POLICY_REFERENCE'
-                      AND (d.raw_text IS NULL OR btrim(d.raw_text) = '')
+                      AND (
+                        %s::boolean = TRUE
+                        OR d.raw_text IS NULL
+                        OR btrim(d.raw_text) = ''
+                      )
                     ORDER BY u.first_document_id, d.document_id
                 """,
-                (limit,),
+                (rebuild, limit, rebuild),
             )
             rows = await cur.fetchall()
 
@@ -238,6 +247,42 @@ class PolicyDocumentRepository:
                         embedding.cmetadata->>'source_type',
                         'POLICY_DETAIL'
                       ) = 'POLICY_DETAIL'
+                """,
+                (document_id, document_id),
+            )
+            return cur.rowcount or 0
+
+    @staticmethod
+    async def delete_policy_reference_embeddings_for_document(
+        conn,
+        document_id: int,
+    ) -> int:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                """
+                    SELECT to_regclass('public.langchain_pg_collection') IS NOT NULL
+                       AND to_regclass('public.langchain_pg_embedding') IS NOT NULL
+                """
+            )
+            vector_tables_exist = (await cur.fetchone())[0]
+            if not vector_tables_exist:
+                return 0
+
+            await cur.execute(
+                """
+                    DELETE FROM langchain_pg_embedding embedding
+                    USING langchain_pg_collection collection
+                    WHERE embedding.collection_id = collection.uuid
+                      AND collection.name = 'policy_documents'
+                      AND (
+                        embedding.cmetadata->>'document_id' = %s::text
+                        OR embedding.id IN (
+                            SELECT chunk_id::text
+                            FROM policy_document_chunk
+                            WHERE document_id = %s
+                        )
+                      )
+                      AND embedding.cmetadata->>'source_type' = 'POLICY_REFERENCE'
                 """,
                 (document_id, document_id),
             )
