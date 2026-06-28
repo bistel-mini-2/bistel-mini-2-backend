@@ -191,8 +191,6 @@ class CompareService:
         policy_a: dict[str, Any],
         policy_b: dict[str, Any],
     ) -> str:
-        name_a = str(policy_a["name"])
-        name_b = str(policy_b["name"])
         target_a = cls._display_value(
             policy_a.get("condition_profile_target_summary")
         )
@@ -204,6 +202,11 @@ class CompareService:
         review_a = bool(policy_a.get("condition_profile_review_required"))
         review_b = bool(policy_b.get("condition_profile_review_required"))
 
+        if not (target_a or source_a or target_b or source_b):
+            return (
+                "두 정책 모두 정리된 조건 정보가 부족합니다. "
+                "비교 결과는 공식 안내와 담당 기관 안내를 함께 확인하세요."
+            )
         if target_a != target_b:
             return (
                 "두 정책은 지원 대상 조건이 다릅니다. "
@@ -230,7 +233,14 @@ class CompareService:
         if key == "income_conditions":
             return cls._conditions_by_domains(
                 row.get("condition_profile_json"),
-                {"income", "income_status", "median_income_percent"},
+                {
+                    "benefit_status",
+                    "income",
+                    "income_bracket",
+                    "income_level",
+                    "income_status",
+                    "median_income_percent",
+                },
             )
         if key == "target_conditions":
             return cls._conditions_by_domains(

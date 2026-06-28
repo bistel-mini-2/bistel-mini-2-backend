@@ -148,6 +148,53 @@ def test_target_conditions_include_target_domain_aliases() -> None:
     ]
 
 
+def test_income_conditions_include_benefit_status_aliases() -> None:
+    condition_json = {
+        "condition_tree": {
+            "operator": "AND",
+            "conditions": [
+                {
+                    "type": "income",
+                    "field": "benefit_status",
+                    "source_text": "기초생활보장 생계급여 수급자",
+                },
+                {
+                    "type": "income_level",
+                    "field": "income_bracket",
+                    "source_text": "저소득층",
+                },
+            ],
+        },
+    }
+
+    row = {"condition_profile_json": condition_json}
+
+    assert CompareService._field_value(row, "income_conditions") == [
+        "기초생활보장 생계급여 수급자",
+        "저소득층",
+    ]
+
+
+def test_selection_guide_handles_missing_condition_profiles() -> None:
+    policy_a = {
+        "name": "A 정책",
+        "condition_profile_target_summary": None,
+        "condition_profile_source_text": None,
+        "condition_profile_review_required": False,
+    }
+    policy_b = {
+        "name": "B 정책",
+        "condition_profile_target_summary": None,
+        "condition_profile_source_text": None,
+        "condition_profile_review_required": False,
+    }
+
+    assert CompareService._selection_guide(policy_a, policy_b) == (
+        "두 정책 모두 정리된 조건 정보가 부족합니다. "
+        "비교 결과는 공식 안내와 담당 기관 안내를 함께 확인하세요."
+    )
+
+
 def test_compare_policies_saves_history_when_user_exists(monkeypatch) -> None:
     policy_a = make_policy(policy_id=1, slug="WLF00000001", name="A 정책")
     policy_b = make_policy(policy_id=2, slug="WLF00000002", name="B 정책")
