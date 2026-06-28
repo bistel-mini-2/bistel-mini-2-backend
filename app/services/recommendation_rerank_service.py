@@ -551,8 +551,10 @@ class RecommendationRerankService:
                 index,
                 previous_score,
             )
+            # priority_score는 순위 정렬용 합성 점수다. 표시용 적합도
+            # (condition_match_score/confidence_score)와 분리하기 위해
+            # match_score를 이 합성값으로 덮지 않는다(원래 룰 매칭 점수 유지).
             item["priority_score"] = priority_score
-            item["match_score"] = priority_score
             item["recommendation_rank"] = index + 1
 
             if not item.get("priority_label"):
