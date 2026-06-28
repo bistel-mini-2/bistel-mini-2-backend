@@ -1,5 +1,5 @@
 import asyncio
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock
 
 import pytest
@@ -246,6 +246,26 @@ def test_summary_cache_detects_condition_profile_change() -> None:
     )
 
 
+def test_failed_summary_cache_does_not_restart_without_force_refresh() -> None:
+    assert not PolicySummaryRepository._should_restart_processing(
+        {
+            "request_status": RequestStatus.FAILED.value,
+            "updated_at": datetime.now(timezone.utc) - timedelta(hours=1),
+        },
+        stale_after_minutes=10,
+    )
+
+
+def test_stale_processing_summary_cache_restarts() -> None:
+    assert PolicySummaryRepository._should_restart_processing(
+        {
+            "request_status": RequestStatus.PROCESSING.value,
+            "updated_at": datetime.now(timezone.utc) - timedelta(minutes=11),
+        },
+        stale_after_minutes=10,
+    )
+
+
 def test_summary_fallback_uses_condition_profile_source_text_as_evidence() -> None:
     generator = LangChainPolicySummaryGenerator()
 
@@ -277,6 +297,29 @@ def test_summary_fallback_uses_condition_profile_source_text_as_evidence() -> No
     )
 
     assert result.evidence[0] == "원본 선정기준: 만 2세 미만 아동"
+    assert len(result.summary.splitlines()) == 3
     assert "policy_condition_profile" in prompt
     assert "condition_json" in prompt
     assert "원본 선정기준: 만 2세 미만 아동" in prompt
+
+
+def test_summary_normalization_pads_to_exactly_three_lines() -> None:
+    generator = LangChainPolicySummaryGenerator()
+
+    result = generator._normalize_result(
+        result=generator._fallback(
+            {
+                "name": "테스트 정책",
+                "condition_profile_source_text": "원본 선정기준",
+            },
+            [],
+        ).model_copy(update={"summary": "첫 번째 줄", "evidence": ["근거"]}),
+        policy={
+            "name": "테스트 정책",
+            "condition_profile_source_text": "원본 선정기준",
+        },
+        evidence_chunks=[],
+    )
+
+    assert len(result.summary.splitlines()) == 3
+    assert result.summary.splitlines()[0] == "첫 번째 줄"

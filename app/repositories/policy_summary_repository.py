@@ -143,7 +143,10 @@ class PolicySummaryRepository:
         existing = await self.find_by_policy_id(db, policy_id)
         if existing is None:
             raise RuntimeError("policy summary cache insert failed")
-        if self._should_restart(existing, stale_after_minutes) or self._profile_changed(
+        if self._should_restart_processing(
+            existing,
+            stale_after_minutes,
+        ) or self._profile_changed(
             existing,
             profile_meta,
         ):
@@ -325,10 +328,11 @@ class PolicySummaryRepository:
         return json.dumps(value, ensure_ascii=False)
 
     @staticmethod
-    def _should_restart(cache: dict[str, Any], stale_after_minutes: int) -> bool:
+    def _should_restart_processing(
+        cache: dict[str, Any],
+        stale_after_minutes: int,
+    ) -> bool:
         status = str(cache.get("request_status") or "")
-        if status == RequestStatus.FAILED.value:
-            return True
         if status != RequestStatus.PROCESSING.value:
             return False
 

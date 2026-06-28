@@ -47,13 +47,13 @@ class LangChainPolicySummaryGenerator:
             (
                 "system",
                 (
-                    "You summarize Korean public policy detail pages for ordinary "
-                    "users. Return exactly a concise 3-line Korean summary and "
-                    "2-3 short evidence strings grounded only in the supplied "
-                    "policy fields and evidence chunks. Treat "
-                    "policy_condition_profile.source_text and condition_json as "
-                    "the primary source for eligibility/target conditions. Use "
-                    "legacy policy_detail fields only as supplemental context."
+                    "한국 공공정책 상세 정보를 일반 사용자가 이해하기 쉬운 말로 "
+                    "요약합니다. 반드시 한국어로 간결한 3줄 요약과 2~3개의 "
+                    "짧은 근거 문구를 반환하세요. 요약과 근거는 제공된 정책 "
+                    "필드와 evidence chunk에만 기반해야 합니다. 지원 조건과 "
+                    "대상 판단은 policy_condition_profile.source_text와 "
+                    "condition_json을 1차 기준으로 삼고, 기존 policy_detail "
+                    "필드는 보조 문맥으로만 사용하세요."
                 ),
             ),
             (
@@ -122,9 +122,9 @@ class LangChainPolicySummaryGenerator:
             for index, chunk in enumerate(evidence_chunks[:5])
         )
         return (
-            "Policy fields as JSON:\n"
+            "정책 필드 JSON:\n"
             f"{json.dumps(fields, ensure_ascii=False, default=str)}\n\n"
-            f"Evidence chunks:\n{evidence_text}"
+            f"근거 chunk:\n{evidence_text}"
         )
 
     def _fallback(
@@ -151,6 +151,15 @@ class LangChainPolicySummaryGenerator:
             lines.append(f"지원 내용: {self._short(benefit, 90)}")
         if len(lines) < 3 and apply_method:
             lines.append(f"신청: {self._short(apply_method, 90)}")
+        fallback_lines = (
+            "지원 조건은 정책 원문 기준으로 확인이 필요해요.",
+            "신청 전 대상, 기간, 제출 서류를 다시 확인해 주세요.",
+            "자세한 내용은 정책 상세 안내와 담당 기관 공지를 참고해 주세요.",
+        )
+        for line in fallback_lines:
+            if len(lines) >= 3:
+                break
+            lines.append(line)
 
         fallback_evidence = [
             self._short(chunk.snippet, 120)
@@ -179,22 +188,26 @@ class LangChainPolicySummaryGenerator:
         policy: dict[str, Any],
         evidence_chunks: list[EvidenceChunk],
     ) -> PolicySummaryGeneration:
-        summary = "\n".join(
+        summary_lines = [
             line.strip()
             for line in result.summary.splitlines()
             if line.strip()
-        )
-        summary = "\n".join(summary.splitlines()[:3])
+        ][:3]
+        fallback = self._fallback(policy, evidence_chunks)
+        for line in fallback.summary.splitlines():
+            if len(summary_lines) >= 3:
+                break
+            value = line.strip()
+            if value:
+                summary_lines.append(value)
+        summary = "\n".join(summary_lines[:3])
         evidence = [
             self._short(item, 160)
             for item in result.evidence
             if self._clean(item)
         ][:3]
-        if summary and evidence:
-            return PolicySummaryGeneration(summary=summary, evidence=evidence)
-        fallback = self._fallback(policy, evidence_chunks)
         return PolicySummaryGeneration(
-            summary=summary or fallback.summary,
+            summary=summary,
             evidence=evidence or fallback.evidence,
         )
 

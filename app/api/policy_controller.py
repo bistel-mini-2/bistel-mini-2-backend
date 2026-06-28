@@ -92,12 +92,10 @@ async def get_policy_summary(
     background_tasks: BackgroundTasks,
     db: DbSessionDep,
     service: PolicySummaryServiceDep,
-    force_refresh: Annotated[bool, Query()] = False,
 ) -> JSONResponse:
     summary, start_summary_id = await service.get_or_start_summary(
         db,
         policy_slug=policy_slug,
-        force_refresh=force_refresh,
     )
     await db.commit()
     if start_summary_id is not None:
