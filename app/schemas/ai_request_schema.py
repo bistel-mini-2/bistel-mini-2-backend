@@ -108,6 +108,8 @@ class RecommendationResultItem(BaseModel):
     reason: str | None = None
     reason_summary: str | None = None
     reasons: RecommendationReasons | None = None
+    # AI 판정이 뽑은 부족 정보(follow-up 질문 생성의 원천).
+    missing_information: list[str] = Field(default_factory=list)
     why_recommended: str | None = None
     check_before_apply: str | None = None
     evidences: list[RecommendationEvidenceItem] = Field(default_factory=list)

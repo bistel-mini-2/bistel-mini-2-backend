@@ -224,6 +224,7 @@ class RecommendationService:
                     "assessment_status": assessment.assessment_status.value,
                     "confidence_score": assessment.confidence_score,
                     "condition_match_score": assessment.confidence_score,
+                    "missing_information": assessment.missing_information,
                     "matched_conditions": assessment.matched_conditions_json,
                     "missing_conditions": assessment.missing_conditions_json,
                     "conflicting_conditions": (

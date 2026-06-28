@@ -1,6 +1,9 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
+from app.ai.agents.recommendation_judgement_agent import (
+    RecommendationJudgementAgent,
+)
 from app.common.ai_status import (
     AssessmentStatus,
     UserStatus,
@@ -26,10 +29,19 @@ class RecommendationPolicyAssessment:
     conflicting_conditions_json: list[dict[str, Any]]
     manual_check_points_json: list[dict[str, Any]]
     reason_summary: str
+    # AI 판정이 뽑은 부족 정보(follow-up 질문 생성용). 룰 fallback 시 빈 목록.
+    missing_information: list[str] = field(default_factory=list)
     selected_for_result: bool = False
 
 
 class RecommendationAssessmentService:
+    def __init__(
+        self,
+        judgement_agent: RecommendationJudgementAgent | None = None,
+    ) -> None:
+        # 룰 기반 판정을 유지하면서, AI 적합도 판정은 별도 에이전트에 위임한다.
+        self.judgement_agent = judgement_agent or RecommendationJudgementAgent()
+
     async def assess_candidates(
         self,
         merged_condition_json: dict[str, Any],
@@ -38,6 +50,7 @@ class RecommendationAssessmentService:
         profile_conflict_json: list[dict[str, Any]] | None = None,
         result_limit: int = 6,
     ) -> list[RecommendationPolicyAssessment]:
+        # 1) 룰 기반 판정(결정론). AI 판정 실패 시 fallback이자, 사유 구조 데이터의 출처.
         assessments = [
             self._assess_candidate(
                 candidate=candidate,
@@ -51,6 +64,14 @@ class RecommendationAssessmentService:
             int(candidate.policy.policy_id): candidate
             for candidate in candidates
         }
+        # 2) AI 적합도 판정: 하드 EXCLUDED가 아닌 후보의 verdict를 LLM이 결정(배치 1회).
+        #    실패/누락 시 위의 룰 판정을 그대로 유지한다.
+        await self._apply_llm_judgement(
+            merged_condition_json=merged_condition_json,
+            candidates=candidates,
+            assessments=assessments,
+            candidate_by_policy=candidate_by_policy,
+        )
         selected_policy_ids = {
             assessment.policy_id
             for assessment in sorted(
@@ -68,6 +89,114 @@ class RecommendationAssessmentService:
         for assessment in assessments:
             assessment.selected_for_result = assessment.policy_id in selected_policy_ids
         return assessments
+
+    # ------------------------------------------------------------------
+    # AI 적합도 판정 (LLM)
+    # ------------------------------------------------------------------
+
+    async def _apply_llm_judgement(
+        self,
+        merged_condition_json: dict[str, Any],
+        candidates: list[PolicyCandidate],
+        assessments: list[RecommendationPolicyAssessment],
+        candidate_by_policy: dict[int, PolicyCandidate],
+    ) -> None:
+        """비-EXCLUDED 후보의 verdict를 LLM 판정으로 덮어쓴다.
+
+        - 하드 EXCLUDED는 안전을 위해 룰 결정론을 유지(LLM 대상에서 제외).
+        - LLM 호출 실패/결과 누락 시 해당 후보는 룰 판정을 그대로 둔다.
+        """
+        targets = [
+            candidate
+            for candidate in candidates
+            if candidate.candidate_status != CANDIDATE_STATUS_EXCLUDED
+        ]
+        if not targets:
+            return
+
+        payloads = [self._candidate_payload(candidate) for candidate in targets]
+        judgements = await self.judgement_agent.judge(
+            user_condition=merged_condition_json,
+            candidate_payloads=payloads,
+        )
+        if not judgements:
+            return
+
+        assessment_by_policy = {
+            assessment.policy_id: assessment for assessment in assessments
+        }
+        for judged in judgements:
+            try:
+                policy_id = int(judged.policy_id)
+            except (TypeError, ValueError):
+                continue
+            assessment = assessment_by_policy.get(policy_id)
+            candidate = candidate_by_policy.get(policy_id)
+            if assessment is None or candidate is None:
+                continue
+            # EXCLUDED 안전장치: 룰이 하드 제외한 후보를 AI가 되살리지 않는다.
+            if candidate.candidate_status == CANDIDATE_STATUS_EXCLUDED:
+                continue
+
+            status = judged.assessment_status
+            assessment.assessment_status = status
+            assessment.user_status = map_assessment_to_user_status(status)
+            # 표시 적합도는 임의 숫자 대신 status 기반으로 tier링(안정적).
+            assessment.confidence_score = self._confidence_score(
+                status, candidate.retrieval_score
+            )
+            reason = (judged.reason_summary or "").strip()
+            if reason:
+                assessment.reason_summary = reason
+            assessment.missing_information = self._clean_missing_information(
+                judged.missing_information
+            )
+
+    def _candidate_payload(self, candidate: PolicyCandidate) -> dict[str, Any]:
+        """LLM 판정 입력용 후보 요약(내부 점수/토큰은 제외)."""
+        detail = candidate.detail
+        filter_match_json = candidate.filter_match_json or {}
+        return {
+            "policy_id": str(candidate.policy.policy_id),
+            "policy_name": candidate.policy.policy_name,
+            "target_description": self._short(
+                getattr(detail, "target_description", None)
+            ),
+            "benefit_description": self._short(
+                getattr(detail, "benefit_description", None)
+            ),
+            "matched_conditions": self._rule_reasons(
+                filter_match_json.get("matched_rules")
+            ),
+            "uncertain_conditions": self._rule_reasons(
+                filter_match_json.get("uncertain_rules")
+            ),
+        }
+
+    def _rule_reasons(self, rules: Any) -> list[str]:
+        reasons: list[str] = []
+        for rule in self._dict_list(rules):
+            text = str(rule.get("reason") or rule.get("field") or "").strip()
+            # 내부 토큰/검색 신호는 LLM 입력에서도 제외해 혼선을 줄인다.
+            if text and str(rule.get("field") or "") != "candidate_search":
+                reasons.append(text)
+            if len(reasons) >= 5:
+                break
+        return reasons
+
+    def _clean_missing_information(self, values: Any) -> list[str]:
+        cleaned: list[str] = []
+        for value in values if isinstance(values, list) else []:
+            text = str(value or "").strip()
+            if text and text not in cleaned:
+                cleaned.append(text)
+            if len(cleaned) >= 5:
+                break
+        return cleaned
+
+    def _short(self, value: Any, limit: int = 300) -> str:
+        text = " ".join(str(value or "").split())
+        return text[:limit]
 
     def _assess_candidate(
         self,
