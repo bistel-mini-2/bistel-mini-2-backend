@@ -10,6 +10,7 @@ from app.services.recommendation_candidate_service import (
     CANDIDATE_STATUS_CANDIDATE,
     CANDIDATE_STATUS_EXCLUDED,
     CANDIDATE_STATUS_UNCERTAIN,
+    FIELD_DOMAIN,
     PolicyCandidate,
 )
 
@@ -86,6 +87,7 @@ class RecommendationAssessmentService:
             merged_condition_json=merged_condition_json,
             input_issues=input_issues,
             uncertain_rules=uncertain_rules,
+            candidate=candidate,
         )
         manual_check_points = self._manual_check_points(uncertain_rules)
         conflicting_conditions = self._dict_list(profile_conflict_json)
@@ -165,9 +167,10 @@ class RecommendationAssessmentService:
         merged_condition_json: dict[str, Any],
         input_issues: list[dict[str, Any]],
         uncertain_rules: list[dict[str, Any]],
+        candidate: PolicyCandidate,
     ) -> list[dict[str, Any]]:
         missing: list[dict[str, Any]] = []
-        for field_name in self._missing_core_fields(merged_condition_json):
+        for field_name in self._missing_core_fields(merged_condition_json, candidate):
             missing.append(
                 {
                     "field": field_name,
@@ -199,10 +202,18 @@ class RecommendationAssessmentService:
     def _missing_core_fields(
         self,
         merged_condition_json: dict[str, Any],
+        candidate: PolicyCandidate,
     ) -> list[str]:
+        # region/income은 정책이 실제로 그 도메인을 다룰 때만 결측 패널티를 준다.
+        # 전국 정책에 "지역 결측", 비소득 정책에 "소득 결측"이 잘못 잡혀
+        # 거의 모든 결과가 INSUFFICIENT_PROFILE(확인해 볼 정책)로 쏠리던 문제를 막는다.
+        relevant_domains = self._policy_relevant_domains(candidate)
         missing: list[str] = []
-        if not self._first(merged_condition_json, "region", "region_code"):
+        if "region" in relevant_domains and not self._first(
+            merged_condition_json, "region", "region_code"
+        ):
             missing.append("region")
+        # 생애주기/자녀 나이는 가족·육아 복지 서비스의 핵심 식별자라 항상 확인한다.
         if not self._first(
             merged_condition_json,
             "stage",
@@ -213,9 +224,42 @@ class RecommendationAssessmentService:
             "child_age_range",
         ):
             missing.append("stage_or_childAge")
-        if not self._first(merged_condition_json, "income", "income_level"):
+        # income domain 입력은 income/income_level 외에 income_status/benefit_status
+        # /income_bracket 등 다양한 alias로 들어올 수 있어 모두 확인한다.
+        if "income" in relevant_domains and not self._first(
+            merged_condition_json,
+            "income",
+            "income_level",
+            "income_bracket",
+            "income_status",
+            "benefit_status",
+        ):
             missing.append("income")
         return missing
+
+    def _policy_relevant_domains(self, candidate: PolicyCandidate) -> set[str]:
+        """정책 rule이 실제로 다루는 semantic domain 집합(stage/income/region 등).
+
+        filter_match_json의 matched/uncertain/excluded rule field를 domain으로 매핑한다.
+        rule이 없으면 빈 집합이 되어 region/income 결측 패널티가 적용되지 않는다.
+        """
+        filter_match_json = candidate.filter_match_json or {}
+        domains: set[str] = set()
+        for key in ("matched_rules", "uncertain_rules", "excluded_rules"):
+            for rule in self._dict_list(filter_match_json.get(key)):
+                field = str(rule.get("field") or rule.get("field_name") or "")
+                # 전국 정책은 지역과 무관한데 _apply_region_rule이
+                # policy_value="NATIONAL" region matched rule을 넣는다.
+                # 이를 region 관련 도메인으로 오인해 지역 결측 패널티를 주지 않는다.
+                if (
+                    field == "region"
+                    and str(rule.get("policy_value") or "").upper() == "NATIONAL"
+                ):
+                    continue
+                domain = FIELD_DOMAIN.get(field)
+                if domain:
+                    domains.add(domain)
+        return domains
 
     def _missing_field_count(
         self,
@@ -243,6 +287,9 @@ class RecommendationAssessmentService:
             "child_age_range": "stage_or_childAge",
             "income_level": "income",
             "income_bracket": "income",
+            "income_status": "income",
+            "benefit_status": "income",
+            "median_income_percent": "income",
         }
         return aliases.get(field, field)
 
