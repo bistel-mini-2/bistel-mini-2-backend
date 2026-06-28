@@ -160,9 +160,7 @@ class CompareService:
             slug=str(row["slug"]),
             name=str(row["name"]),
             summary={
-                "benefit": cls._display_value(
-                    row.get("condition_profile_source_text")
-                ),
+                "benefit": cls._display_value(row.get("benefit_type")),
                 "condition": cls._display_value(
                     row.get("condition_profile_target_summary")
                 ),
@@ -239,12 +237,24 @@ class CompareService:
                 row.get("condition_profile_json"),
                 {
                     "age",
+                    "caregiver_type",
                     "child_age",
+                    "disability",
+                    "eligible_household",
+                    "employment_status",
+                    "family_type",
+                    "household",
+                    "household_type",
                     "household_member_age",
                     "life_stage",
                     "pregnancy_status",
+                    "pregnancy_or_birth",
+                    "special_condition",
                     "stage",
+                    "target",
+                    "target_context",
                     "target_stage",
+                    "target_type",
                 },
             )
         if key == "caution_conditions":
@@ -283,7 +293,10 @@ class CompareService:
         return cls._unique_values([
             text
             for leaf in leaves
-            if str(leaf.get("field") or leaf.get("type") or "") in fields
+            if (
+                str(leaf.get("field") or "") in fields
+                or str(leaf.get("type") or "") in fields
+            )
             for text in [cls._condition_text(leaf)]
             if text
         ])

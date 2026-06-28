@@ -100,6 +100,7 @@ def test_compare_policies_returns_diff_and_related(monkeypatch) -> None:
 
     assert response.policy_a.policy_id == "1"
     assert response.policy_a.slug == "WLF00000001"
+    assert response.policy_a.summary["benefit"] == "현금"
     assert response.policy_a.summary["condition"] == "A 정책 대상 요약"
     assert response.policy_a.summary["source"] == "A 정책 조건 원문"
     assert response.policy_b.name == "B 정책"
@@ -108,6 +109,43 @@ def test_compare_policies_returns_diff_and_related(monkeypatch) -> None:
     assert any(item.field == "소득 조건" for item in response.diff_table)
     assert response.selection_guide
     assert response.related_policies[0].slug == "WLF00000003"
+
+
+def test_to_policy_summary_keeps_benefit_meaning() -> None:
+    policy = make_policy(policy_id=1, slug="WLF00000001", name="A 정책")
+
+    summary = CompareService._to_policy_summary(policy)
+
+    assert summary.summary["benefit"] == "현금"
+    assert summary.summary["condition"] == "A 정책 대상 요약"
+    assert summary.summary["source"] == "A 정책 조건 원문"
+
+
+def test_target_conditions_include_target_domain_aliases() -> None:
+    condition_json = {
+        "condition_tree": {
+            "operator": "AND",
+            "conditions": [
+                {
+                    "type": "target",
+                    "field": "special_condition",
+                    "source_text": "다문화가족 대상",
+                },
+                {
+                    "type": "target_context",
+                    "field": "eligible_household",
+                    "source_text": "보호자가 돌봄 공백 상태인 가구",
+                },
+            ],
+        },
+    }
+
+    row = {"condition_profile_json": condition_json}
+
+    assert CompareService._field_value(row, "target_conditions") == [
+        "다문화가족 대상",
+        "보호자가 돌봄 공백 상태인 가구",
+    ]
 
 
 def test_compare_policies_saves_history_when_user_exists(monkeypatch) -> None:

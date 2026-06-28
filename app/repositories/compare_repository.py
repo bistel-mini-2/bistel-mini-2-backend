@@ -281,7 +281,7 @@ class CompareRepository:
                     '[]'::jsonb
                 ) AS required_documents
             FROM policy p
-            JOIN policy_condition_profile cp ON cp.policy_id = p.policy_id
+            LEFT JOIN policy_condition_profile cp ON cp.policy_id = p.policy_id
             WHERE p.is_active = TRUE
               AND p.policy_code IN :slugs
             """
