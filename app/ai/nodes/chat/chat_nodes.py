@@ -28,6 +28,7 @@ from app.services.apply_preparation_service import ApplyPreparationService
 from app.services.policy_rag_service import PolicyRagService
 
 if TYPE_CHECKING:
+    from app.ai.graphs.comparison_graph import ComparisonGraphRunner
     from app.ai.graphs.eligibility_graph import EligibilityGraphRunner
     from app.services.ai_request_lifecycle_service import AiRequestLifecycleService
 
@@ -175,6 +176,12 @@ _ELIGIBILITY_FALLBACK_FOLLOW_UP = (
 )
 _ELIGIBILITY_FALLBACK_ERROR = (
     "지원 가능성을 분석하는 중 문제가 발생했어요. 잠시 후 다시 시도해 주세요."
+)
+_COMPARE_CLARIFICATION_FALLBACK = (
+    "비교할 정책 2개를 알려주세요. 예를 들어 '농식품바우처와 건강보험 임신출산 진료비를 비교해줘'처럼 질문하면 조건 기준으로 비교해 드릴게요."
+)
+_COMPARE_FALLBACK_ERROR = (
+    "정책 비교 결과를 만드는 중 문제가 발생했어요. 잠시 후 다시 시도해 주세요."
 )
 _APPLY_CLARIFICATION_FALLBACK = (
     "어떤 정책의 신청 방법을 알고 싶으신가요? 정책명을 알려주시면 신청 방법과 준비서류를 안내해 드릴게요."
@@ -343,6 +350,94 @@ def _adapt_eligibility_result(
     return content, user_status, policies, evidences
 
 
+def _adapt_comparison_result(
+    result_json: dict[str, Any],
+) -> tuple[str, list[dict[str, Any]]]:
+    policy_a = result_json.get("policy_a") or {}
+    policy_b = result_json.get("policy_b") or {}
+    name_a = str(policy_a.get("name") or policy_a.get("slug") or "첫 번째 정책")
+    name_b = str(policy_b.get("name") or policy_b.get("slug") or "두 번째 정책")
+    selection_guide = str(result_json.get("selection_guide") or "")
+    diff_table = [
+        item for item in result_json.get("diff_table") or []
+        if isinstance(item, dict)
+    ]
+    highlights: list[str] = []
+    for item in diff_table[:3]:
+        field = item.get("field")
+        a_value = str(item.get("a") or "공식 안내 확인 필요")
+        b_value = str(item.get("b") or "공식 안내 확인 필요")
+        if field:
+            highlights.append(f"- {field}: {name_a}은 {a_value}, {name_b}은 {b_value}")
+
+    content_parts = [
+        f"{name_a}와 {name_b}를 조건 기준으로 비교했어요.",
+    ]
+    if selection_guide:
+        content_parts.append(selection_guide)
+    if highlights:
+        content_parts.append("주요 차이는 다음과 같아요.\n" + "\n".join(highlights))
+    content_parts.append("자세한 항목별 비교는 정책 비교 화면에서 이어서 확인할 수 있어요.")
+
+    policies = []
+    for policy in (policy_a, policy_b):
+        slug = policy.get("slug")
+        if not slug:
+            continue
+        policies.append(
+            {
+                "policy_id": policy.get("policy_id") or slug,
+                "slug": slug,
+                "policy_name": policy.get("name") or "",
+                "summary": (policy.get("summary") or {}).get("condition"),
+                "tag": None,
+                "tagTone": None,
+            }
+        )
+    return "\n\n".join(content_parts), policies
+
+
+def _pick_compare_targets(
+    policies: list[dict[str, Any]],
+    *,
+    slot: ChatSlot | None,
+    user_content: str,
+) -> tuple[tuple[str, str | None] | None, tuple[str, str | None] | None]:
+    candidates: list[tuple[str, str | None]] = []
+    seen: set[str] = set()
+
+    def append(slug: Any, policy_name: Any = None) -> None:
+        if not slug:
+            return
+        key = str(slug)
+        if key in seen:
+            return
+        seen.add(key)
+        candidates.append((key, str(policy_name) if policy_name else None))
+
+    mentioned_slot_policies: list[SlotPolicy] = []
+    for policy in (slot or {}).get("recent_policies") or []:
+        if _user_mentions_policy_name(user_content, policy.get("policy_name")):
+            mentioned_slot_policies.append(policy)  # type: ignore[arg-type]
+    for policy in mentioned_slot_policies:
+        append(policy.get("slug"), policy.get("policy_name"))
+
+    if not candidates and _is_context_dependent_compare_question(user_content):
+        for policy in (slot or {}).get("recent_policies") or []:
+            append(policy.get("slug"), policy.get("policy_name"))
+            if len(candidates) >= 2:
+                break
+
+    for policy in policies:
+        append(policy.get("slug"), policy.get("policy_name"))
+        if len(candidates) >= 2:
+            break
+
+    if len(candidates) < 2:
+        return None, None
+    return candidates[0], candidates[1]
+
+
 def _pick_apply_target(
     policies: list[dict[str, Any]],
     *,
@@ -381,12 +476,25 @@ _CONTEXT_DEPENDENT_APPLY_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"(신청|서류|준비|기간|어디서|어떻게|방법|절차|문의).*[?？]?$"),
 )
 
+_CONTEXT_DEPENDENT_COMPARE_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"(둘|두 정책|두개|2개|서로|비교|차이|뭐가 더|어느 쪽|어떤 게)"),
+)
+
 
 def _is_context_dependent_apply_question(user_content: str) -> bool:
     content = user_content.strip()
     if not content:
         return False
     return any(pattern.search(content) for pattern in _CONTEXT_DEPENDENT_APPLY_PATTERNS)
+
+
+def _is_context_dependent_compare_question(user_content: str) -> bool:
+    content = user_content.strip()
+    if not content:
+        return False
+    return any(
+        pattern.search(content) for pattern in _CONTEXT_DEPENDENT_COMPARE_PATTERNS
+    )
 
 
 def _recent_assistant_policy_target(
@@ -507,10 +615,12 @@ class ChatGraphNodes:
         rag_service: PolicyRagService | None = None,
         lifecycle_service: AiRequestLifecycleService | None = None,
         eligibility_graph: EligibilityGraphRunner | None = None,
+        comparison_graph: ComparisonGraphRunner | None = None,
     ) -> None:
         self.rag_service = rag_service or PolicyRagService()
         self.lifecycle_service = lifecycle_service
         self.eligibility_graph = eligibility_graph
+        self.comparison_graph = comparison_graph
 
     async def supervisor(self, state: ChatGraphState) -> ChatGraphState:
         llm = _llm().with_structured_output(_IntentDecision)
@@ -610,7 +720,25 @@ class ChatGraphNodes:
         )
 
     async def branch_compare(self, state: ChatGraphState) -> ChatGraphState:
-        return await self._branch_with_rag("compare", state)
+        policies, evidences = await self._rag_lookup(state["user_content"])
+        first, second = _pick_compare_targets(
+            policies,
+            slot=state.get("slot"),
+            user_content=state["user_content"],
+        )
+        if first is None or second is None:
+            return {
+                **state,
+                "branch_content": _COMPARE_CLARIFICATION_FALLBACK,
+                "branch_policies": [],
+                "branch_evidences": evidences,
+            }
+        return await self._run_comparison_branch(
+            state=state,
+            slug_a=first[0],
+            slug_b=second[0],
+            evidences=evidences,
+        )
 
     async def branch_apply(self, state: ChatGraphState) -> ChatGraphState:
         decision = state.get("supervisor_decision") or {}
@@ -908,6 +1036,52 @@ class ChatGraphNodes:
                 lifecycle_service=self.lifecycle_service
             )
         return self.eligibility_graph
+
+    async def _run_comparison_branch(
+        self,
+        *,
+        state: ChatGraphState,
+        slug_a: str,
+        slug_b: str,
+        evidences: list[dict],
+    ) -> ChatGraphState:
+        try:
+            async with AsyncSessionLocal() as db:
+                try:
+                    result_json = await self._comparison_graph().run(
+                        db,
+                        slug_a=slug_a,
+                        slug_b=slug_b,
+                        user_id=state["user_id"],
+                        raw_query=state["user_content"],
+                    )
+                    await db.commit()
+                except Exception:
+                    await db.rollback()
+                    raise
+        except Exception:
+            logger.exception("chat branch_compare comparison graph failed")
+            return {
+                **state,
+                "branch_content": _COMPARE_FALLBACK_ERROR,
+                "branch_policies": [],
+                "branch_evidences": evidences,
+            }
+
+        content, policies = _adapt_comparison_result(result_json)
+        return {
+            **state,
+            "branch_content": content,
+            "branch_policies": policies,
+            "branch_evidences": evidences,
+        }
+
+    def _comparison_graph(self) -> ComparisonGraphRunner:
+        if self.comparison_graph is None:
+            from app.ai.graphs.comparison_graph import ComparisonGraphRunner
+
+            self.comparison_graph = ComparisonGraphRunner()
+        return self.comparison_graph
 
     async def _run_apply_preparation(
         self,
