@@ -33,6 +33,17 @@ class EligibilityRequestCreate(BaseModel):
         return self
 
 
+class RecommendationAnswer(BaseModel):
+    # 게이트 질문에 대한 사용자 답변. question_text는 raw_query 머지용 맥락.
+    question_text: str | None = None
+    answer: str | None = None
+
+
+class RecommendationAnswerSubmit(BaseModel):
+    # 빈 목록이면 "그냥 결과 보기"(건너뛰기)로 처리한다.
+    answers: list[RecommendationAnswer] = Field(default_factory=list)
+
+
 class AiRequestSnapshot(BaseModel):
     request_id: str
     request_type: Literal["recommendation", "eligibility"]
@@ -51,7 +62,7 @@ class AiRequestSnapshot(BaseModel):
     error_message: str | None = None
 
 
-RecommendationPollingStatus = Literal["loading", "done", "error"]
+RecommendationPollingStatus = Literal["loading", "done", "error", "follow_up"]
 
 
 class RecommendationEvidenceItem(BaseModel):

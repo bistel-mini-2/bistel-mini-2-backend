@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from typing import Any, Protocol
 
 from pydantic import BaseModel, Field
@@ -12,6 +13,8 @@ from app.schemas.ai_contract import (
 )
 from app.services.profile_condition_merge_service import ProfileConditionMergeService
 
+
+logger = logging.getLogger(__name__)
 
 ALLOWED_LIFE_STAGES = {item.value for item in LifeStage}
 ALLOWED_CHILD_AGES = {item.value for item in ChildAge}
@@ -128,7 +131,7 @@ class LangChainConditionExtractor:
     def __init__(
         self,
         model: str = "gpt-4o-mini",
-        timeout_seconds: float = 30,
+        timeout_seconds: float = 60,
     ) -> None:
         self.model = model
         self.timeout_seconds = timeout_seconds
@@ -216,7 +219,15 @@ class LangChainConditionExtractor:
                 structured_llm.ainvoke(messages),
                 timeout=self.timeout_seconds,
             )
-        except asyncio.TimeoutError:
+        except Exception as exc:
+            # LLM 실패(타임아웃/쿼터 초과/네트워크 등) 시 빈 추출로 degrade한다.
+            # 입력 파싱이 죽어 요청 전체가 실패하지 않도록, 폼 selected_conditions
+            # 기반 룰 추천은 계속 진행되게 한다.
+            logger.warning(
+                "Condition extraction LLM failed, falling back to empty extraction: %s: %s",
+                type(exc).__name__,
+                exc,
+            )
             return {}
         if isinstance(result, NaturalLanguageConditionExtraction):
             return result.model_dump(exclude_none=True)

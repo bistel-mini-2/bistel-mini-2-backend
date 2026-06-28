@@ -23,7 +23,7 @@ class RecommendationJudgementAgent:
     def __init__(
         self,
         model: str = "gpt-4o-mini",
-        timeout_seconds: float = 40,
+        timeout_seconds: float = 90,
     ) -> None:
         self.model = model
         self.timeout_seconds = timeout_seconds
@@ -107,7 +107,11 @@ class RecommendationJudgementAgent:
 1. 제공된 정책 정보(target/benefit/조건)와 사용자 조건 안에서만 판단하고, 없는 내용을 추측하지 않습니다.
 2. 이 후보들은 이미 하드 불일치 필터를 통과했으므로, 명백히 어긋날 때만 NOT_MATCH로 둡니다. 애매하면 NEEDS_MORE_INFO를 우선합니다.
 3. 지원 자격을 "확정"으로 단정하지 않습니다(추천 보조 판단).
-4. reason_summary는 사용자 친화 한국어 1문장으로, 어떤 사용자 조건과 어떤 정책 조건이 맞거나 확인이 필요한지 설명합니다. 시스템/내부 용어, 대문자 규칙 코드는 쓰지 않습니다.
-5. missing_information에는 확정 판정을 위해 사용자에게 더 물어봐야 할 정보만 짧게 담습니다(없으면 빈 배열). 예: "의료급여 수급 여부", "자녀의 정확한 개월 수".
-6. 입력으로 받은 policy_id만 사용하고, 모든 후보에 대해 판정을 출력합니다.
+4. 정책 자격이 사용자가 아직 밝히지 않은 "결정적 조건"에 달려 있으면 LIKELY_MATCH로 단정하지 말고 NEEDS_MORE_INFO로 두고, 그 확인 항목을 missing_information에 구체적으로 담습니다. 결정적 조건의 예:
+   - 수급 자격(기초생활보장/생계·의료·주거·교육 급여/차상위계층/한부모가족 수급 등). 사용자가 소득 "구간"만 말하고 수급 자격을 밝히지 않았으면, 수급 자격 정책은 "소득이 낮으니 잘 맞음"으로 단정하지 말고 수급 자격 여부를 묻습니다.
+   - 출생신고/주민등록 여부, 장애 정도, 위기아동·가정보호 해당 여부 등 자격을 가르는 핵심 상태.
+   이런 항목은 카드 "확인사항"으로만 미루지 말고 missing_information(=추가질문)에 올립니다.
+5. reason_summary는 사용자 친화 한국어 1문장으로, 어떤 사용자 조건과 어떤 정책 조건이 맞거나 확인이 필요한지 설명합니다. 시스템/내부 용어, 대문자 규칙 코드는 쓰지 않습니다.
+6. missing_information에는 확정 판정을 위해 사용자에게 더 물어봐야 할 정보만 짧게 담습니다. 예: "기초생활/차상위 등 수급 자격 여부", "자녀의 정확한 개월 수". NEEDS_MORE_INFO나 INSUFFICIENT_PROFILE로 판정하면 반드시 1개 이상 채웁니다(더 물어볼 게 없는 LIKELY_MATCH만 빈 배열).
+7. 입력으로 받은 policy_id만 사용하고, 모든 후보에 대해 판정을 출력합니다.
 """.strip()

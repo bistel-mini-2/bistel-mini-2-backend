@@ -158,6 +158,62 @@ class AiRequestLifecycleService:
             RequestStatus.FOLLOW_UP_REQUIRED,
         )
 
+    async def submit_recommendation_answers(
+        self,
+        db: AsyncSession,
+        request_id: int,
+        user_id: int,
+        answers: list[dict[str, Any]],
+    ) -> AiRequestSnapshot:
+        """추가질문 답변을 받아 조건에 반영하고 추천을 재실행 가능 상태로 만든다.
+
+        답변을 raw_query에 자연어로 머지해 condition_agent가 재파싱하게 하고,
+        follow_up_resolved 플래그를 set해 재실행 시 게이트가 다시 발생하지 않게 한다.
+        빈 답변(건너뛰기)이면 플래그만 set하고 그대로 재실행한다.
+        """
+        request = await self._get_request_or_raise(db, "recommendation", request_id)
+        if request.user_id != user_id:
+            raise self._not_found("recommendation", request_id)
+        # 추가질문 답변은 게이트 상태(FOLLOW_UP_REQUIRED)에서만 허용한다.
+        # 이미 완료/처리중/실패한 요청에 답변이 와도 파이프라인을 다시 돌리지 않는다.
+        if RequestStatus(request.request_status) != RequestStatus.FOLLOW_UP_REQUIRED:
+            raise AppException(
+                status_code=status.HTTP_409_CONFLICT,
+                code=ErrorCode.CONFLICT,
+                message="추가 정보가 필요한 요청에만 답변을 제출할 수 있어요.",
+            )
+
+        parsed_query_json = dict(request.parsed_query_json or {})
+        parsed_query_json["follow_up_resolved"] = True
+        augmented_raw_query = self._augment_raw_query(request.raw_query, answers)
+        await self.repository.update_payload(
+            db=db,
+            request=request,
+            parsed_query_json=parsed_query_json,
+            raw_query=augmented_raw_query,
+        )
+        return await self.mark_processing(db, "recommendation", request_id)
+
+    def _augment_raw_query(
+        self,
+        raw_query: str | None,
+        answers: list[dict[str, Any]],
+    ) -> str:
+        base = " ".join(str(raw_query or "").split())
+        extra_parts: list[str] = []
+        for answer in answers if isinstance(answers, list) else []:
+            if not isinstance(answer, dict):
+                continue
+            question = " ".join(str(answer.get("question_text") or "").split())
+            value = " ".join(str(answer.get("answer") or "").split())
+            if not value:
+                continue
+            extra_parts.append(f"{question} {value}".strip() if question else value)
+        extra = " ".join(extra_parts).strip()
+        if not extra:
+            return base
+        return f"{base} {extra}".strip()
+
     async def mark_failed(
         self,
         db: AsyncSession,
@@ -226,6 +282,8 @@ class AiRequestLifecycleService:
     ) -> AiRequestSnapshot:
         request = await self._get_request_or_raise(db, request_type, request_id)
         parsed_query_json = request.parsed_query_json or {}
+        # 추가질문 게이트를 이미 한 번 거쳤는지(답변 후 재실행인지). 재실행이면 게이트 스킵.
+        follow_up_resolved = bool(parsed_query_json.get("follow_up_resolved"))
         profile_snapshot = await self._condition_profile_snapshot(
             db=db,
             request_type=request_type,
@@ -253,6 +311,8 @@ class AiRequestLifecycleService:
                 candidate.model_dump(mode="json")
                 for candidate in condition_result.follow_up_candidates
             ],
+            # 재실행 시 게이트가 다시 발생하지 않도록 플래그를 보존한다.
+            "follow_up_resolved": follow_up_resolved,
         }
         await self.repository.update_payload(
             db=db,
@@ -261,7 +321,8 @@ class AiRequestLifecycleService:
             merged_condition_json=condition_result.merged_condition_json,
             profile_conflict_json=profile_conflict_json,
         )
-        if condition_result.follow_up_candidates:
+        # 입력 파싱 게이트: 아직 추가질문을 안 거쳤을 때만.
+        if condition_result.follow_up_candidates and not follow_up_resolved:
             return await self.mark_follow_up_required(
                 db,
                 request_type,
@@ -278,6 +339,24 @@ class AiRequestLifecycleService:
                 selected_conditions=parsed_query_json.get("selected_conditions"),
             )
             result_json = normalize_recommendation_result_json(result_json)
+            # AI 판정 게이트: 아직 추가질문을 안 거쳤고, 최종 결과에 공통 부족정보가 있으면
+            # 결과를 확정하지 않고 질문을 띄운다(최대 1라운드).
+            if not follow_up_resolved:
+                gate_questions = self._recommendation_missing_questions(result_json)
+                if gate_questions:
+                    await self.repository.update_payload(
+                        db=db,
+                        request=request,
+                        parsed_query_json={
+                            **parsed_result,
+                            "questions": gate_questions,
+                        },
+                    )
+                    return await self.mark_follow_up_required(
+                        db,
+                        request_type,
+                        request_id,
+                    )
             await self.repository.update_result(
                 db=db,
                 request=request,
@@ -693,10 +772,10 @@ class AiRequestLifecycleService:
     ) -> RecommendationPollingStatus:
         if request_status in {RequestStatus.READY, RequestStatus.PROCESSING}:
             return "loading"
-        if request_status in {
-            RequestStatus.COMPLETED,
-            RequestStatus.FOLLOW_UP_REQUIRED,
-        }:
+        # 추가질문 게이트는 결과(done)와 구분해 내려, 프론트가 답변 폼을 띄울 수 있게 한다.
+        if request_status == RequestStatus.FOLLOW_UP_REQUIRED:
+            return "follow_up"
+        if request_status == RequestStatus.COMPLETED:
             return "done"
         return "error"
 
@@ -777,6 +856,115 @@ class AiRequestLifecycleService:
             for question in questions
             if isinstance(question, dict)
         ][:2]
+
+    def _recommendation_missing_questions(
+        self,
+        result_json: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        """최종 추천 결과의 부족 정보를 게이트 질문(최대 2개)으로 변환한다.
+
+        AI 모델이 제한적이라 missing_information만 믿으면 핵심 자격(수급 자격 등)을
+        자주 놓치므로, 룰 기반 확인사항(check_before_apply/manual_check_points)에서
+        결정적 자격 축을 키워드로 감지해 결정론적으로 질문을 올린다.
+        순서: 1) 결정적 자격 키워드  2) AI missing_information  3) 룰 핵심 조건 field 라벨.
+        상위 결과부터 훑어 중복 제거 후 최대 2개만 채택한다.
+        parsed_query_json.questions에 저장되어 기존 폴링 변환이 그대로 사용한다.
+        """
+        results = result_json.get("results") or result_json.get("recommendations") or []
+        if not isinstance(results, list):
+            return []
+
+        seen: set[str] = set()
+        questions: list[dict[str, Any]] = []
+
+        def add_question(question_text: str) -> bool:
+            text = " ".join(str(question_text or "").split())
+            if not text or text in seen:
+                return False
+            seen.add(text)
+            questions.append(
+                {
+                    "field_name": "",
+                    "question_text": text,
+                    "reason": "더 정확한 추천을 위해 확인이 필요해요.",
+                    "priority": len(questions),
+                }
+            )
+            return len(questions) >= 2
+
+        # 1순위: 결정적 자격 축(수급 자격 등)을 룰 확인사항 텍스트에서 키워드로 감지.
+        for item in results:
+            if not isinstance(item, dict):
+                continue
+            check_text = self._item_check_text(item)
+            for keywords, question in self._GATE_KEYWORD_QUESTIONS:
+                if any(keyword in check_text for keyword in keywords):
+                    if add_question(question):
+                        return questions
+
+        # 2순위: AI 판정이 명시한 부족 정보.
+        for item in results:
+            if not isinstance(item, dict):
+                continue
+            missing = item.get("missing_information")
+            for info in missing if isinstance(missing, list) else []:
+                label = " ".join(str(info or "").split())
+                if label and add_question(f"{label}, 알려주시겠어요?"):
+                    return questions
+
+        # 3순위: 룰상 핵심 조건 부족(missing_conditions)을 field 라벨 질문으로 보강.
+        for item in results:
+            if not isinstance(item, dict):
+                continue
+            conditions = item.get("missing_conditions")
+            for condition in conditions if isinstance(conditions, list) else []:
+                if not isinstance(condition, dict):
+                    continue
+                field = str(condition.get("field") or condition.get("field_name") or "")
+                label = self._GATE_FIELD_LABELS.get(field)
+                if label and add_question(f"{label}, 알려주시겠어요?"):
+                    return questions
+
+        return questions
+
+    def _item_check_text(self, item: dict[str, Any]) -> str:
+        """후보의 룰 기반 확인사항 텍스트를 모은다(키워드 감지용)."""
+        parts: list[str] = [str(item.get("check_before_apply") or "")]
+        for key in ("manual_check_points", "missing_conditions"):
+            rows = item.get(key)
+            for row in rows if isinstance(rows, list) else []:
+                if isinstance(row, dict):
+                    parts.append(str(row.get("reason") or ""))
+        return " ".join(parts)
+
+    # 룰 확인사항 텍스트에 이 키워드가 보이면, 해당 결정적 자격을 게이트 질문으로 올린다.
+    _GATE_KEYWORD_QUESTIONS = (
+        (
+            ("수급 자격", "수급 여부", "수급 가구", "기초생활", "차상위"),
+            "기초생활·차상위 등 수급 자격이 있으신가요?",
+        ),
+        (("출생신고",), "자녀의 출생신고를 마치셨나요?"),
+        (
+            ("장애 정도", "장애 등급", "장애인 등록", "장애아"),
+            "자녀(또는 가구원)의 장애 등록 여부를 알려주시겠어요?",
+        ),
+        (
+            ("위기아동", "가정보호", "전문위탁", "전문가정위탁"),
+            "위기아동 가정보호·전문위탁 대상에 해당하시나요?",
+        ),
+    )
+
+    # 룰 부족 조건 field → 게이트 질문에 쓸 사용자 친화 라벨.
+    _GATE_FIELD_LABELS = {
+        "income": "가구 소득 구간",
+        "income_level": "가구 소득 구간",
+        "region": "거주 지역",
+        "region_code": "거주 지역",
+        "stage_or_childAge": "자녀 나이(또는 임신 여부)",
+        "stage": "생애주기(임신/영유아 등)",
+        "child_age": "자녀 나이",
+        "childAge": "자녀 나이",
+    }
 
     def _eligibility_follow_up_questions(
         self,

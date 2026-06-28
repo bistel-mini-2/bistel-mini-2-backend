@@ -38,9 +38,12 @@ class RecommendationAssessmentService:
     def __init__(
         self,
         judgement_agent: RecommendationJudgementAgent | None = None,
+        judgement_target_limit: int = 10,
     ) -> None:
         # 룰 기반 판정을 유지하면서, AI 적합도 판정은 별도 에이전트에 위임한다.
         self.judgement_agent = judgement_agent or RecommendationJudgementAgent()
+        # LLM 판정 대상 상한(retrieval 상위 N). 토큰/지연 통제용.
+        self.judgement_target_limit = judgement_target_limit
 
     async def assess_candidates(
         self,
@@ -106,11 +109,17 @@ class RecommendationAssessmentService:
         - 하드 EXCLUDED는 안전을 위해 룰 결정론을 유지(LLM 대상에서 제외).
         - LLM 호출 실패/결과 누락 시 해당 후보는 룰 판정을 그대로 둔다.
         """
-        targets = [
-            candidate
-            for candidate in candidates
-            if candidate.candidate_status != CANDIDATE_STATUS_EXCLUDED
-        ]
+        # 비-EXCLUDED 후보를 retrieval 상위 N개만 LLM 판정 대상으로 둔다.
+        # (어차피 풀 선별에서 상위만 결과로 가므로, 전체 판정으로 토큰/지연을 키우지 않는다.)
+        targets = sorted(
+            (
+                candidate
+                for candidate in candidates
+                if candidate.candidate_status != CANDIDATE_STATUS_EXCLUDED
+            ),
+            key=lambda candidate: candidate.retrieval_score,
+            reverse=True,
+        )[: self.judgement_target_limit]
         if not targets:
             return
 
