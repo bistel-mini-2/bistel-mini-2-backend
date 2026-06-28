@@ -1,3 +1,4 @@
+import re
 from typing import Any
 
 # 판정 종류.
@@ -60,7 +61,7 @@ class RuleExplanationService:
                 return self._shorten(manual_reason)
 
         source = self._clean(entry.get("source_text"))
-        if source:
+        if source and self._is_displayable(source):
             return self._with_verdict(self._shorten(source), verdict)
 
         # note는 사람이 읽는 문구일 때만 사용한다(group_key/field_name 같은 내부 토큰 제외).
@@ -69,7 +70,7 @@ class RuleExplanationService:
             return self._with_verdict(self._shorten(note), verdict)
 
         reason = self._clean(entry.get("reason"))
-        if reason:
+        if reason and self._is_displayable(reason):
             return self._shorten(reason)
 
         label = self._field_label(entry.get("field") or entry.get("field_name"))
@@ -126,6 +127,18 @@ class RuleExplanationService:
     def _is_human_text(self, text: str) -> bool:
         """한글이 포함된 사람이 읽는 문구인지(내부 영문 토큰 노출 방지)."""
         return any("가" <= ch <= "힣" for ch in text)
+
+    def _is_displayable(self, text: str) -> bool:
+        """사용자 노출 가능한 문구인지. 내부 토큰(대문자/언더스코어 코드)은 제외한다.
+
+        예: "FOSTERCAREPARTICIPATIONNOTMODELED",
+        "REFUGEE_APPLICATION_PENDING_EXCLUDED" 같은 규칙 코드가 source_text/reason에
+        섞여 들어와도 사용자 카드에 그대로 노출되지 않도록 막는다.
+        """
+        if self._is_human_text(text):
+            return True
+        # 한글이 없고 영문 대문자/숫자/언더스코어/구분기호로만 이뤄지면 내부 토큰으로 본다.
+        return not bool(re.fullmatch(r"[A-Z0-9][A-Z0-9_./\s-]*", text.strip()))
 
     def _clean(self, value: Any) -> str | None:
         if value in (None, "", []):

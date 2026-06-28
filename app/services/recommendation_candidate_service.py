@@ -438,12 +438,20 @@ class RecommendationCandidateService:
                 excluded_rules,
             ),
             # 사용자 노출용 사유 목록(기존 score_reason/reason은 유지, 추가만).
+            # candidate_search(DB/RAG 후보 검색) 같은 내부 검색 신호는 사용자에게
+            # 의미가 없으므로 사유 목록에서 제외한다.
             "reasons": {
-                "matched": _EXPLANATION.explain_each(matched_rules, VERDICT_MATCHED),
-                "uncertain": _EXPLANATION.explain_each(
-                    uncertain_rules, VERDICT_UNCERTAIN
+                # "잘 맞는 점"은 짧은 필드 라벨 칩으로 노출한다(지역 제외).
+                "matched_labels": self._matched_field_labels(matched_rules),
+                "matched": _EXPLANATION.explain_each(
+                    self._user_facing_rules(matched_rules), VERDICT_MATCHED
                 ),
-                "excluded": _EXPLANATION.explain_each(excluded_rules, VERDICT_EXCLUDED),
+                "uncertain": _EXPLANATION.explain_each(
+                    self._user_facing_rules(uncertain_rules), VERDICT_UNCERTAIN
+                ),
+                "excluded": _EXPLANATION.explain_each(
+                    self._user_facing_rules(excluded_rules), VERDICT_EXCLUDED
+                ),
             },
             "query_terms": query_terms,
             "candidate_search": candidate_search,
@@ -1140,6 +1148,44 @@ class RecommendationCandidateService:
         if matched_rules:
             return "사용자 조건과 정책 정보가 일부 일치해 후보로 유지합니다."
         return "비교 가능한 기본 후보입니다."
+
+    # 사용자 노출용 사유에서 제외할 내부 신호 field.
+    _INTERNAL_REASON_FIELDS = frozenset({"candidate_search"})
+
+    # "잘 맞는 점" 라벨에서 제외할 field.
+    # candidate_search: 내부 DB/RAG 검색 신호.
+    # region: 정책이 지자체 단위까지 구분되지 않아 "전국 정책" 매칭이 사실상 무의미.
+    _MATCHED_LABEL_EXCLUDED_FIELDS = frozenset({"candidate_search", "region"})
+
+    def _user_facing_rules(
+        self, rules: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        """사유 목록 생성 전, 내부 검색 신호(candidate_search 등)를 걸러낸다."""
+        return [
+            rule
+            for rule in rules
+            if str(rule.get("field") or rule.get("field_name") or "")
+            not in self._INTERNAL_REASON_FIELDS
+        ]
+
+    def _matched_field_labels(
+        self, rules: list[dict[str, Any]]
+    ) -> list[str]:
+        """"잘 맞는 점" 칩용 짧은 한국어 필드 라벨 목록(중복 제거).
+
+        장황한 사유 문장 대신 "생애주기", "자녀 나이"처럼 매칭된 조건 라벨만 추린다.
+        내부 신호/지역 field와 라벨 매핑이 없는 field는 제외한다.
+        """
+        labels: list[str] = []
+        for rule in rules:
+            field = str(rule.get("field") or rule.get("field_name") or "")
+            if field in self._MATCHED_LABEL_EXCLUDED_FIELDS:
+                continue
+            label = _EXPLANATION.field_label(field)
+            if not label or label == "해당 조건" or label in labels:
+                continue
+            labels.append(label)
+        return labels
 
     def _matched_rule(
         self,
