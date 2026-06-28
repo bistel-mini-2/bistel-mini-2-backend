@@ -178,9 +178,33 @@ class RecommendationRerankService:
                    모든 후보에 같은 점수나 1.0을 반복하지 말고 순위 차이가 보이게 한다.
                 7. priority_label은 "가장 먼저 확인", "우선 확인", "조건 잘 맞음",
                    "추가 확인 필요", "함께 확인" 중 하나를 권장한다.
-                8. why_recommended는 왜 이 사용자에게 우선 추천되는지 한 문장으로 쓴다.
+                8. why_recommended는 "사용자의 어떤 입력 조건"과 "정책의 어떤 지원
+                   대상/혜택"이 왜 맞는지를 자연스러운 2~3문장으로 설명한다.
+                   (카드의 "AI 코멘트" 영역에 들어가므로 한 문장으로 끝내지 말고
+                   2~3문장으로 충분히 풀어 쓴다.)
+                   반드시 아래 내용을 모두 포함한다.
+                   - 사용자의 입력 조건을 1개 이상 언급한다(예: 자녀 나이, 가구 유형,
+                     소득 상황, 거주 지역 등 user_context/merged_condition_json 기반).
+                   - 정책의 지원 대상 또는 혜택을 1개 이상 언급한다.
+                   - 둘이 왜 맞는지(또는 왜 확인해 볼 만한지)와, 이 정책으로 무엇이
+                     도움이 되는지를 이어서 설명한다.
+                   예시:
+                   - "입력하신 자녀 나이가 영유아 지원 대상과 잘 맞아요. 이 정책은
+                     돌봄 공간과 프로그램을 제공해 보육 부담을 덜어줘요. 양육 지원이
+                     필요한 상황과 맞아 우선 추천드려요."
+                   - "차상위계층 조건이 정책의 저소득 가구 지원 대상과 맞닿아 있어요.
+                     의료비 부담을 줄여주는 혜택이라 도움이 될 수 있어요. 다만 세부
+                     자격은 확인이 필요해 확인해 볼 정책으로 안내드려요."
+                   다음은 절대 쓰지 않는다.
+                   - "DB", "RAG", "policy_rule", "hard rule" 같은 시스템/내부 용어
+                   - "REFUGEE_APPLICATION_PENDING_EXCLUDED"처럼 대문자 SNAKE_CASE로 된
+                     내부 토큰이나 규칙 코드(사람이 읽는 일반 표현으로 바꿔 쓴다)
+                   - "충족/미충족" 같은 판정표 문구
+                   - 정책 근거 원문을 그대로 길게 복사하는 것
                 9. check_before_apply는 신청 전 확인할 점이 있으면 한 문장으로 쓴다.
-                10. reason_summary는 짧고 자연스러운 한글 1~2문장으로 작성한다.
+                10. reason_summary는 짧고 자연스러운 한글 1~2문장의 사용자 친화적 문장으로
+                   작성한다. why_recommended와 동일한 금지 규칙(시스템/내부 용어, 대문자
+                   SNAKE_CASE 내부 토큰, 판정표 문구, 근거 원문 복사 금지)을 따른다.
                 11. evidences는 카드 UI에 보여줄 짧은 근거 문장이다.
                    각 evidence는 입력 evidence chunk 내용 안에서만 요약하고,
                    source_chunk_id는 반드시 입력 evidence에 존재하는 chunk_id를 사용한다.
@@ -360,12 +384,13 @@ class RecommendationRerankService:
                 limit=220,
                 max_sentences=2,
             )
+            # 카드 AI 코멘트 본문: 카드가 꽉 차 보이도록 2~3문장까지 허용한다.
             why_recommended = normalize_card_text(
                 recommendation.why_recommended
                 or recommendation_reason
                 or reason_summary,
-                limit=180,
-                max_sentences=1,
+                limit=300,
+                max_sentences=3,
             )
             check_before_apply = normalize_card_text(
                 recommendation.check_before_apply
@@ -621,8 +646,16 @@ class RecommendationRerankService:
         reasons: list[str] = []
         for row in rows:
             if isinstance(row, dict) and row.get("reason"):
-                reasons.append(str(row["reason"]))
+                text = str(row["reason"]).strip()
+                # 내부 규칙 코드(예: "FOSTERCAREPARTICIPATIONNOTMODELED")가 그대로
+                # 확인사항으로 노출되지 않도록 사람이 읽는 한글 문구만 사용한다.
+                if self._is_human_reason(text):
+                    reasons.append(text)
         return reasons
+
+    def _is_human_reason(self, text: str) -> bool:
+        """한글이 포함된 사람이 읽는 문구인지(내부 영문 토큰/규칙 코드 제외)."""
+        return any("가" <= ch <= "힣" for ch in text)
 
     def _check_field_labels(self, rows: Any) -> list[str]:
         if not isinstance(rows, list):

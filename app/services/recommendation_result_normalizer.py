@@ -75,13 +75,19 @@ def normalize_recommendation_result_item(
                 limit=CARD_REASON_LIMIT,
                 max_sentences=2,
             )
-    for key in ("why_recommended", "check_before_apply"):
-        if normalized.get(key):
-            normalized[key] = normalize_card_text(
-                normalized[key],
-                limit=180,
-                max_sentences=1,
-            )
+    # why_recommended는 카드 AI 코멘트 본문이라 2~3문장까지 허용해 꽉 차 보이게 한다.
+    if normalized.get("why_recommended"):
+        normalized["why_recommended"] = normalize_card_text(
+            normalized["why_recommended"],
+            limit=300,
+            max_sentences=3,
+        )
+    if normalized.get("check_before_apply"):
+        normalized["check_before_apply"] = normalize_card_text(
+            normalized["check_before_apply"],
+            limit=180,
+            max_sentences=1,
+        )
     if normalized.get("priority_label"):
         normalized["priority_label"] = normalize_card_text(
             normalized["priority_label"],
