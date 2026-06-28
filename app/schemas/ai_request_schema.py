@@ -71,6 +71,17 @@ class FollowUpQuestionItem(BaseModel):
     priority: int = 0
 
 
+class RecommendationReasons(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    # 카드 "잘 맞는 점" 칩에 쓰는 짧은 매칭 조건 라벨(생애주기·자녀 나이 등).
+    matched_labels: list[str] = Field(default_factory=list)
+    # 상세 사유 목록(충족/확인 필요/미충족).
+    matched: list[str] = Field(default_factory=list)
+    uncertain: list[str] = Field(default_factory=list)
+    excluded: list[str] = Field(default_factory=list)
+
+
 class RecommendationResultItem(BaseModel):
     model_config = ConfigDict(extra="allow")
 
@@ -81,9 +92,22 @@ class RecommendationResultItem(BaseModel):
     benefit_description: str | None = None
     match_score: float | None = None
     raw_match_score: float | None = None
+    # priority_score는 순위 정렬용 합성 점수(표시용 아님).
     priority_score: float | None = None
+    # 표시 전용 적합도: 판정(assessment) 기반 신뢰도. 카드 "적합도 %"에 사용.
+    condition_match_score: float | None = None
+    confidence_score: float | None = None
     recommendation_rank: int | None = None
     priority_label: str | None = None
+    # 후보 필터 단계 상태(CANDIDATE/UNCERTAIN/EXCLUDED).
+    candidate_status: str | None = None
+    # 최종 사용자 노출 판정. 카드 상태 배지는 user_status를 우선 사용한다.
+    user_status: str | None = None
+    assessment_status: str | None = None
+    # 카드 본문/요약 사유.
+    reason: str | None = None
+    reason_summary: str | None = None
+    reasons: RecommendationReasons | None = None
     why_recommended: str | None = None
     check_before_apply: str | None = None
     evidences: list[RecommendationEvidenceItem] = Field(default_factory=list)

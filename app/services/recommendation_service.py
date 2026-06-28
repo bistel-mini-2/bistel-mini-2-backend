@@ -201,6 +201,11 @@ class RecommendationService:
             ),
             "match_score": match_score,
             "retrieval_score": candidate.retrieval_score,
+            # 표시용 적합도(판정 기반 신뢰도). assessment가 있으면 아래에서 정직한 값으로
+            # 덮어쓰고, 없을 때도 카드에 빈 값이 나가지 않도록 상태 기반 기본값을 둔다.
+            # condition_match_score는 "표시 전용 적합도" 별칭(priority_score=정렬 분리).
+            "confidence_score": self._fallback_confidence(candidate),
+            "condition_match_score": self._fallback_confidence(candidate),
             "candidate_status": candidate.candidate_status,
             "filter_match_json": candidate.filter_match_json,
             "reason": reason,
@@ -218,6 +223,7 @@ class RecommendationService:
                     "user_status": assessment.user_status.value,
                     "assessment_status": assessment.assessment_status.value,
                     "confidence_score": assessment.confidence_score,
+                    "condition_match_score": assessment.confidence_score,
                     "matched_conditions": assessment.matched_conditions_json,
                     "missing_conditions": assessment.missing_conditions_json,
                     "conflicting_conditions": (
@@ -227,6 +233,16 @@ class RecommendationService:
                 }
             )
         return item
+
+    def _fallback_confidence(self, candidate: PolicyCandidate) -> float:
+        # assessment가 없을 때 카드에 표시할 신뢰도 기본값(상태 기반).
+        # assessment._confidence_score의 구간과 대략 맞춰 톤을 일관되게 한다.
+        retrieval = candidate.retrieval_score or 0.0
+        if candidate.candidate_status == CANDIDATE_STATUS_EXCLUDED:
+            return round(min(retrieval, 0.3), 2)
+        if candidate.candidate_status == CANDIDATE_STATUS_UNCERTAIN:
+            return round(min(max(retrieval, 0.45), 0.6), 2)
+        return round(min(max(retrieval, 0.55), 0.7), 2)
 
     def _policy_evidence_query(
         self,
