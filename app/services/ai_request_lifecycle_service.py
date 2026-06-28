@@ -1,9 +1,11 @@
+import logging
 from typing import Any
 
 from fastapi import status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ai.tools.policy_chunk_search_tool import search_policy_chunks
 from app.ai.graphs.recommendation_graph import RecommendationGraphRunner
 from app.ai.agents.condition_agent import ConditionAgent
 from app.common.ai_status import (
@@ -18,7 +20,12 @@ from app.repositories.ai_request_repository import AiRequestModel, AiRequestRepo
 from app.repositories.family_profile_repository import FamilyProfileRepository
 from app.repositories.policy_assessment_repository import PolicyAssessmentRepository
 from app.repositories.user_repository import UserRepository
-from app.schemas.ai_contract import AssessmentInput, ConditionInput, RequestStatus
+from app.schemas.ai_contract import (
+    AssessmentInput,
+    ConditionInput,
+    EvidenceChunk,
+    RequestStatus,
+)
 from app.schemas.ai_request_schema import (
     AiRequestSnapshot,
     EligibilityCriteriaItem,
@@ -43,6 +50,7 @@ from app.services.recommendation_service import RecommendationService
 
 
 RECOMMENDATION_RESULT_SOURCE_TYPE = "RECOMMENDATION_RESULT"
+logger = logging.getLogger(__name__)
 
 
 class AiRequestLifecycleService:
@@ -55,6 +63,7 @@ class AiRequestLifecycleService:
         recommendation_graph: RecommendationGraphRunner | None = None,
         recommendation_service: RecommendationService | None = None,
         rule_filter_service: PolicyRuleFilterService | None = None,
+        policy_chunk_searcher: Any | None = None,
     ) -> None:
         self.repository = repository or AiRequestRepository()
         self.assessment_repository = assessment_repository or PolicyAssessmentRepository()
@@ -63,6 +72,7 @@ class AiRequestLifecycleService:
         self.recommendation_graph = recommendation_graph
         self.recommendation_service = recommendation_service
         self.rule_filter_service = rule_filter_service or PolicyRuleFilterService()
+        self.policy_chunk_searcher = policy_chunk_searcher or search_policy_chunks
 
     async def create_request(
         self,
@@ -308,9 +318,11 @@ class AiRequestLifecycleService:
             assessment_condition,
             rule_filter,
         )
-        evidence_chunks = await self.assessment_repository.find_policy_evidence_chunks(
+        evidence_chunks = await self._find_eligibility_evidence_chunks(
             db=db,
             policy_id=policy_id,
+            condition=assessment_condition,
+            request=request,
         )
         assessment_result = self.assessment_service.assess(
             AssessmentInput(
@@ -362,6 +374,111 @@ class AiRequestLifecycleService:
         if finder is None:
             return []
         return await finder(db=db, policy_id=policy_id)
+
+    async def _find_eligibility_evidence_chunks(
+        self,
+        db: AsyncSession,
+        policy_id: int,
+        condition: dict[str, Any],
+        request: AiRequestModel,
+    ) -> list[EvidenceChunk]:
+        query = self._eligibility_evidence_query(condition, request)
+        if query:
+            try:
+                chunks = await self.policy_chunk_searcher(
+                    query=query,
+                    policy_ids=[policy_id],
+                    top_k=8,
+                    evidence_role="TARGET",
+                )
+                if chunks:
+                    return chunks
+            except Exception:
+                logger.exception(
+                    "지원 가능성 판정 근거 RAG 검색 실패: request_id=%s policy_id=%s",
+                    request.request_id,
+                    policy_id,
+                )
+
+        return await self.assessment_repository.find_policy_evidence_chunks(
+            db=db,
+            policy_id=policy_id,
+        )
+
+    def _eligibility_evidence_query(
+        self,
+        condition: dict[str, Any],
+        request: AiRequestModel,
+    ) -> str:
+        parts: list[str] = ["지원 가능성 판정 근거"]
+        raw_query = getattr(request, "raw_query", None)
+        if raw_query:
+            parts.append(f"사용자 질문: {raw_query}")
+
+        selected_conditions = (getattr(request, "parsed_query_json", None) or {}).get(
+            "selected_conditions"
+        )
+        if isinstance(selected_conditions, dict):
+            condition_text = self._condition_dict_text(selected_conditions)
+            if condition_text:
+                parts.append(f"사용자 입력 조건: {condition_text}")
+
+        label_by_key = {
+            "matched_conditions": "충족 조건",
+            "missing_conditions": "부족한 조건",
+            "rule_failures": "맞지 않는 조건",
+            "conflicting_conditions": "충돌 조건",
+            "manual_check_points": "추가 확인 조건",
+        }
+        for key, label in label_by_key.items():
+            values = self._string_values(condition.get(key))
+            if values:
+                parts.append(f"{label}: {', '.join(values)}")
+
+        if len(parts) == 1:
+            fallback_text = self._condition_dict_text(condition)
+            if fallback_text:
+                parts.append(fallback_text)
+        return "\n".join(parts)[:1200]
+
+    def _condition_dict_text(self, value: dict[str, Any]) -> str:
+        excluded_keys = {
+            "input_issues",
+            "profile_conflicts",
+            "matched_conditions",
+            "missing_conditions",
+            "rule_failures",
+            "conflicting_conditions",
+            "manual_check_points",
+        }
+        parts = []
+        for key, item in value.items():
+            if key in excluded_keys or item in (None, "", []):
+                continue
+            parts.append(f"{key}={self._condition_value_text(item)}")
+        return ", ".join(parts)
+
+    def _condition_value_text(self, value: Any) -> str:
+        if isinstance(value, dict):
+            return ", ".join(
+                f"{key}:{self._condition_value_text(item)}"
+                for key, item in value.items()
+                if item not in (None, "", [])
+            )
+        if isinstance(value, list):
+            return ", ".join(
+                self._condition_value_text(item)
+                for item in value
+                if item not in (None, "", [])
+            )
+        return str(value)
+
+    def _string_values(self, value: Any) -> list[str]:
+        if isinstance(value, list):
+            return [str(item) for item in value if item not in (None, "")]
+        if value in (None, ""):
+            return []
+        return [str(value)]
 
     def _merge_rule_filter_result(
         self,

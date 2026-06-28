@@ -9,7 +9,7 @@ from app.api.ai_request_controller import eligibility_router
 from app.common.exceptions import register_exception_handlers
 from app.core.dependencies import get_current_user
 from app.db.session import get_db_session
-from app.schemas.ai_contract import ConditionResult, RequestStatus
+from app.schemas.ai_contract import ConditionResult, EvidenceChunk, RequestStatus
 from app.schemas.ai_request_schema import EligibilityResultResponse
 from app.services.ai_request_lifecycle_service import AiRequestLifecycleService
 
@@ -317,6 +317,10 @@ def test_process_eligibility_request_saves_policy_assessment(monkeypatch) -> Non
             }
             return []
 
+    async def fake_chunk_searcher(**kwargs):
+        captured["rag_search"] = kwargs
+        return []
+
     class FakeConnection:
         async def __aenter__(self):
             return "conn"
@@ -369,6 +373,7 @@ def test_process_eligibility_request_saves_policy_assessment(monkeypatch) -> Non
         repository=FakeRepository(),
         assessment_repository=FakeAssessmentRepository(),
         condition_agent=FakeConditionAgent(),
+        policy_chunk_searcher=fake_chunk_searcher,
     )
 
     import asyncio
@@ -381,6 +386,8 @@ def test_process_eligibility_request_saves_policy_assessment(monkeypatch) -> Non
         )
     )
 
+    assert captured["rag_search"]["policy_ids"] == [24]
+    assert "충족 조건: region" in captured["rag_search"]["query"]
     assert captured["evidence_chunks"] == {
         "policy_id": 24,
         "limit": 8,
@@ -463,6 +470,10 @@ def test_recommendation_result_eligibility_skips_saved_profile(monkeypatch) -> N
         async def find_policy_evidence_chunks(self, db, policy_id, limit=8):
             return []
 
+    async def fake_chunk_searcher(**kwargs):
+        captured["rag_search"] = kwargs
+        return []
+
     class FakeConnection:
         async def __aenter__(self):
             return "conn"
@@ -513,6 +524,7 @@ def test_recommendation_result_eligibility_skips_saved_profile(monkeypatch) -> N
         repository=FakeRepository(),
         assessment_repository=FakeAssessmentRepository(),
         condition_agent=FakeConditionAgent(),
+        policy_chunk_searcher=fake_chunk_searcher,
     )
 
     import asyncio
@@ -527,6 +539,7 @@ def test_recommendation_result_eligibility_skips_saved_profile(monkeypatch) -> N
 
     assert captured.get("profile_snapshot_called") is None
     assert captured["condition_profile_snapshot"] is None
+    assert captured["rag_search"]["policy_ids"] == [24]
     assert captured["payload"] == {
         "merged_condition_json": {
             "region": "seoul",
@@ -539,3 +552,58 @@ def test_recommendation_result_eligibility_skips_saved_profile(monkeypatch) -> N
     assert captured["status"] == RequestStatus.COMPLETED
     assert captured["saved_status"] == "LIKELY_MATCH"
     assert captured["saved_conflicts"] == []
+
+
+def test_eligibility_evidence_uses_condition_based_rag_before_fallback() -> None:
+    captured: dict[str, object] = {}
+
+    class FakeAssessmentRepository:
+        async def find_policy_evidence_chunks(self, db, policy_id, limit=8):
+            captured["fallback_called"] = True
+            return []
+
+    async def fake_chunk_searcher(**kwargs):
+        captured["rag_search"] = kwargs
+        return [
+            EvidenceChunk(
+                chunk_id=9,
+                policy_id=24,
+                snippet="서울 거주 임산부 대상 지원 근거",
+                source_title="테스트 정책 - 지원 대상",
+                source_url="",
+                score=0.91,
+                evidence_role="TARGET",
+            )
+        ]
+
+    service = AiRequestLifecycleService(
+        assessment_repository=FakeAssessmentRepository(),
+        policy_chunk_searcher=fake_chunk_searcher,
+    )
+    request = SimpleNamespace(
+        request_id=123,
+        raw_query=None,
+        parsed_query_json={"selected_conditions": {"region": "seoul", "stage": "pregnant"}},
+    )
+
+    import asyncio
+
+    chunks = asyncio.run(
+        service._find_eligibility_evidence_chunks(
+            db=SimpleNamespace(),
+            policy_id=24,
+            condition={
+                "region": "seoul",
+                "stage": "pregnant",
+                "matched_conditions": ["서울 거주"],
+                "manual_check_points": ["임신 여부 확인"],
+            },
+            request=request,
+        )
+    )
+
+    assert captured.get("fallback_called") is None
+    assert captured["rag_search"]["policy_ids"] == [24]
+    assert "사용자 입력 조건: region=seoul, stage=pregnant" in captured["rag_search"]["query"]
+    assert "충족 조건: 서울 거주" in captured["rag_search"]["query"]
+    assert chunks[0].chunk_id == 9
