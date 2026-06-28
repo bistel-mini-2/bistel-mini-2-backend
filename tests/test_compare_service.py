@@ -17,6 +17,8 @@ def make_policy(
     category: str = "보육",
     tags: list[str] | None = None,
 ) -> dict:
+    target_summary = f"{name} 대상 요약"
+    source_text = f"{name} 조건 원문"
     return {
         "policy_id": policy_id,
         "slug": slug,
@@ -32,12 +34,39 @@ def make_policy(
         "region_code": None,
         "contact": "129",
         "official_url": "https://example.test",
-        "easy_summary": f"{name} 요약",
-        "target_description": f"{name} 대상",
-        "benefit_description": f"{name} 혜택",
-        "application_method": f"{name} 신청 방법",
-        "application_period_text": "상시",
-        "caution": f"{name} 유의사항",
+        "condition_profile_id": policy_id + 100,
+        "condition_profile_json": {
+            "condition_tree": {
+                "operator": "AND",
+                "conditions": [
+                    {
+                        "type": "income",
+                        "field": "median_income_percent",
+                        "operator": "LTE",
+                        "value": {"percent": 100 + policy_id},
+                        "source_text": f"{name} 소득 조건",
+                    },
+                    {
+                        "type": "stage",
+                        "field": "stage",
+                        "operator": "EQ",
+                        "value": "infant",
+                        "source_text": f"{name} 대상 조건",
+                    },
+                ],
+            },
+            "special_notes": [
+                {
+                    "source_text": f"{name} 추가 확인 조건",
+                },
+            ],
+        },
+        "condition_profile_target_summary": target_summary,
+        "condition_profile_source_text": source_text,
+        "condition_profile_confidence": 0.9,
+        "condition_profile_review_required": False,
+        "condition_profile_quality_flags": [],
+        "condition_profile_source_fields": ["source_text"],
         "tags": tags or ["보육", "영유아"],
         "required_documents": ["신분증"],
     }
@@ -71,11 +100,99 @@ def test_compare_policies_returns_diff_and_related(monkeypatch) -> None:
 
     assert response.policy_a.policy_id == "1"
     assert response.policy_a.slug == "WLF00000001"
+    assert response.policy_a.summary["benefit"] == "현금"
+    assert response.policy_a.summary["condition"] == "A 정책 대상 요약"
+    assert response.policy_a.summary["source"] == "A 정책 조건 원문"
     assert response.policy_b.name == "B 정책"
     assert response.diff_table
-    assert any(item.field == "지원 대상" for item in response.diff_table)
+    assert any(item.field == "지원 대상 요약" for item in response.diff_table)
+    assert any(item.field == "소득 조건" for item in response.diff_table)
     assert response.selection_guide
     assert response.related_policies[0].slug == "WLF00000003"
+
+
+def test_to_policy_summary_keeps_benefit_meaning() -> None:
+    policy = make_policy(policy_id=1, slug="WLF00000001", name="A 정책")
+
+    summary = CompareService._to_policy_summary(policy)
+
+    assert summary.summary["benefit"] == "현금"
+    assert summary.summary["condition"] == "A 정책 대상 요약"
+    assert summary.summary["source"] == "A 정책 조건 원문"
+
+
+def test_target_conditions_include_target_domain_aliases() -> None:
+    condition_json = {
+        "condition_tree": {
+            "operator": "AND",
+            "conditions": [
+                {
+                    "type": "target",
+                    "field": "special_condition",
+                    "source_text": "다문화가족 대상",
+                },
+                {
+                    "type": "target_context",
+                    "field": "eligible_household",
+                    "source_text": "보호자가 돌봄 공백 상태인 가구",
+                },
+            ],
+        },
+    }
+
+    row = {"condition_profile_json": condition_json}
+
+    assert CompareService._field_value(row, "target_conditions") == [
+        "다문화가족 대상",
+        "보호자가 돌봄 공백 상태인 가구",
+    ]
+
+
+def test_income_conditions_include_benefit_status_aliases() -> None:
+    condition_json = {
+        "condition_tree": {
+            "operator": "AND",
+            "conditions": [
+                {
+                    "type": "income",
+                    "field": "benefit_status",
+                    "source_text": "기초생활보장 생계급여 수급자",
+                },
+                {
+                    "type": "income_level",
+                    "field": "income_bracket",
+                    "source_text": "저소득층",
+                },
+            ],
+        },
+    }
+
+    row = {"condition_profile_json": condition_json}
+
+    assert CompareService._field_value(row, "income_conditions") == [
+        "기초생활보장 생계급여 수급자",
+        "저소득층",
+    ]
+
+
+def test_selection_guide_handles_missing_condition_profiles() -> None:
+    policy_a = {
+        "name": "A 정책",
+        "condition_profile_target_summary": None,
+        "condition_profile_source_text": None,
+        "condition_profile_review_required": False,
+    }
+    policy_b = {
+        "name": "B 정책",
+        "condition_profile_target_summary": None,
+        "condition_profile_source_text": None,
+        "condition_profile_review_required": False,
+    }
+
+    assert CompareService._selection_guide(policy_a, policy_b) == (
+        "두 정책 모두 정리된 조건 정보가 부족합니다. "
+        "비교 결과는 공식 안내와 담당 기관 안내를 함께 확인하세요."
+    )
 
 
 def test_compare_policies_saves_history_when_user_exists(monkeypatch) -> None:
