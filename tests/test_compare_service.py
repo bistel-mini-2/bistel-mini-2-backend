@@ -17,6 +17,8 @@ def make_policy(
     category: str = "보육",
     tags: list[str] | None = None,
 ) -> dict:
+    target_summary = f"{name} 대상 요약"
+    source_text = f"{name} 조건 원문"
     return {
         "policy_id": policy_id,
         "slug": slug,
@@ -32,12 +34,39 @@ def make_policy(
         "region_code": None,
         "contact": "129",
         "official_url": "https://example.test",
-        "easy_summary": f"{name} 요약",
-        "target_description": f"{name} 대상",
-        "benefit_description": f"{name} 혜택",
-        "application_method": f"{name} 신청 방법",
-        "application_period_text": "상시",
-        "caution": f"{name} 유의사항",
+        "condition_profile_id": policy_id + 100,
+        "condition_profile_json": {
+            "condition_tree": {
+                "operator": "AND",
+                "conditions": [
+                    {
+                        "type": "income",
+                        "field": "median_income_percent",
+                        "operator": "LTE",
+                        "value": {"percent": 100 + policy_id},
+                        "source_text": f"{name} 소득 조건",
+                    },
+                    {
+                        "type": "stage",
+                        "field": "stage",
+                        "operator": "EQ",
+                        "value": "infant",
+                        "source_text": f"{name} 대상 조건",
+                    },
+                ],
+            },
+            "special_notes": [
+                {
+                    "source_text": f"{name} 추가 확인 조건",
+                },
+            ],
+        },
+        "condition_profile_target_summary": target_summary,
+        "condition_profile_source_text": source_text,
+        "condition_profile_confidence": 0.9,
+        "condition_profile_review_required": False,
+        "condition_profile_quality_flags": [],
+        "condition_profile_source_fields": ["source_text"],
         "tags": tags or ["보육", "영유아"],
         "required_documents": ["신분증"],
     }
@@ -71,9 +100,12 @@ def test_compare_policies_returns_diff_and_related(monkeypatch) -> None:
 
     assert response.policy_a.policy_id == "1"
     assert response.policy_a.slug == "WLF00000001"
+    assert response.policy_a.summary["condition"] == "A 정책 대상 요약"
+    assert response.policy_a.summary["source"] == "A 정책 조건 원문"
     assert response.policy_b.name == "B 정책"
     assert response.diff_table
-    assert any(item.field == "지원 대상" for item in response.diff_table)
+    assert any(item.field == "지원 대상 요약" for item in response.diff_table)
+    assert any(item.field == "소득 조건" for item in response.diff_table)
     assert response.selection_guide
     assert response.related_policies[0].slug == "WLF00000003"
 

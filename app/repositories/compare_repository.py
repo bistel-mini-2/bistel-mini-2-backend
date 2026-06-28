@@ -256,12 +256,14 @@ class CompareRepository:
                 p.region_code,
                 p.contact,
                 p.official_url,
-                pd.easy_summary,
-                pd.target_description,
-                pd.benefit_description,
-                pd.application_method,
-                pd.application_period_text,
-                pd.caution,
+                cp.condition_profile_id,
+                cp.condition_json AS condition_profile_json,
+                cp.target_summary AS condition_profile_target_summary,
+                cp.source_text AS condition_profile_source_text,
+                cp.confidence AS condition_profile_confidence,
+                cp.review_required AS condition_profile_review_required,
+                cp.quality_flags AS condition_profile_quality_flags,
+                cp.source_fields AS condition_profile_source_fields,
                 COALESCE(
                     (
                         SELECT jsonb_agg(pt.tag_name ORDER BY pt.tag_name)
@@ -279,7 +281,7 @@ class CompareRepository:
                     '[]'::jsonb
                 ) AS required_documents
             FROM policy p
-            LEFT JOIN policy_detail pd ON pd.policy_id = p.policy_id
+            JOIN policy_condition_profile cp ON cp.policy_id = p.policy_id
             WHERE p.is_active = TRUE
               AND p.policy_code IN :slugs
             """

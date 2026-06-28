@@ -16,15 +16,14 @@ from app.schemas.compare_schema import (
 
 class CompareService:
     DIFF_FIELDS = (
-        ("지원 금액", "benefit_description"),
-        ("지원 대상", "target_description"),
-        ("신청 방법", "application_method"),
+        ("지원 대상 요약", "condition_profile_target_summary"),
+        ("조건 원문", "condition_profile_source_text"),
+        ("소득 조건", "income_conditions"),
+        ("대상/연령 조건", "target_conditions"),
+        ("제외/주의 조건", "caution_conditions"),
+        ("추가 확인 필요", "condition_profile_review_required"),
+        ("조건 신뢰도", "condition_profile_confidence"),
         ("제출 서류", "required_documents"),
-        ("지원 유형", "benefit_type"),
-        ("담당 기관", "agency"),
-        ("지역", "region"),
-        ("문의처", "contact"),
-        ("유의 사항", "caution"),
     )
 
     async def compare_policies(
@@ -161,8 +160,15 @@ class CompareService:
             slug=str(row["slug"]),
             name=str(row["name"]),
             summary={
-                "benefit": cls._display_value(row.get("benefit_description")),
-                "condition": cls._display_value(row.get("target_description")),
+                "benefit": cls._display_value(
+                    row.get("condition_profile_source_text")
+                ),
+                "condition": cls._display_value(
+                    row.get("condition_profile_target_summary")
+                ),
+                "source": cls._display_value(
+                    row.get("condition_profile_source_text")
+                ),
             },
         )
 
@@ -189,33 +195,70 @@ class CompareService:
     ) -> str:
         name_a = str(policy_a["name"])
         name_b = str(policy_b["name"])
-        target_a = cls._display_value(policy_a.get("target_description"))
-        target_b = cls._display_value(policy_b.get("target_description"))
-        benefit_a = cls._display_value(policy_a.get("benefit_description"))
-        benefit_b = cls._display_value(policy_b.get("benefit_description"))
+        target_a = cls._display_value(
+            policy_a.get("condition_profile_target_summary")
+        )
+        target_b = cls._display_value(
+            policy_b.get("condition_profile_target_summary")
+        )
+        source_a = cls._display_value(policy_a.get("condition_profile_source_text"))
+        source_b = cls._display_value(policy_b.get("condition_profile_source_text"))
+        review_a = bool(policy_a.get("condition_profile_review_required"))
+        review_b = bool(policy_b.get("condition_profile_review_required"))
 
         if target_a != target_b:
             return (
-                f"{name_a}와 {name_b}는 지원 대상 조건이 다릅니다. "
-                "가족 상황이 각 정책의 지원 대상에 먼저 해당하는지 확인한 뒤 "
-                "혜택 규모와 신청 방법을 비교해 선택하세요."
+                "두 정책은 지원 대상 조건이 다릅니다. "
+                "각 정책의 조건 원문과 소득·연령·가구 조건을 먼저 비교한 뒤 "
+                "본인 상황에 더 가까운 정책을 선택하세요."
             )
-        if benefit_a != benefit_b:
+        if source_a != source_b:
             return (
-                "지원 대상 조건이 비슷하다면 실제 받을 수 있는 지원 내용과 "
-                "신청 방법을 기준으로 더 유리한 정책을 선택하세요."
+                "지원 대상 요약은 비슷하지만 세부 조건 원문이 다릅니다. "
+                "제외 조건과 추가 확인 항목을 함께 확인하세요."
+            )
+        if review_a or review_b:
+            return (
+                "두 정책 모두 조건 확인이 필요할 수 있습니다. "
+                "수동 검토가 필요한 조건과 원문 근거를 먼저 확인하세요."
             )
         return (
-            "두 정책의 핵심 조건이 비슷합니다. 제출 서류, 담당 기관, 신청 방법을 "
-            "함께 확인해 준비 부담이 적은 정책부터 진행하세요."
+            "두 정책의 핵심 조건이 비슷합니다. 조건 원문과 제출 서류를 함께 "
+            "확인해 준비 부담이 적은 정책부터 진행하세요."
         )
 
     @classmethod
     def _field_value(cls, row: dict[str, Any], key: str) -> Any:
-        if key == "region":
-            if row.get("region_scope") == "NATIONAL":
-                return "전국"
-            return row.get("region_code")
+        if key == "income_conditions":
+            return cls._conditions_by_domains(
+                row.get("condition_profile_json"),
+                {"income", "income_status", "median_income_percent"},
+            )
+        if key == "target_conditions":
+            return cls._conditions_by_domains(
+                row.get("condition_profile_json"),
+                {
+                    "age",
+                    "child_age",
+                    "household_member_age",
+                    "life_stage",
+                    "pregnancy_status",
+                    "stage",
+                    "target_stage",
+                },
+            )
+        if key == "caution_conditions":
+            return cls._caution_conditions(row.get("condition_profile_json"))
+        if key == "condition_profile_review_required":
+            return "추가 확인 필요" if row.get(key) else "추가 확인 항목 없음"
+        if key == "condition_profile_confidence":
+            value = row.get(key)
+            if value is None:
+                return None
+            try:
+                return f"{float(value):.2f}"
+            except (TypeError, ValueError):
+                return value
         return row.get(key)
 
     @classmethod
@@ -223,9 +266,96 @@ class CompareService:
         if value is None:
             return None
         if isinstance(value, list):
-            return ", ".join(str(item) for item in value if item not in (None, ""))
+            return ", ".join(
+                str(item) for item in cls._unique_values(value)
+                if item not in (None, "")
+            )
         normalized = str(value).strip()
         return normalized or None
+
+    @classmethod
+    def _conditions_by_domains(
+        cls,
+        condition_json: Any,
+        fields: set[str],
+    ) -> list[str]:
+        leaves = cls._condition_leaves(condition_json)
+        return cls._unique_values([
+            text
+            for leaf in leaves
+            if str(leaf.get("field") or leaf.get("type") or "") in fields
+            for text in [cls._condition_text(leaf)]
+            if text
+        ])
+
+    @classmethod
+    def _caution_conditions(cls, condition_json: Any) -> list[str]:
+        if not isinstance(condition_json, dict):
+            return []
+        values: list[str] = []
+        for key in (
+            "exclusions",
+            "special_notes",
+            "unknowns",
+            "unsupported_conditions",
+        ):
+            for item in condition_json.get(key) or []:
+                if isinstance(item, dict):
+                    raw_text = (
+                        item.get("source_text")
+                        or item.get("text")
+                        or item.get("reason")
+                    )
+                else:
+                    raw_text = item
+                text = cls._display_value(raw_text)
+                if text:
+                    values.append(text)
+        return cls._unique_values(values)
+
+    @classmethod
+    def _condition_leaves(cls, condition_json: Any) -> list[dict[str, Any]]:
+        if not isinstance(condition_json, dict):
+            return []
+        leaves: list[dict[str, Any]] = []
+
+        def walk(node: Any) -> None:
+            if not isinstance(node, dict):
+                return
+            children = node.get("conditions")
+            if isinstance(children, list) and children:
+                for child in children:
+                    walk(child)
+                return
+            if node.get("field") or node.get("type") or node.get("source_text"):
+                leaves.append(node)
+
+        walk(condition_json.get("condition_tree"))
+        return leaves
+
+    @classmethod
+    def _condition_text(cls, leaf: dict[str, Any]) -> str | None:
+        source_text = cls._display_value(leaf.get("source_text"))
+        if source_text:
+            return source_text
+        field = cls._display_value(leaf.get("field") or leaf.get("type"))
+        operator = cls._display_value(leaf.get("operator"))
+        value = cls._display_value(leaf.get("value"))
+        parts = [part for part in (field, operator, value) if part]
+        return " ".join(parts) if parts else None
+
+    @staticmethod
+    def _unique_values(values: list[Any]) -> list[Any]:
+        unique: list[Any] = []
+        seen: set[str] = set()
+        for value in values:
+            key = str(value).strip()
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            unique.append(value)
+        return unique
+
 
     @staticmethod
     def _combined_tags(
