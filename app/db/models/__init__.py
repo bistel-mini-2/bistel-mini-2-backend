@@ -11,6 +11,7 @@ from app.db.models.policy_detail import PolicyDetail
 from app.db.models.policy_document import PolicyDocument
 from app.db.models.policy_document_chunk import PolicyDocumentChunk
 from app.db.models.policy_rule import PolicyRule
+from app.db.models.policy_summary_cache import PolicySummaryCache
 from app.db.models.profile import FamilyMember, UserProfile
 from app.db.models.recommendation_candidate import RecommendationCandidate
 from app.db.models.recommendation_request import RecommendationRequest
@@ -36,6 +37,7 @@ __all__ = [
     "PolicyDocument",
     "PolicyDocumentChunk",
     "PolicyRule",
+    "PolicySummaryCache",
     "RecommendationCandidate",
     "RecommendationRequest",
     "User",
