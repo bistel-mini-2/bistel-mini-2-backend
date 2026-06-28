@@ -558,12 +558,14 @@ class RecommendationRerankService:
             if not item.get("priority_label"):
                 item["priority_label"] = self._default_priority_label(item, index)
             if not item.get("why_recommended"):
+                # LLM이 why_recommended를 비워 보낸 경우의 fallback도
+                # 카드 AI 코멘트 본문 기준(2~3문장)에 맞춘다.
                 item["why_recommended"] = normalize_card_text(
                     item.get("recommendation_reason")
                     or item.get("reason_summary")
                     or item.get("reason"),
-                    limit=180,
-                    max_sentences=1,
+                    limit=300,
+                    max_sentences=3,
                 )
             if not item.get("check_before_apply"):
                 item["check_before_apply"] = self._default_check_before_apply(item)
