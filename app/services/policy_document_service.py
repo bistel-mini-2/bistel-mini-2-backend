@@ -1,7 +1,9 @@
 import base64
 import json
 import logging
+import re
 from collections import defaultdict
+from dataclasses import dataclass, field
 from io import BytesIO
 from typing import Annotated, Any
 
@@ -9,7 +11,8 @@ from fastapi import Depends
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from openai import AsyncOpenAI
-from pypdf import PdfReader
+import pdfplumber
+import pypdfium2 as pdfium
 import requests
 
 from app.common.psycopg_pool_conf import psycopg_pool
@@ -24,9 +27,58 @@ from app.schemas.policy_document_schema import (
     PolicyReferenceDocumentSkipItem,
 )
 
+try:
+    import fitz
+except ImportError:
+    fitz = None
+
 
 POLICY_REFERENCE_VISION_MODEL = "gpt-4o"
 POLICY_REFERENCE_OPENAI_MAX_BYTES = 50 * 1024 * 1024
+POLICY_REFERENCE_SECTION_TARGET_CHARS = 1800
+
+REFERENCE_HEADER_PATTERN = re.compile(
+    r"^\s*(?:"
+    r"[ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩ]+[.\s]+.+|"
+    r"\d{1,2}[.)]\s+.+|"
+    r"\d{1,2}\.\d{1,2}[.)]?\s+.+|"
+    r"[가-하][.)]\s+.+|"
+    r"제\s*\d+\s*[장절]\s+.+"
+    r")$"
+)
+REFERENCE_HEADER_KEYWORDS = (
+    "개요",
+    "목적",
+    "근거",
+    "현황",
+    "방향",
+    "추진",
+    "대상",
+    "기준",
+    "선정",
+    "내용",
+    "지원",
+    "급여",
+    "서비스",
+    "신청",
+    "접수",
+    "방법",
+    "절차",
+    "서류",
+    "제출",
+    "유의",
+    "주의",
+    "제외",
+    "제한",
+)
+
+
+@dataclass
+class PdfExtractionResult:
+    method: str
+    text: str
+    quality_score: float
+    metrics: dict[str, Any] = field(default_factory=dict)
 
 
 class PolicyDocumentService:
@@ -130,6 +182,7 @@ class PolicyDocumentService:
     async def ingest_policy_reference_documents(
         self,
         limit: int = 10,
+        rebuild: bool = False,
     ) -> PolicyReferenceDocumentIngestResponse:
         items: list[PolicyReferenceDocumentIngestItem] = []
         skipped: list[PolicyReferenceDocumentSkipItem] = []
@@ -139,6 +192,7 @@ class PolicyDocumentService:
             targets = await PolicyDocumentRepository.find_policy_reference_download_targets(
                 conn=conn,
                 limit=limit,
+                rebuild=rebuild,
             )
             targets_by_url = self._group_by_source_url(targets)
 
@@ -150,10 +204,11 @@ class PolicyDocumentService:
                         source_title=documents[0]["source_title"],
                         content_type=downloaded.get("content_type"),
                     )
-                    raw_text = self._extract_text(
+                    extraction_result = self._extract_text(
                         content=downloaded["content"],
                         file_type=file_type,
                     )
+                    raw_text = extraction_result.text
                     if not raw_text:
                         for document in documents:
                             skipped.append(
@@ -170,6 +225,7 @@ class PolicyDocumentService:
                                 source=document,
                                 raw_text=raw_text,
                                 file_type=file_type,
+                                extraction_result=extraction_result,
                             )
                         )
                         async with conn.transaction():
@@ -177,6 +233,12 @@ class PolicyDocumentService:
                                 conn=conn,
                                 document_id=document["document_id"],
                                 raw_text=raw_text,
+                            )
+                            deleted_embedding_count = (
+                                await PolicyDocumentRepository.delete_policy_reference_embeddings_for_document(
+                                    conn=conn,
+                                    document_id=document["document_id"],
+                                )
                             )
                             chunk_count = (
                                 await PolicyDocumentRepository.replace_document_chunks(
@@ -197,6 +259,11 @@ class PolicyDocumentService:
                                 file_type=file_type,
                                 raw_text_length=len(raw_text),
                                 chunk_count=chunk_count,
+                                extraction_method=extraction_result.method,
+                                extraction_quality_score=(
+                                    extraction_result.quality_score
+                                ),
+                                deleted_embedding_count=deleted_embedding_count,
                             )
                         )
                 except ValueError as exc:
@@ -315,6 +382,12 @@ class PolicyDocumentService:
                                 source=document,
                                 raw_text=raw_text,
                                 file_type="PDF",
+                                extraction_result=PdfExtractionResult(
+                                    method="openai_vision",
+                                    text=raw_text,
+                                    quality_score=self._text_quality_score(raw_text)[0],
+                                    metrics=self._text_quality_score(raw_text)[1],
+                                ),
                             )
                         )
                         async with conn.transaction():
@@ -417,7 +490,7 @@ class PolicyDocumentService:
 
     def split_reference_documents(self, documents: list[Document]) -> list[Document]:
         text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=2000,
+            chunk_size=1800,
             chunk_overlap=200,
             length_function=len,
         )
@@ -461,20 +534,262 @@ class PolicyDocumentService:
             return "HTML"
         return "UNKNOWN"
 
-    def _extract_text(self, content: bytes, file_type: str) -> str:
+    def _extract_text(self, content: bytes, file_type: str) -> PdfExtractionResult:
         if file_type == "PDF":
             return self._extract_pdf_text(content)
         if file_type in {"HWP", "HWPX"}:
             raise ValueError(f"{file_type} 문서 텍스트 추출은 아직 지원하지 않습니다.")
         raise ValueError(f"지원하지 않는 문서 형식입니다: {file_type}")
 
-    def _extract_pdf_text(self, content: bytes) -> str:
-        reader = PdfReader(BytesIO(content))
-        page_texts = [
-            self._clean_text(page.extract_text())
-            for page in reader.pages
+    def _extract_pdf_text(self, content: bytes) -> PdfExtractionResult:
+        candidates = []
+        primary_result = self._extract_pdf_text_with_pypdfium2(content)
+        candidates.append(primary_result)
+        if self._is_good_pdf_extraction(primary_result):
+            return primary_result
+
+        pymupdf_result = self._extract_pdf_text_with_pymupdf(content)
+        candidates.append(pymupdf_result)
+        if self._is_good_pdf_extraction(pymupdf_result):
+            pymupdf_result.metrics["fallback_from"] = primary_result.method
+            return pymupdf_result
+
+        if primary_result.text or pymupdf_result.text:
+            pdfplumber_result = self._extract_pdf_text_with_pdfplumber(content)
+            candidates.append(pdfplumber_result)
+            if self._is_good_pdf_extraction(pdfplumber_result):
+                pdfplumber_result.metrics["fallback_from"] = primary_result.method
+                return pdfplumber_result
+
+        valid_candidates = [candidate for candidate in candidates if candidate.text]
+        if not valid_candidates:
+            return PdfExtractionResult(
+                method="none",
+                text="",
+                quality_score=0,
+                metrics={
+                    "error": "추출된 텍스트가 없습니다.",
+                    "ocr_recommended": True,
+                },
+            )
+        best_candidate = max(valid_candidates, key=lambda candidate: candidate.quality_score)
+        if not self._is_good_pdf_extraction(best_candidate):
+            best_candidate.metrics["ocr_recommended"] = True
+        return best_candidate
+
+    def _extract_pdf_text_with_pypdfium2(self, content: bytes) -> PdfExtractionResult:
+        try:
+            pdf = pdfium.PdfDocument(BytesIO(content))
+            page_texts = []
+            rotated_page_count = 0
+            reversed_page_count = 0
+            for page in pdf:
+                rotation = int(page.get_rotation() or 0)
+                if rotation:
+                    rotated_page_count += 1
+                textpage = page.get_textpage()
+                page_text, was_reversed = self._normalize_pdf_page_text(
+                    textpage.get_text_range() or "",
+                    rotation=rotation,
+                )
+                if was_reversed:
+                    reversed_page_count += 1
+                page_texts.append(page_text)
+            result = self._pdf_extraction_result(
+                method="pypdfium2",
+                text="\n\n".join(page_text for page_text in page_texts if page_text),
+            )
+            result.metrics["rotated_page_count"] = rotated_page_count
+            result.metrics["reversed_page_count"] = reversed_page_count
+            return result
+        except Exception as exc:
+            return PdfExtractionResult(
+                method="pypdfium2",
+                text="",
+                quality_score=0,
+                metrics={"error": f"{type(exc).__name__}: {exc}"},
+            )
+
+    def _extract_pdf_text_with_pymupdf(self, content: bytes) -> PdfExtractionResult:
+        if fitz is None:
+            return PdfExtractionResult(
+                method="pymupdf",
+                text="",
+                quality_score=0,
+                metrics={"error": "PyMuPDF가 설치되어 있지 않습니다."},
+            )
+        try:
+            with fitz.open(stream=content, filetype="pdf") as pdf:
+                page_texts = [
+                    self._clean_extracted_text(page.get_text("text") or "")
+                    for page in pdf
+                ]
+            return self._pdf_extraction_result(
+                method="pymupdf",
+                text="\n\n".join(page_text for page_text in page_texts if page_text),
+            )
+        except Exception as exc:
+            return PdfExtractionResult(
+                method="pymupdf",
+                text="",
+                quality_score=0,
+                metrics={"error": f"{type(exc).__name__}: {exc}"},
+            )
+
+    def _extract_pdf_text_with_pdfplumber(self, content: bytes) -> PdfExtractionResult:
+        try:
+            with pdfplumber.open(BytesIO(content)) as pdf:
+                page_texts = [
+                    self._clean_extracted_text(page.extract_text() or "")
+                    for page in pdf.pages
+                ]
+            return self._pdf_extraction_result(
+                method="pdfplumber",
+                text="\n\n".join(page_text for page_text in page_texts if page_text),
+            )
+        except Exception as exc:
+            return PdfExtractionResult(
+                method="pdfplumber",
+                text="",
+                quality_score=0,
+                metrics={"error": f"{type(exc).__name__}: {exc}"},
+            )
+
+    def _normalize_pdf_page_text(
+        self,
+        text: str,
+        rotation: int = 0,
+    ) -> tuple[str, bool]:
+        cleaned_text = self._clean_extracted_text(text)
+        if not cleaned_text:
+            return "", False
+
+        lines = [line.strip() for line in cleaned_text.splitlines() if line.strip()]
+        if not lines or not self._looks_like_reversed_pdf_page(cleaned_text, rotation):
+            return cleaned_text, False
+
+        reversed_lines = "\n".join(line[::-1] for line in lines)
+        reversed_lines_and_order = "\n".join(line[::-1] for line in reversed(lines))
+        candidates = [
+            (cleaned_text, self._korean_text_order_score(cleaned_text)),
+            (reversed_lines, self._korean_text_order_score(reversed_lines)),
+            (
+                reversed_lines_and_order,
+                self._korean_text_order_score(reversed_lines_and_order),
+            ),
         ]
-        return "\n\n".join(page_text for page_text in page_texts if page_text)
+        best_text, best_score = max(candidates, key=lambda candidate: candidate[1])
+        original_score = candidates[0][1]
+        if best_text != cleaned_text and best_score >= original_score + 3:
+            return best_text, True
+        return cleaned_text, False
+
+    def _looks_like_reversed_pdf_page(self, text: str, rotation: int = 0) -> bool:
+        hangul_count = len(re.findall(r"[가-힣]", text))
+        if hangul_count < 30:
+            return False
+        if rotation in {90, 180, 270}:
+            return True
+        return self._korean_text_order_score(text) <= -3
+
+    def _korean_text_order_score(self, text: str) -> int:
+        normal_tokens = (
+            "지원",
+            "신청",
+            "대상",
+            "기준",
+            "서비스",
+            "사업",
+            "내용",
+            "방법",
+            "절차",
+            "서류",
+            "제출",
+            "대상자",
+            "가구",
+            "소득",
+            "장애",
+            "아동",
+            "임산부",
+            "가능",
+            "필요",
+            "합니다",
+            "습니다",
+            "입니다",
+            "됩니다",
+            "있습니다",
+            "바랍니다",
+        )
+        reversed_tokens = tuple(token[::-1] for token in normal_tokens)
+        return sum(text.count(token) for token in normal_tokens) - sum(
+            text.count(token) for token in reversed_tokens
+        )
+
+    def _is_good_pdf_extraction(self, result: PdfExtractionResult) -> bool:
+        if not result.text:
+            return False
+        metrics = result.metrics
+        return (
+            metrics.get("text_length", 0) >= 1000
+            and metrics.get("replacement_count", 0) <= 5
+            and metrics.get("space_ratio", 1) <= 0.4
+            and metrics.get("spaced_hangul_runs", 0) <= 800
+        )
+
+    def _pdf_extraction_result(
+        self,
+        method: str,
+        text: str,
+    ) -> PdfExtractionResult:
+        quality_score, metrics = self._text_quality_score(text)
+        return PdfExtractionResult(
+            method=method,
+            text=text,
+            quality_score=quality_score,
+            metrics=metrics,
+        )
+
+    def _text_quality_score(self, text: str) -> tuple[float, dict[str, Any]]:
+        cleaned_text = self._clean_extracted_text(text)
+        compact_text = re.sub(r"\s+", "", cleaned_text)
+        replacement_count = cleaned_text.count("\ufffd") + cleaned_text.count("�")
+        spaced_hangul_runs = len(
+            re.findall(r"(?:[가-힣]\s+){4,}[가-힣]", cleaned_text)
+        )
+        spaced_latin_runs = len(
+            re.findall(r"(?:[A-Za-z]\s+){4,}[A-Za-z]", cleaned_text)
+        )
+        space_ratio = (
+            (len(cleaned_text) - len(compact_text)) / max(len(compact_text), 1)
+        )
+        header_count = sum(
+            1
+            for line in cleaned_text.splitlines()
+            if self._is_reference_header(line)
+        )
+        length_score = min(len(cleaned_text) / 2000, 1.0) * 30
+        header_score = min(header_count, 30) * 1.0
+        penalty = (
+            replacement_count * 2
+            + spaced_hangul_runs * 0.2
+            + spaced_latin_runs * 1
+            + max(space_ratio - 0.35, 0) * 180
+        )
+        if len(cleaned_text.strip()) < 200:
+            penalty += 100
+
+        score = max(0.0, 100 + length_score + header_score - penalty)
+        return (
+            round(score, 3),
+            {
+                "text_length": len(cleaned_text),
+                "replacement_count": replacement_count,
+                "spaced_hangul_runs": spaced_hangul_runs,
+                "spaced_latin_runs": spaced_latin_runs,
+                "space_ratio": round(space_ratio, 3),
+                "header_count": header_count,
+            },
+        )
 
     def _is_pdf_content(self, content: bytes) -> bool:
         return content.startswith(b"%PDF")
@@ -526,13 +841,15 @@ class PolicyDocumentService:
         source: dict[str, Any],
         raw_text: str,
         file_type: str,
+        extraction_result: PdfExtractionResult,
     ) -> list[Document]:
+        sections = self._reference_sections(raw_text)
         return [
             Document(
                 page_content=self._format_section_text(
                     policy_name=source["policy_name"],
-                    section="관련 문서",
-                    content=raw_text,
+                    section=section["section"],
+                    content=section["content"],
                 ),
                 metadata={
                     "policy_id": source["policy_id"],
@@ -540,12 +857,129 @@ class PolicyDocumentService:
                     "source_type": "POLICY_REFERENCE",
                     "source_title": source["source_title"],
                     "source_url": source["source_url"],
-                    "section": "관련 문서",
+                    "section": section["section"],
+                    "reference_section_index": section["section_index"],
                     "evidence_role": "reference",
                     "file_type": file_type,
+                    "extraction_method": extraction_result.method,
+                    "extraction_quality_score": extraction_result.quality_score,
+                    "extraction_metrics": extraction_result.metrics,
                 },
             )
+            for section in sections
         ]
+
+    def _reference_sections(self, raw_text: str) -> list[dict[str, Any]]:
+        cleaned_text = self._clean_extracted_text(raw_text)
+        sections: list[dict[str, Any]] = []
+        current_title = "관련 문서"
+        current_lines: list[str] = []
+
+        for line in cleaned_text.splitlines():
+            stripped_line = line.strip()
+            if not stripped_line:
+                continue
+            if self._is_reference_header(stripped_line):
+                if current_lines:
+                    sections.append(
+                        {
+                            "section": current_title,
+                            "content": "\n".join(current_lines).strip(),
+                        }
+                    )
+                current_title = stripped_line[:120]
+                current_lines = [stripped_line]
+                continue
+            current_lines.append(stripped_line)
+
+        if current_lines:
+            sections.append(
+                {
+                    "section": current_title,
+                    "content": "\n".join(current_lines).strip(),
+                }
+            )
+
+        if not sections:
+            sections = [{"section": "관련 문서", "content": cleaned_text}]
+
+        packed_sections = self._pack_reference_sections(sections)
+        return [
+            {
+                "section_index": index,
+                "section": section["section"],
+                "content": section["content"],
+            }
+            for index, section in enumerate(packed_sections)
+            if section["content"]
+        ]
+
+    def _pack_reference_sections(
+        self,
+        sections: list[dict[str, str]],
+    ) -> list[dict[str, str]]:
+        packed: list[dict[str, str]] = []
+        current_title: str | None = None
+        current_parts: list[str] = []
+        current_length = 0
+
+        for section in sections:
+            title = section["section"]
+            content = section["content"]
+            next_part = content
+            next_length = len(next_part)
+            should_flush = (
+                current_parts
+                and current_length + next_length > POLICY_REFERENCE_SECTION_TARGET_CHARS
+            )
+            if should_flush:
+                packed.append(
+                    {
+                        "section": current_title or "관련 문서",
+                        "content": "\n\n".join(current_parts).strip(),
+                    }
+                )
+                current_title = None
+                current_parts = []
+                current_length = 0
+
+            if current_title is None:
+                current_title = title
+            current_parts.append(next_part)
+            current_length += next_length
+
+        if current_parts:
+            packed.append(
+                {
+                    "section": current_title or "관련 문서",
+                    "content": "\n\n".join(current_parts).strip(),
+                }
+            )
+
+        return packed
+
+    def _is_reference_header(self, line: str) -> bool:
+        cleaned_line = line.strip()
+        if not cleaned_line or len(cleaned_line) > 120:
+            return False
+        if cleaned_line.count("·") >= 5:
+            return False
+        if not REFERENCE_HEADER_PATTERN.match(cleaned_line):
+            return False
+        if re.match(r"^\s*[ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩ]+[.\s]+", cleaned_line):
+            return True
+        if re.match(r"^\s*제\s*\d+\s*[장절]\s+", cleaned_line):
+            return True
+        return any(keyword in cleaned_line for keyword in REFERENCE_HEADER_KEYWORDS)
+
+    def _clean_extracted_text(self, value: Any) -> str:
+        text = self._clean_text(value)
+        text = text.replace("\ufeff", "").replace("\u00a0", " ")
+        text = text.replace("\x0c", "\n")
+        text = text.replace("\r\n", "\n").replace("\r", "\n")
+        text = re.sub(r"[ \t]{3,}", "  ", text)
+        text = re.sub(r"\n{4,}", "\n\n\n", text)
+        return text.strip()
 
     def _reference_skip_item(
         self,

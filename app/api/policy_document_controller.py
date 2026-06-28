@@ -31,9 +31,13 @@ async def ingest_policy_detail_chunks(
 async def ingest_policy_reference_documents(
     service: PolicyDocumentServiceDep,
     limit: Annotated[int, Query(ge=1, le=20)] = 5,
+    rebuild: bool = False,
 ) -> JSONResponse:
     logger.info("정책 관련 문서 텍스트 추출 및 chunk 생성 시작")
-    result = await service.ingest_policy_reference_documents(limit=limit)
+    result = await service.ingest_policy_reference_documents(
+        limit=limit,
+        rebuild=rebuild,
+    )
     return success_response(data=result)
 
 

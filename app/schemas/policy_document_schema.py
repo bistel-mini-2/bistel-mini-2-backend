@@ -39,6 +39,9 @@ class PolicyReferenceDocumentIngestItem(BaseModel):
     file_type: str
     raw_text_length: int
     chunk_count: int
+    extraction_method: str | None = None
+    extraction_quality_score: float | None = None
+    deleted_embedding_count: int = 0
 
 
 class PolicyReferenceDocumentSkipItem(BaseModel):
