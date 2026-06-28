@@ -1,21 +1,43 @@
+import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, BackgroundTasks, Query
 from fastapi.responses import JSONResponse
 
 from app.common.policy_types import LifeStage, RegionCode
 from app.common.response import paginated_response, success_response
 from app.common.schemas import ApiResponse
 from app.core.dependencies import DbSessionDep
+from app.db.session import AsyncSessionLocal
 from app.schemas.policy_schema import (
     PolicyDetailResponse,
     PolicyListItemResponse,
     PolicySort,
 )
+from app.schemas.policy_summary_schema import PolicySummaryResponse
 from app.services.policy_service import PolicyServiceDep
+from app.services.policy_summary_service import (
+    PolicySummaryService,
+    PolicySummaryServiceDep,
+)
 
 
 router = APIRouter(prefix="/api/v1/policies", tags=["Policies"])
+logger = logging.getLogger(__name__)
+
+
+async def process_policy_summary(summary_id: int) -> None:
+    service = PolicySummaryService()
+    async with AsyncSessionLocal() as db:
+        try:
+            await service.process_summary(db, summary_id=summary_id)
+            await db.commit()
+        except Exception:
+            await db.rollback()
+            logger.exception(
+                "Policy summary background task failed: summary_id=%s",
+                summary_id,
+            )
 
 
 @router.get(
@@ -58,6 +80,27 @@ async def get_policy_list(
         size=size,
         total=total,
     )
+
+
+@router.get(
+    "/{policy_slug}/summary",
+    response_model=ApiResponse[PolicySummaryResponse],
+    summary="정책 상세 AI 요약 조회",
+)
+async def get_policy_summary(
+    policy_slug: str,
+    background_tasks: BackgroundTasks,
+    db: DbSessionDep,
+    service: PolicySummaryServiceDep,
+) -> JSONResponse:
+    summary, start_summary_id = await service.get_or_start_summary(
+        db,
+        policy_slug=policy_slug,
+    )
+    await db.commit()
+    if start_summary_id is not None:
+        background_tasks.add_task(process_policy_summary, start_summary_id)
+    return success_response(data=summary)
 
 
 @router.get(
