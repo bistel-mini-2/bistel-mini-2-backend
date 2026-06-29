@@ -22,6 +22,9 @@ class ManualConfirmation(BaseModel):
     question: str
     answer: Literal["yes", "no", "unknown"]
     note: str | None = None
+    # 추가 질문의 원본 항목(follow_up 질문의 source_point)을 그대로 돌려받는 매칭 키.
+    # LLM이 질문 문장을 바꿔도 이 키로 원래 항목과 매칭한다. 미전달 시 question 텍스트로 매칭.
+    source: str | None = None
 
 
 class EligibilityRequestCreate(BaseModel):
@@ -168,6 +171,8 @@ class EligibilityCriteriaItem(BaseModel):
 
 class EligibilityFollowUpQuestionItem(FollowUpQuestionItem):
     follow_up_id: str | None = None
+    # 답변 제출 시 manual_confirmations[].source로 그대로 돌려보낼 원본 항목 키.
+    source_point: str | None = None
 
 
 class EligibilityResultResponse(BaseModel):
