@@ -474,15 +474,6 @@ class ConditionAgent:
 
     def _missing_issues(self, merged_condition: dict[str, Any]) -> list[InputIssue]:
         issues: list[InputIssue] = []
-        if not merged_condition.get("region"):
-            issues.append(
-                InputIssue(
-                    field_name="region",
-                    issue_type="missing",
-                    message="region is missing",
-                    priority=3,
-                )
-            )
         if not merged_condition.get("stage") and not merged_condition.get("childAge"):
             issues.append(
                 InputIssue(
@@ -498,7 +489,7 @@ class ConditionAgent:
                     field_name="income",
                     issue_type="missing",
                     message="income is missing",
-                    priority=2,
+                    priority=3,
                 )
             )
         return issues
