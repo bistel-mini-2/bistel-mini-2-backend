@@ -49,6 +49,25 @@ class ChatSessionListResponse(BaseModel):
     sessions: list[ChatSessionListItem]
 
 
+class ChatSessionDeleteResponse(BaseModel):
+    chat_session_id: str
+    deleted: bool = True
+
+
+class ChatSessionBulkDeleteRequest(BaseModel):
+    chat_session_ids: list[int] = Field(..., min_length=1)
+
+    @field_validator("chat_session_ids")
+    @classmethod
+    def _dedupe_session_ids(cls, value: list[int]) -> list[int]:
+        return list(dict.fromkeys(value))
+
+
+class ChatSessionBulkDeleteResponse(BaseModel):
+    deleted_count: int
+    deleted_session_ids: list[str]
+
+
 class AssistantMessagePolicy(BaseModel):
     policy_id: str
     slug: str

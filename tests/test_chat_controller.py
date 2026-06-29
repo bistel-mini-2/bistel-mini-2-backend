@@ -20,7 +20,9 @@ from app.schemas.chat_schema import (
     ChatMessageItem,
     ChatMessageListResponse,
     ChatMessageSendResponse,
+    ChatSessionBulkDeleteResponse,
     ChatSessionCreateResponse,
+    ChatSessionDeleteResponse,
     ChatSessionTitleUpdateResponse,
 )
 from app.services.chat_service import ChatService
@@ -111,6 +113,63 @@ def test_update_chat_session_title_rejects_over_max_length(monkeypatch) -> None:
     assert resp.status_code == 422
     assert resp.json()["error"]["code"] == "VALIDATION_ERROR"
     update_mock.assert_not_awaited()
+
+
+def test_delete_chat_session_returns_deleted_response(monkeypatch) -> None:
+    delete_mock = AsyncMock(return_value=ChatSessionDeleteResponse(
+        chat_session_id="9",
+        deleted=True,
+    ))
+    monkeypatch.setattr(ChatService, "delete_session", delete_mock)
+
+    with TestClient(_build_app()) as client:
+        resp = client.delete("/api/v1/chat/sessions/9")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["success"] is True
+    assert body["data"] == {"chat_session_id": "9", "deleted": True}
+    delete_mock.assert_awaited_once()
+    assert delete_mock.await_args.kwargs["user_id"] == 5
+    assert delete_mock.await_args.kwargs["chat_session_id"] == 9
+
+
+def test_bulk_delete_chat_sessions_returns_deleted_ids(monkeypatch) -> None:
+    bulk_delete_mock = AsyncMock(return_value=ChatSessionBulkDeleteResponse(
+        deleted_count=2,
+        deleted_session_ids=["9", "10"],
+    ))
+    monkeypatch.setattr(ChatService, "bulk_delete_sessions", bulk_delete_mock)
+
+    with TestClient(_build_app()) as client:
+        resp = client.post(
+            "/api/v1/chat/sessions/bulk-delete",
+            json={"chat_session_ids": [9, 10]},
+        )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["success"] is True
+    assert body["data"]["deleted_count"] == 2
+    assert body["data"]["deleted_session_ids"] == ["9", "10"]
+    bulk_delete_mock.assert_awaited_once()
+    assert bulk_delete_mock.await_args.kwargs["user_id"] == 5
+    assert bulk_delete_mock.await_args.kwargs["chat_session_ids"] == [9, 10]
+
+
+def test_bulk_delete_chat_sessions_rejects_empty_ids(monkeypatch) -> None:
+    bulk_delete_mock = AsyncMock()
+    monkeypatch.setattr(ChatService, "bulk_delete_sessions", bulk_delete_mock)
+
+    with TestClient(_build_app()) as client:
+        resp = client.post(
+            "/api/v1/chat/sessions/bulk-delete",
+            json={"chat_session_ids": []},
+        )
+
+    assert resp.status_code == 422
+    assert resp.json()["error"]["code"] == "VALIDATION_ERROR"
+    bulk_delete_mock.assert_not_awaited()
 
 
 def test_send_chat_message_serializes_normalized_fields(monkeypatch) -> None:
