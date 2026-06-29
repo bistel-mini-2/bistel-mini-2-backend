@@ -241,13 +241,15 @@ class ChatService:
             )
             slot = session.slot_json or {}
 
-            # --- FOLLOW_UP 경로: eligibility 재질문 상태가 슬롯에 있으면 3-way 분류 ---
+            # --- FOLLOW_UP 경로: eligibility 재질문 상태가 슬롯에 있으면 4-way 분류 ---
             follow_up_policy = _find_follow_up_policy(slot)
             if follow_up_policy:
                 follow_up_intent = await _classify_follow_up_intent(
                     follow_up_policy, history, content
                 )
-                yield _sse_event({"type": "intent", "intent": follow_up_intent})
+                # other_intent는 supervisor graph가 직접 intent를 결정하도록 SSE 미발행
+                if follow_up_intent != "other_intent":
+                    yield _sse_event({"type": "intent", "intent": follow_up_intent})
 
                 if follow_up_intent == "general":
                     # FOLLOW_UP 답변 경로: 답변을 yes/no/unknown으로 매핑 후 eligibility 재분석
@@ -401,8 +403,12 @@ class ChatService:
                 "recent_assistant_policy": recent_assistant_policy,
             }
 
-            # FOLLOW_UP → recommendation 경로: 다음 턴에서 FOLLOW_UP 재진입하지 않도록 슬롯 클리어 예약.
+            # FOLLOW_UP → recommendation만 슬롯 클리어 (other_intent는 슬롯 유지).
             # 그래프 실행 후 final_state.update(output)이 덮어쓰지 않음 (recommendation 브랜치는 eligibility_slot_update 미반환).
+            _is_follow_up_recommendation = (
+                follow_up_policy is not None
+                and follow_up_intent == "recommendation"  # type: ignore[possibly-undefined]
+            )
             final_state: dict[str, Any] = (
                 {
                     "eligibility_slot_update": {
@@ -412,11 +418,12 @@ class ChatService:
                         "eligibility_status": None,
                     }
                 }
-                if follow_up_policy is not None
+                if _is_follow_up_recommendation
                 else {}
             )
             stream_failed = False
-            intent_emitted = follow_up_policy is not None  # FOLLOW_UP 경로는 이미 발행
+            # other_intent는 supervisor graph에서 intent를 결정하므로 미발행 상태로 시작
+            intent_emitted = follow_up_policy is not None and follow_up_intent != "other_intent"  # type: ignore[possibly-undefined]
             token_buffer: list[str] = []
             try:
                 async for event in chat_supervisor_graph.astream_events(
@@ -531,16 +538,17 @@ _FOLLOW_UP_INTENT_SYSTEM = """\
 정책: {policy_name}
 부족한 정보 항목: {follow_up_questions}
 
-사용자의 마지막 메시지 의도를 아래 세 가지 중 하나로 분류하세요.
+사용자의 마지막 메시지 의도를 아래 네 가지 중 하나로 분류하세요.
 
 - recommendation: 이 eligibility와 관계없이 맞춤 정책 추천을 원하는 경우
 - eligibility_clarification: "뭐가 부족해?", "왜 확인이 필요해?" 등 부족 정보 자체를 질문하는 경우
-- general: 위 두 경우 외 모두 (부족한 정보를 실제로 제공하는 답변 포함)
+- general: 부족한 정보에 대한 실제 답변을 제공하는 경우
+- other_intent: 비교, 상세 설명, 신청 방법 등 eligibility 재분석과 무관한 다른 의도
 """
 
 
 class _FollowUpIntent(BaseModel):
-    intent: Literal["recommendation", "eligibility_clarification", "general"]
+    intent: Literal["recommendation", "eligibility_clarification", "general", "other_intent"]
 
 
 def _make_follow_up_llm() -> ChatOpenAI:
@@ -692,20 +700,20 @@ _FOLLOW_UP_ANSWER_SYSTEM = """\
 사용자가 지원 가능성 분석 추가 질문에 답변했습니다.
 
 정책: {policy_name}
-추가 질문 목록:
+추가 질문 목록 (index 번호를 그대로 사용하세요):
 {follow_up_questions}
 
-사용자 답변을 분석해 각 질문에 대한 답변을 아래 기준으로 분류하세요.
+사용자 답변을 분석해 각 질문의 index와 답변을 분류하세요.
 - yes: 해당 조건을 충족한다고 명시하거나 긍정적으로 답변
 - no: 해당 조건을 충족하지 않는다고 명시하거나 부정적으로 답변
 - unknown: 언급되지 않았거나 불명확한 경우
 
-모든 질문에 대해 반드시 하나씩 응답하세요.
+모든 질문에 대해 반드시 index와 함께 하나씩 응답하세요.
 """
 
 
 class _FollowUpAnswerItem(BaseModel):
-    question: str
+    index: int
     answer: Literal["yes", "no", "unknown"]
 
 
@@ -729,7 +737,7 @@ async def _map_follow_up_answers(
     llm = _FOLLOW_UP_LLM.with_structured_output(_FollowUpAnswerMapping)
     system = _FOLLOW_UP_ANSWER_SYSTEM.format(
         policy_name=follow_up_policy.get("policy_name") or "해당 정책",
-        follow_up_questions="\n".join(f"- {q}" for q in question_texts),
+        follow_up_questions="\n".join(f"{i}. {q}" for i, q in enumerate(question_texts)),
     )
     try:
         result = await llm.ainvoke([
@@ -737,9 +745,10 @@ async def _map_follow_up_answers(
             HumanMessage(content=user_content),
         ])
         return [
-            {"question": item.question, "answer": item.answer}
+            # 인덱스로 원본 question_text 참조 → LLM 문자열 변형에 독립
+            {"question": question_texts[item.index], "answer": item.answer}
             for item in result.mappings
-            if item.question and item.answer
+            if 0 <= item.index < len(question_texts) and item.answer
         ]
     except Exception:
         logger.exception("FOLLOW_UP answer mapping failed; proceeding with raw_query only")
@@ -754,23 +763,36 @@ async def _run_follow_up_eligibility(
     manual_confirmations: list[dict] | None = None,
 ) -> dict | None:
     from app.ai.graphs.eligibility_graph import eligibility_graph_runner
+    from app.repositories.ai_request_repository import AiRequestRepository
 
     policy_slug = follow_up_policy["slug"]
-    source_ref_id = (
-        str(follow_up_policy["eligibility_request_id"])
-        if follow_up_policy.get("eligibility_request_id") is not None
-        else None
-    )
-    selected_conditions = (
-        {"manual_confirmations": manual_confirmations} if manual_confirmations else None
-    )
+    prev_request_id = follow_up_policy.get("eligibility_request_id")
+    source_ref_id = str(prev_request_id) if prev_request_id is not None else None
+
+    # 이전 request의 selected_conditions를 base로 사용해 기존 조건 유지
+    base_selected: dict = {}
+    raw_query = content
+    if prev_request_id is not None:
+        prev_req = await AiRequestRepository().find_by_id(db, "eligibility", prev_request_id)
+        if prev_req is not None:
+            prev_parsed = prev_req.parsed_query_json or {}
+            base_selected = dict(prev_parsed.get("selected_conditions") or {})
+            # 이전 raw_query와 이어붙여 컨텍스트 보존
+            if prev_req.raw_query:
+                raw_query = f"{prev_req.raw_query}\n{content}"
+
+    # 기존 조건 위에 새 manual_confirmations만 덧씌우기
+    if manual_confirmations:
+        base_selected["manual_confirmations"] = manual_confirmations
+
+    selected_conditions = base_selected if base_selected else None
     try:
         return await asyncio.wait_for(
             eligibility_graph_runner.run(
                 db=db,
                 user_id=user_id,
                 policy_identifier=policy_slug,
-                raw_query=content,
+                raw_query=raw_query,
                 source_type="CHAT",
                 source_ref_id=source_ref_id,
                 follow_up_resolved=True,
