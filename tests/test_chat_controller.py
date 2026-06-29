@@ -26,6 +26,7 @@ from app.schemas.chat_schema import (
     ChatSessionTitleUpdateResponse,
 )
 from app.services.chat_service import ChatService
+from app.services.chat_service import _to_message_item
 
 
 def _build_app() -> FastAPI:
@@ -290,6 +291,79 @@ def test_list_chat_messages_includes_normalized_join(monkeypatch) -> None:
     assert assistant_msg["evidences"][0]["chunk_id"] == "101"
     assert assistant_msg["evidences"][0]["evidence_role"] == "summary"
     assert assistant_msg["actions"] == ["recommend"]
+
+
+def test_to_message_item_uses_structured_policy_fallback_without_duplicate_kwargs() -> None:
+    message = SimpleNamespace(
+        chat_message_id=12,
+        role="assistant",
+        message_type="TEXT",
+        content="답변",
+        sequence_no=2,
+        created_at=None,
+        structured_json={
+            "policies": [
+                {
+                    "policy_id": "42",
+                    "slug": "WLF1",
+                    "policy_name": "정책1",
+                    "summary": "요약",
+                    "action_type": "RECOMMENDED",
+                }
+            ],
+            "actions": ["recommend"],
+            "disclaimer": True,
+        },
+    )
+
+    item = _to_message_item(message, policies=[], evidences=[])
+
+    assert item.chat_message_id == "12"
+    assert item.policies[0].policy_id == "42"
+    assert item.policies[0].summary == "요약"
+    assert item.policies[0].action_type == "RECOMMENDED"
+    assert item.actions == ["recommend"]
+
+
+def test_to_message_item_merges_cached_policy_summary_into_joined_policy() -> None:
+    message = SimpleNamespace(
+        chat_message_id=12,
+        role="assistant",
+        message_type="TEXT",
+        content="답변",
+        sequence_no=2,
+        created_at=None,
+        structured_json={
+            "policies": [
+                {
+                    "policy_id": "42",
+                    "slug": "WLF1",
+                    "policy_name": "정책1",
+                    "summary": "저장된 카드 설명",
+                    "tag": "추천 이유",
+                    "tagTone": "coral",
+                    "action_type": "RECOMMENDED",
+                }
+            ],
+        },
+    )
+
+    item = _to_message_item(
+        message,
+        policies=[
+            {
+                "policy_id": "42",
+                "slug": "WLF1",
+                "policy_name": "정책1",
+                "action_type": "RECOMMENDED",
+            }
+        ],
+        evidences=[],
+    )
+
+    assert item.policies[0].summary == "저장된 카드 설명"
+    assert item.policies[0].tag == "추천 이유"
+    assert item.policies[0].tagTone == "coral"
 
 
 # --- SSE streaming endpoint ----------------------------------------------
