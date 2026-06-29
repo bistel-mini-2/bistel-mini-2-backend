@@ -1,8 +1,3 @@
-from app.ai.graphs.chat_supervisor_graph import (
-    ChatSupervisorGraphRunner,
-    chat_supervisor_graph,
-    chat_supervisor_graph_runner,
-)
 from app.ai.graphs.comparison_graph import ComparisonGraphRunner
 from app.ai.graphs.recommendation_graph import (
     RecommendationGraphRunner,
@@ -15,12 +10,9 @@ from app.ai.states.recommendation_state import RecommendationGraphState
 
 __all__ = [
     "ChatGraphState",
-    "ChatSupervisorGraphRunner",
     "ComparisonGraphRunner",
     "ComparisonGraphState",
     "EligibilityGraphState",
     "RecommendationGraphRunner",
     "RecommendationGraphState",
-    "chat_supervisor_graph",
-    "chat_supervisor_graph_runner",
 ]

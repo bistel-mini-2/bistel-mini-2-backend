@@ -1,7 +1,8 @@
 import asyncio
+import contextlib
 import json
 import logging
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Any, Literal
@@ -12,11 +13,7 @@ from langchain_openai import ChatOpenAI
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.ai.graphs.chat_supervisor_graph import (
-    HISTORY_LIMIT,
-    chat_supervisor_graph,
-)
-from app.ai.nodes.chat.chat_nodes import BRANCH_LLM_TAG, _adapt_eligibility_result
+from app.ai.nodes.chat.chat_nodes import _adapt_eligibility_result
 from app.ai.states.chat_state import HistoryMessage
 from app.core.config import settings
 from app.common.exceptions import AppException, ErrorCode
@@ -44,6 +41,7 @@ from app.services.chat_title_service import assign_title_if_missing
 
 
 logger = logging.getLogger(f"{__name__}.ChatService")
+HISTORY_LIMIT = 5
 
 
 class ChatService:
@@ -179,7 +177,8 @@ class ChatService:
             )
             await db.commit()
 
-            graph_result = await _run_supervisor_graph(
+            graph_result = await _run_chat(
+                db=db,
                 user_id=user_id,
                 user_content=content,
                 history=history,
@@ -395,21 +394,13 @@ class ChatService:
                     return
                 # recommendation / general → 그래프로 이어서 처리 (intent 이벤트는 이미 발행됨)
 
-            graph_state = {
-                "user_id": session.user_id,
-                "user_content": content,
-                "history": history,
-                "slot": slot,
-                "recent_assistant_policy": recent_assistant_policy,
-            }
-
             # FOLLOW_UP → recommendation만 슬롯 클리어 (other_intent는 슬롯 유지).
-            # 그래프 실행 후 final_state.update(output)이 덮어쓰지 않음 (recommendation 브랜치는 eligibility_slot_update 미반환).
+            # 직접 라우팅 결과가 eligibility_slot_update를 반환하지 않으면 이 값을 유지한다.
             _is_follow_up_recommendation = (
                 follow_up_policy is not None
                 and follow_up_intent == "recommendation"  # type: ignore[possibly-undefined]
             )
-            final_state: dict[str, Any] = (
+            preseed_result: dict[str, Any] = (
                 {
                     "eligibility_slot_update": {
                         "slug": follow_up_policy["slug"],
@@ -422,50 +413,61 @@ class ChatService:
                 else {}
             )
             stream_failed = False
-            # other_intent는 supervisor graph에서 intent를 결정하므로 미발행 상태로 시작
-            intent_emitted = follow_up_policy is not None and follow_up_intent != "other_intent"  # type: ignore[possibly-undefined]
-            token_buffer: list[str] = []
+            final_state: dict[str, Any] = {}
+            stream_queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
+
+            async def _queue_intent(intent: str) -> None:
+                await stream_queue.put({"type": "intent", "intent": intent})
+
+            async def _queue_token(delta: str) -> None:
+                await stream_queue.put({"type": "token", "delta": delta})
+
+            intent_already_emitted = (
+                follow_up_policy is not None
+                and follow_up_intent != "other_intent"  # type: ignore[possibly-undefined]
+            )
+
+            async def _run_stream_chat() -> dict[str, Any]:
+                try:
+                    return await _run_chat(
+                        db=db,
+                        user_id=session.user_id,
+                        user_content=content,
+                        history=history,
+                        slot=slot,
+                        recent_assistant_policy=recent_assistant_policy,
+                        emit_intent=not intent_already_emitted,
+                        on_intent=_queue_intent,
+                        on_token=_queue_token,
+                        preseed_result=preseed_result,
+                    )
+                finally:
+                    await stream_queue.put(None)
+
+            stream_task = asyncio.create_task(_run_stream_chat())
             try:
-                async for event in chat_supervisor_graph.astream_events(
-                    graph_state, version="v2"
-                ):
+                while True:
                     if cancel_event.is_set():
+                        stream_task.cancel()
+                        with contextlib.suppress(asyncio.CancelledError):
+                            await stream_task
                         await db.rollback()
                         yield _sse_event(_cancelled_event_payload())
                         return
 
-                    kind = event.get("event")
-                    if kind == "on_chat_model_stream":
-                        if BRANCH_LLM_TAG not in (event.get("tags") or []):
-                            continue
-                        delta = _extract_token_text(event.get("data", {}).get("chunk"))
-                        if delta:
-                            if intent_emitted:
-                                yield _sse_event({"type": "token", "delta": delta})
-                            else:
-                                token_buffer.append(delta)
-                    elif kind == "on_chain_end":
-                        output = event.get("data", {}).get("output")
-                        if isinstance(output, dict):
-                            if (
-                                not intent_emitted
-                                and "supervisor_decision" in output
-                                and "supervisor_decision" not in final_state
-                            ):
-                                sv_intent = (output["supervisor_decision"] or {}).get(
-                                    "intent", "unclear"
-                                )
-                                yield _sse_event(
-                                    {"type": "intent", "intent": _INTENT_TO_SSE[sv_intent]}
-                                )
-                                intent_emitted = True
-                                for buffered_delta in token_buffer:
-                                    yield _sse_event({"type": "token", "delta": buffered_delta})
-                                token_buffer.clear()
-                            final_state.update(output)
+                    try:
+                        queued_event = await asyncio.wait_for(stream_queue.get(), 0.2)
+                    except asyncio.TimeoutError:
+                        continue
+
+                    if queued_event is None:
+                        break
+                    yield _sse_event(queued_event)
+
+                final_state = await stream_task
             except Exception:
                 stream_failed = True
-                logger.exception("Chat supervisor graph streaming failed")
+                logger.exception("Chat direct routing streaming failed")
 
             if stream_failed or not final_state.get("assistant_payload"):
                 yield _sse_event({
@@ -633,25 +635,6 @@ async def _is_cancelled_or_deleted(
     return not await ChatRepository.session_exists(db, chat_session_id)
 
 
-def _extract_token_text(chunk: Any) -> str:
-    if chunk is None:
-        return ""
-    content = getattr(chunk, "content", None)
-    if isinstance(content, str):
-        return content
-    if isinstance(content, list):
-        parts: list[str] = []
-        for item in content:
-            if isinstance(item, str):
-                parts.append(item)
-            elif isinstance(item, dict):
-                text = item.get("text")
-                if isinstance(text, str):
-                    parts.append(text)
-        return "".join(parts)
-    return ""
-
-
 def _schedule_title_generation(chat_session_id: int, user_content: str) -> None:
     asyncio.create_task(assign_title_if_missing(chat_session_id, user_content))
 
@@ -805,28 +788,91 @@ async def _run_follow_up_eligibility(
         return None
 
 
-async def _run_supervisor_graph(
+async def _run_chat(
     *,
+    db: AsyncSession,
     user_id: int,
     user_content: str,
     history: list[dict],
     slot: dict | None = None,
     recent_assistant_policy: dict | None = None,
-) -> dict:
-    graph_state = {
-        "user_id": user_id,
-        "user_content": user_content,
-        "history": history,
-        "slot": slot or {},
-        "recent_assistant_policy": recent_assistant_policy,
-    }
+    emit_intent: bool = False,
+    on_intent: Callable[[str], Awaitable[None]] | None = None,
+    on_token: Callable[[str], Awaitable[None]] | None = None,
+    preseed_result: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    from app.ai.nodes.chat.chat_nodes import (
+        reset_branch_token_callback,
+        set_branch_token_callback,
+    )
+    from app.services.chat_handlers import (
+        build_assistant_payload,
+        classify_intent,
+        extract_evidences,
+        extract_policy_links,
+        handle_apply,
+        handle_collect_slots,
+        handle_compare,
+        handle_confirm_profile,
+        handle_eligibility,
+        handle_policy_summary,
+        handle_recommend,
+        handle_summary,
+        handle_unclear,
+    )
+
     try:
-        return await chat_supervisor_graph.ainvoke(graph_state)
+        state = await classify_intent(
+            user_id=user_id,
+            user_content=user_content,
+            history=history,
+            slot=slot or {},
+            recent_assistant_policy=recent_assistant_policy,
+        )
+
+        decision = state.get("supervisor_decision") or {"intent": "unclear"}
+        intent = decision.get("intent", "unclear")
+        if emit_intent and on_intent is not None:
+            await on_intent(_INTENT_TO_SSE[intent])
+
+        token = set_branch_token_callback(on_token)
+        try:
+            if state.get("profile_confirm"):
+                branch_result = await handle_confirm_profile(state)
+            elif state.get("awaiting_slots"):
+                branch_result = await handle_collect_slots(state)
+            else:
+                match intent:
+                    case "recommend":
+                        branch_result = await handle_recommend(state, db)
+                    case "eligibility":
+                        branch_result = await handle_eligibility(state, db)
+                    case "compare":
+                        branch_result = await handle_compare(state)
+                    case "apply":
+                        branch_result = await handle_apply(state, db)
+                    case "policy_summary":
+                        branch_result = await handle_policy_summary(state)
+                    case "summary":
+                        branch_result = await handle_summary(state)
+                    case _:
+                        branch_result = await handle_unclear(state)
+        finally:
+            reset_branch_token_callback(token)
+
+        state.update(branch_result)
+        state.update(await build_assistant_payload(state))
+        return {
+            **(preseed_result or {}),
+            **state,
+            "evidences_to_save": await extract_evidences(state),
+            "policy_links_to_save": await extract_policy_links(state),
+        }
     except Exception:
-        logger.exception("Chat supervisor graph failed")
+        logger.exception("Chat direct routing failed")
         return {
             "assistant_payload": _fallback_payload(),
-            "supervisor_decision": {"intent": "unclear", "raw": "graph_error"},
+            "supervisor_decision": {"intent": "unclear", "raw": "routing_error"},
             "evidences_to_save": [],
             "policy_links_to_save": [],
         }
