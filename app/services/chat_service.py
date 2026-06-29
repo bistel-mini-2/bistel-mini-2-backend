@@ -253,7 +253,7 @@ class ChatService:
                     # FOLLOW_UP 답변 경로: 답변을 yes/no/unknown으로 매핑 후 eligibility 재분석
                     manual_confirmations = await _map_follow_up_answers(follow_up_policy, content)
                     result_json = await _run_follow_up_eligibility(
-                        session.user_id, content, follow_up_policy, manual_confirmations
+                        db, session.user_id, content, follow_up_policy, manual_confirmations
                     )
                     if result_json is None:
                         yield _sse_event({
@@ -401,7 +401,20 @@ class ChatService:
                 "recent_assistant_policy": recent_assistant_policy,
             }
 
-            final_state: dict[str, Any] = {}
+            # FOLLOW_UP → recommendation 경로: 다음 턴에서 FOLLOW_UP 재진입하지 않도록 슬롯 클리어 예약.
+            # 그래프 실행 후 final_state.update(output)이 덮어쓰지 않음 (recommendation 브랜치는 eligibility_slot_update 미반환).
+            final_state: dict[str, Any] = (
+                {
+                    "eligibility_slot_update": {
+                        "slug": follow_up_policy["slug"],
+                        "eligibility_request_id": follow_up_policy.get("eligibility_request_id"),
+                        "follow_up_questions": [],
+                        "eligibility_status": None,
+                    }
+                }
+                if follow_up_policy is not None
+                else {}
+            )
             stream_failed = False
             intent_emitted = follow_up_policy is not None  # FOLLOW_UP 경로는 이미 발행
             token_buffer: list[str] = []
@@ -427,8 +440,11 @@ class ChatService:
                     elif kind == "on_chain_end":
                         output = event.get("data", {}).get("output")
                         if isinstance(output, dict):
-                            final_state.update(output)
-                            if not intent_emitted and "supervisor_decision" in output:
+                            if (
+                                not intent_emitted
+                                and "supervisor_decision" in output
+                                and "supervisor_decision" not in final_state
+                            ):
                                 sv_intent = (output["supervisor_decision"] or {}).get(
                                     "intent", "unclear"
                                 )
@@ -439,6 +455,7 @@ class ChatService:
                                 for buffered_delta in token_buffer:
                                     yield _sse_event({"type": "token", "delta": buffered_delta})
                                 token_buffer.clear()
+                            final_state.update(output)
             except Exception:
                 stream_failed = True
                 logger.exception("Chat supervisor graph streaming failed")
@@ -526,11 +543,14 @@ class _FollowUpIntent(BaseModel):
     intent: Literal["recommendation", "eligibility_clarification", "general"]
 
 
-def _follow_up_llm() -> ChatOpenAI:
+def _make_follow_up_llm() -> ChatOpenAI:
     kwargs: dict = {"model": "gpt-4o-mini", "temperature": 0}
     if settings.openai_api_key:
         kwargs["api_key"] = settings.openai_api_key
     return ChatOpenAI(**kwargs)
+
+
+_FOLLOW_UP_LLM: ChatOpenAI = _make_follow_up_llm()
 
 
 async def _classify_follow_up_intent(
@@ -538,7 +558,7 @@ async def _classify_follow_up_intent(
     history: list[HistoryMessage],
     user_content: str,
 ) -> str:
-    llm = _follow_up_llm().with_structured_output(_FollowUpIntent)
+    llm = _FOLLOW_UP_LLM.with_structured_output(_FollowUpIntent)
     system = _FOLLOW_UP_INTENT_SYSTEM.format(
         policy_name=follow_up_policy.get("policy_name") or "해당 정책",
         follow_up_questions=json.dumps(
@@ -706,7 +726,7 @@ async def _map_follow_up_answers(
     question_texts = [q for q in question_texts if q]
     if not question_texts:
         return []
-    llm = _follow_up_llm().with_structured_output(_FollowUpAnswerMapping)
+    llm = _FOLLOW_UP_LLM.with_structured_output(_FollowUpAnswerMapping)
     system = _FOLLOW_UP_ANSWER_SYSTEM.format(
         policy_name=follow_up_policy.get("policy_name") or "해당 정책",
         follow_up_questions="\n".join(f"- {q}" for q in question_texts),
@@ -727,13 +747,13 @@ async def _map_follow_up_answers(
 
 
 async def _run_follow_up_eligibility(
+    db: AsyncSession,
     user_id: int,
     content: str,
     follow_up_policy: dict,
     manual_confirmations: list[dict] | None = None,
 ) -> dict | None:
     from app.ai.graphs.eligibility_graph import eligibility_graph_runner
-    from app.db.session import AsyncSessionLocal
 
     policy_slug = follow_up_policy["slug"]
     source_ref_id = (
@@ -745,26 +765,19 @@ async def _run_follow_up_eligibility(
         {"manual_confirmations": manual_confirmations} if manual_confirmations else None
     )
     try:
-        async with AsyncSessionLocal() as db:
-            try:
-                result_json = await asyncio.wait_for(
-                    eligibility_graph_runner.run(
-                        db=db,
-                        user_id=user_id,
-                        policy_identifier=policy_slug,
-                        raw_query=content,
-                        source_type="CHAT",
-                        source_ref_id=source_ref_id,
-                        follow_up_resolved=True,
-                        selected_conditions=selected_conditions,
-                    ),
-                    timeout=60,
-                )
-                await db.commit()
-                return result_json
-            except Exception:
-                await db.rollback()
-                raise
+        return await asyncio.wait_for(
+            eligibility_graph_runner.run(
+                db=db,
+                user_id=user_id,
+                policy_identifier=policy_slug,
+                raw_query=content,
+                source_type="CHAT",
+                source_ref_id=source_ref_id,
+                follow_up_resolved=True,
+                selected_conditions=selected_conditions,
+            ),
+            timeout=60,
+        )
     except Exception:
         logger.exception("FOLLOW_UP eligibility re-analysis failed")
         return None
@@ -930,6 +943,11 @@ def _build_next_slot(
     # eligibility FOLLOW_UP 결과를 해당 정책 슬롯에 반영
     if eligibility_slot_update:
         update_slug = eligibility_slot_update.get("slug")
+        if not any(p.get("slug") == update_slug for p in recent_policies):
+            logger.warning(
+                "eligibility_slot_update slug %r not found in recent_policies; update skipped",
+                update_slug,
+            )
         recent_policies = [
             {
                 **p,
