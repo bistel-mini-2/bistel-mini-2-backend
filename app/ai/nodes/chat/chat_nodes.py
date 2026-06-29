@@ -1577,7 +1577,30 @@ class ChatGraphNodes:
             resolved_slug,
         )
         if target_type == "policy" and resolved_slug:
-            return await self._branch_with_slot("summary", state, resolved_slug)
+            slot_policy = _find_slot_policy_by_slug(state.get("slot"), resolved_slug)
+            policy_name = (slot_policy or {}).get("policy_name") or ""
+            _, evidences = await self._rag_lookup(policy_name or state["user_content"])
+            logger.info(
+                "chat_slot_resolved",
+                extra={"intent": "summary", "slot_used": True, "rag_skipped": False},
+            )
+            policies = [
+                {
+                    "policy_id": None,
+                    "slug": resolved_slug,
+                    "policy_name": policy_name,
+                    "summary": None,
+                    "tag": None,
+                    "tagTone": None,
+                }
+            ]
+            content = await self._generate_branch_answer("summary", state, evidences)
+            return {
+                **state,
+                "branch_content": content,
+                "branch_policies": policies,
+                "branch_evidences": evidences,
+            }
         return await self._branch_with_rag("summary", state)
 
     async def branch_unclear(self, state: ChatGraphState) -> ChatGraphState:
@@ -2092,36 +2115,6 @@ class ChatGraphNodes:
             "branch_content": content,
             "branch_policies": policies,
             "branch_evidences": evidences,
-        }
-
-    async def _branch_with_slot(
-        self,
-        intent: Intent,
-        state: ChatGraphState,
-        slug: str,
-    ) -> ChatGraphState:
-        slot_policy = _find_slot_policy_by_slug(state.get("slot"), slug)
-        policy_name = (slot_policy or {}).get("policy_name") or ""
-        policies = [
-            {
-                "policy_id": None,
-                "slug": slug,
-                "policy_name": policy_name,
-                "summary": None,
-                "tag": None,
-                "tagTone": None,
-            }
-        ]
-        content = await self._generate_branch_answer(intent, state, evidences=[])
-        logger.info(
-            "chat_slot_resolved",
-            extra={"intent": intent, "slot_used": True, "rag_skipped": True},
-        )
-        return {
-            **state,
-            "branch_content": content,
-            "branch_policies": policies,
-            "branch_evidences": [],
         }
 
     async def _rag_lookup(
