@@ -125,6 +125,7 @@ class AssistantMessage(BaseModel):
     disclaimer: bool | None = None
     slot_request: dict | None = None
     profile_confirm: dict | None = None
+    eligibility_result: dict | None = None
 
 
 class ChatMessageSendRequest(BaseModel):
@@ -155,6 +156,7 @@ class ChatMessageItem(BaseModel):
     disclaimer: bool | None = None
     slot_request: dict | None = None
     profile_confirm: dict | None = None
+    eligibility_result: dict | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

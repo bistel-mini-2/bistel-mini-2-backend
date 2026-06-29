@@ -769,13 +769,14 @@ def test_send_message_stream_emits_tokens_then_done(monkeypatch) -> None:
     ))
     events = _parse_sse_chunks(chunks)
 
-    # token, token, done 순서
-    assert [e["type"] for e in events] == ["token", "token", "done"]
-    assert events[0]["delta"] == "안녕"
-    assert events[1]["delta"] == "하세요"
+    # intent, token, token, done 순서 (버퍼링: supervisor_decision 확정 후 intent 먼저, 이후 토큰 flush)
+    assert [e["type"] for e in events] == ["intent", "token", "token", "done"]
+    assert events[0]["intent"] == "recommendation"
+    assert events[1]["delta"] == "안녕"
+    assert events[2]["delta"] == "하세요"
 
     # done payload에 ChatMessageSendResponse 구조 포함
-    payload = events[2]["payload"]
+    payload = events[3]["payload"]
     assert payload["chat_session_id"] == "10"
     assert payload["assistant_message"]["content"] == "테스트 답변"
     assert payload["assistant_message"]["policies"][0]["action_type"] == "RECOMMENDED"
@@ -798,7 +799,7 @@ def test_send_message_stream_error_event_when_graph_raises(monkeypatch) -> None:
         AsyncMock(return_value={}),
     )
 
-    # 토큰 한 개 emit 후 raise — final_state 미수집 → error 이벤트로 종료
+    # intent 확정 전 raise — 토큰은 버퍼에만 있고 flush 전에 실패 → error 이벤트만 종료
     monkeypatch.setattr(
         chat_service_module,
         "chat_supervisor_graph",
@@ -810,8 +811,8 @@ def test_send_message_stream_error_event_when_graph_raises(monkeypatch) -> None:
     ))
     events = _parse_sse_chunks(chunks)
 
-    assert [e["type"] for e in events] == ["token", "error"]
-    assert events[1]["code"] == "INTERNAL_SERVER_ERROR"
+    assert [e["type"] for e in events] == ["error"]
+    assert events[0]["code"] == "INTERNAL_SERVER_ERROR"
 
     # 유저 메시지·assistant 메시지·정규화 row가 모두 저장되지 않아야 함
     # (P1-1 수정: 그래프 실패 시 user message도 남지 않도록 commit을 함께 묶음)
@@ -861,3 +862,299 @@ def test_send_message_stream_cancelled_before_persist_saves_nothing(monkeypatch)
     mocks["bulk_save_message_evidences"].assert_not_awaited()
     db.commit.assert_not_awaited()
     unregister_mock.assert_called_once_with(10, cancel_event)
+
+
+# --- FOLLOW_UP 시나리오 -------------------------------------------------------
+
+
+def _follow_up_session() -> ChatSession:
+    """FOLLOW_UP_REQUIRED 슬롯이 있는 세션."""
+    session = _session()
+    session.slot_json = {
+        "recent_policies": [
+            {
+                "policy_id": 42,
+                "slug": "WLF1",
+                "policy_name": "정책1",
+                "last_action": "ELIGIBILITY",
+                "eligibility_status": "FOLLOW_UP_REQUIRED",
+                "eligibility_request_id": 99,
+                "follow_up_questions": [{"question_text": "소득이 얼마인가요?"}],
+            }
+        ]
+    }
+    return session
+
+
+def test_follow_up_recommendation_clears_eligibility_slot(monkeypatch) -> None:
+    """버그 1: FOLLOW_UP → recommendation 경로 시 슬롯의 eligibility_status가 None으로 클리어."""
+    session = _follow_up_session()
+    db = AsyncMock()
+    mocks = _patch_repo_for_send(monkeypatch, session=session)
+    monkeypatch.setattr(PolicyRepository, "find_ids_by_codes", AsyncMock(return_value={"WLF1": 42}))
+
+    monkeypatch.setattr(
+        chat_service_module,
+        "_classify_follow_up_intent",
+        AsyncMock(return_value="recommendation"),
+    )
+
+    graph_result = _graph_result()
+    monkeypatch.setattr(
+        chat_service_module,
+        "chat_supervisor_graph",
+        _FakeGraph(events=[_chain_end_event(graph_result)]),
+    )
+
+    chunks = asyncio.run(_collect(
+        ChatService.send_message_stream(db=db, session=session, content="다른 정책 추천해줘")
+    ))
+    events = _parse_sse_chunks(chunks)
+
+    assert events[0]["type"] == "intent"
+    assert events[0]["intent"] == "recommendation"
+    assert events[-1]["type"] == "done"
+
+    # 슬롯 저장 호출 확인 — eligibility_status가 None으로 클리어됨
+    mocks["update_session_slot"].assert_awaited_once()
+    saved_slot = mocks["update_session_slot"].await_args.args[2]
+    policy_entry = saved_slot["recent_policies"][0]
+    assert policy_entry["slug"] == "WLF1"
+    assert policy_entry["eligibility_status"] is None
+    assert policy_entry["follow_up_questions"] == []
+
+
+def test_follow_up_general_uses_outer_db_and_rollback_on_failure(monkeypatch) -> None:
+    """버그 2: _run_follow_up_eligibility가 외부 db를 받고, 저장 실패 시 rollback이 호출됨."""
+    session = _follow_up_session()
+    db = AsyncMock()
+    mocks = _patch_repo_for_send(monkeypatch, session=session)
+    # 저장 단계에서 실패 시뮬레이션
+    mocks["save_message"].side_effect = Exception("저장 실패")
+
+    monkeypatch.setattr(
+        chat_service_module,
+        "_classify_follow_up_intent",
+        AsyncMock(return_value="general"),
+    )
+    monkeypatch.setattr(
+        chat_service_module,
+        "_map_follow_up_answers",
+        AsyncMock(return_value=[]),
+    )
+    run_follow_up_mock = AsyncMock(return_value={
+        "status": "ELIGIBLE",
+        "request_id": 100,
+        "user_status": "eligible",
+        "assessment_status": None,
+        "follow_up_questions": [],
+        "summary": None,
+        "criteria": [],
+        "policies": [],
+        "evidences": [],
+    })
+    monkeypatch.setattr(chat_service_module, "_run_follow_up_eligibility", run_follow_up_mock)
+    monkeypatch.setattr(
+        chat_service_module,
+        "_adapt_eligibility_result",
+        MagicMock(return_value=("분석 완료", "eligible", [], [])),
+    )
+
+    chunks = asyncio.run(_collect(
+        ChatService.send_message_stream(db=db, session=session, content="네, 소득은 200만원입니다")
+    ))
+    events = _parse_sse_chunks(chunks)
+
+    # 저장 실패 → error SSE
+    assert events[-1]["type"] == "error"
+    # 외부 db에 rollback 호출됨 (eligibility 분석도 함께 롤백)
+    db.rollback.assert_awaited()
+    # 핵심: _run_follow_up_eligibility 첫 번째 인자가 외부 db (트랜잭션 통합 검증)
+    assert run_follow_up_mock.await_args.args[0] is db
+
+
+def test_intent_emitted_only_once_when_chain_end_fires_twice(monkeypatch) -> None:
+    """버그 3: on_chain_end가 supervisor_decision을 두 번 포함해도 intent SSE는 한 번만."""
+    session = _session()
+    db = AsyncMock()
+    mocks = _patch_repo_for_send(monkeypatch, session=session)
+    monkeypatch.setattr(PolicyRepository, "find_ids_by_codes", AsyncMock(return_value={"WLF1": 42}))
+
+    graph_result = _graph_result()
+    # 두 번의 on_chain_end — 두 번째도 supervisor_decision 포함 (브랜치 노드가 **state로 spread하는 상황)
+    fake_events = [
+        _token_event("안녕"),
+        _chain_end_event(graph_result),                      # supervisor 노드 완료 → intent 발행
+        _token_event("하세요"),
+        _chain_end_event(graph_result),                      # 브랜치 노드 완료 → 무시
+    ]
+    monkeypatch.setattr(
+        chat_service_module,
+        "chat_supervisor_graph",
+        _FakeGraph(events=fake_events),
+    )
+
+    chunks = asyncio.run(_collect(
+        ChatService.send_message_stream(db=db, session=session, content="추천해줘")
+    ))
+    events = _parse_sse_chunks(chunks)
+
+    intent_events = [e for e in events if e["type"] == "intent"]
+    assert len(intent_events) == 1, "intent SSE는 정확히 한 번만 발행되어야 함"
+    assert intent_events[0]["intent"] == "recommendation"
+
+
+def test_build_next_slot_logs_warning_on_slug_mismatch(caplog) -> None:
+    """버그 4: eligibility_slot_update의 slug가 recent_policies에 없으면 경고 로그."""
+    import logging
+    from app.services.chat_service import _build_next_slot
+
+    with caplog.at_level(logging.WARNING, logger="app.services.chat_service"):
+        result = _build_next_slot(
+            policy_links=[],
+            branch_policies=[],
+            slug_to_policy_id={},
+            current_slot={
+                "recent_policies": [
+                    {"policy_id": 1, "slug": "WLF1", "policy_name": "정책1", "last_action": "ELIGIBILITY"},
+                ]
+            },
+            eligibility_slot_update={
+                "slug": "NONEXISTENT",   # recent_policies에 없는 slug
+                "eligibility_request_id": 99,
+                "follow_up_questions": [],
+                "eligibility_status": "ELIGIBLE",
+            },
+        )
+
+    assert any("NONEXISTENT" in r.message for r in caplog.records), \
+        "slug 미매칭 시 slug 이름을 포함한 경고 로그가 있어야 함"
+    # 슬롯은 변경 없이 유지
+    assert result is not None
+    assert result["recent_policies"][0]["slug"] == "WLF1"
+
+
+# --- 신규 이슈 시나리오 --------------------------------------------------------
+
+
+def test_follow_up_eligibility_merges_prev_conditions(monkeypatch) -> None:
+    """이슈 1: 재분석 시 이전 request의 selected_conditions를 base로 사용하고 raw_query 이어붙임."""
+    from app.repositories.ai_request_repository import AiRequestRepository
+    from app.ai.graphs.eligibility_graph import eligibility_graph_runner
+    from app.services.chat_service import _run_follow_up_eligibility
+
+    db = AsyncMock()
+
+    prev_request = MagicMock(
+        raw_query="2세 아이 의료급여",
+        parsed_query_json={"selected_conditions": {"child_age": "2세", "income": "low"}},
+    )
+    monkeypatch.setattr(AiRequestRepository, "find_by_id", AsyncMock(return_value=prev_request))
+
+    run_graph_mock = AsyncMock(return_value={"status": "ELIGIBLE"})
+    monkeypatch.setattr(eligibility_graph_runner, "run", run_graph_mock)
+
+    asyncio.run(_run_follow_up_eligibility(
+        db=db,
+        user_id=1,
+        content="네, 의료급여예요",
+        follow_up_policy={
+            "slug": "WLF1",
+            "policy_name": "정책1",
+            "eligibility_request_id": 99,
+            "follow_up_questions": [{"question_text": "의료급여 수급자인가요?"}],
+        },
+        manual_confirmations=[{"question": "의료급여 수급자인가요?", "answer": "yes"}],
+    ))
+
+    call_kwargs = run_graph_mock.await_args.kwargs
+    # 이전 raw_query + 새 content 이어붙임
+    assert "2세 아이 의료급여" in call_kwargs["raw_query"]
+    assert "네, 의료급여예요" in call_kwargs["raw_query"]
+    # 기존 조건 보존 + manual_confirmations 병합
+    sc = call_kwargs["selected_conditions"]
+    assert sc["child_age"] == "2세"
+    assert sc["income"] == "low"
+    assert sc["manual_confirmations"][0]["answer"] == "yes"
+
+
+def test_map_follow_up_answers_uses_index_not_string(monkeypatch) -> None:
+    """이슈 2: LLM이 반환한 index로 원본 question_text를 참조 — 문자열 변형에 독립적."""
+    from app.services.chat_service import _map_follow_up_answers
+    from types import SimpleNamespace
+
+    questions = [
+        {"question_text": "의료급여 수급자인가요?"},
+        {"question_text": "자녀 나이가 2세 미만인가요?"},
+    ]
+    follow_up_policy = {
+        "policy_name": "정책1",
+        "follow_up_questions": questions,
+    }
+
+    # LLM이 index 0에 "yes", index 1에 "no" 반환 (질문 문자열을 다르게 썼어도 index로 매핑)
+    fake_result = SimpleNamespace(
+        mappings=[
+            SimpleNamespace(index=0, answer="yes"),
+            SimpleNamespace(index=1, answer="no"),
+        ]
+    )
+    llm_mock = MagicMock()
+    llm_mock.with_structured_output.return_value.ainvoke = AsyncMock(return_value=fake_result)
+    monkeypatch.setattr(chat_service_module, "_FOLLOW_UP_LLM", llm_mock)
+
+    result = asyncio.run(_map_follow_up_answers(follow_up_policy, "네, 수급자고 아이는 3살이에요"))
+
+    # 원본 question_text 그대로 사용
+    assert result[0]["question"] == "의료급여 수급자인가요?"
+    assert result[0]["answer"] == "yes"
+    assert result[1]["question"] == "자녀 나이가 2세 미만인가요?"
+    assert result[1]["answer"] == "no"
+
+
+def test_follow_up_other_intent_passes_to_supervisor(monkeypatch) -> None:
+    """이슈 3: other_intent 시 SSE intent 미발행, supervisor graph가 intent 결정."""
+    session = _follow_up_session()
+    db = AsyncMock()
+    mocks = _patch_repo_for_send(monkeypatch, session=session)
+    monkeypatch.setattr(
+        PolicyRepository, "find_ids_by_codes", AsyncMock(return_value={"WLF1": 42})
+    )
+    monkeypatch.setattr(
+        chat_service_module, "_classify_follow_up_intent",
+        AsyncMock(return_value="other_intent"),
+    )
+
+    # supervisor가 WLF2 다른 정책을 비교 대상으로 결정 (WLF1 슬롯에 영향 없음)
+    graph_result = _graph_result(
+        intent="compare",
+        policies=[{"policy_id": "WLF2", "slug": "WLF2", "policy_name": "정책2",
+                   "summary": None, "tag": None, "tagTone": None}],
+        policy_links=[{"policy_slug": "WLF2", "action_type": "COMPARE"}],
+    )
+    monkeypatch.setattr(PolicyRepository, "find_ids_by_codes", AsyncMock(return_value={"WLF2": 43}))
+    monkeypatch.setattr(
+        chat_service_module,
+        "chat_supervisor_graph",
+        _FakeGraph(events=[_chain_end_event(graph_result)]),
+    )
+
+    chunks = asyncio.run(_collect(
+        ChatService.send_message_stream(db=db, session=session, content="이 정책이랑 다른 정책 비교해줘")
+    ))
+    events = _parse_sse_chunks(chunks)
+
+    intent_events = [e for e in events if e["type"] == "intent"]
+    assert len(intent_events) == 1
+    # supervisor가 결정한 intent가 SSE로 발행됨 (compare → general 매핑)
+    assert intent_events[0]["intent"] == "general"
+
+    # FOLLOW_UP 슬롯이 클리어되지 않음 (other_intent는 eligibility_slot_update 미설정)
+    if mocks["update_session_slot"].await_count > 0:
+        saved_slot = mocks["update_session_slot"].await_args.args[2]
+        wlf1 = next(
+            (p for p in saved_slot.get("recent_policies", []) if p["slug"] == "WLF1"), None
+        )
+        # WLF1이 슬롯에 남아있다면 eligibility_status가 FOLLOW_UP_REQUIRED로 유지
+        if wlf1 is not None:
+            assert wlf1.get("eligibility_status") == "FOLLOW_UP_REQUIRED"
