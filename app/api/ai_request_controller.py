@@ -22,6 +22,9 @@ from app.services.ai_request_lifecycle_service import AiRequestLifecycleService
 # AI 단계(파싱·판정·리랭크)가 충분히 생각할 수 있도록 넉넉하게 둔다.
 # 각 LLM 단계 타임아웃 합(파싱 60 + 판정 90 + 근거검색 20 + 리랭크 180)보다 크게.
 AI_BACKGROUND_TIMEOUT_SECONDS = 360
+AI_REQUEST_USER_ERROR_MESSAGE = (
+    "분석 처리 중 일시적인 문제가 발생했어요. 잠시 후 다시 시도해 주세요."
+)
 logger = logging.getLogger(__name__)
 
 recommendation_router = APIRouter(
@@ -89,23 +92,27 @@ async def process_ai_condition_request(request_type: str, request_id: int) -> No
                 await db.rollback()
                 raise
     except TimeoutError:
-        error_message = (
-            "AI request processing timed out after "
-            f"{AI_BACKGROUND_TIMEOUT_SECONDS} seconds"
-        )
         logger.exception(
             "AI background task timed out: request_type=%s request_id=%s",
             request_type,
             request_id,
         )
-        await _mark_ai_request_failed(request_type, request_id, error_message)
-    except Exception as exc:
+        await _mark_ai_request_failed(
+            request_type,
+            request_id,
+            AI_REQUEST_USER_ERROR_MESSAGE,
+        )
+    except Exception:
         logger.exception(
             "AI background task failed: request_type=%s request_id=%s",
             request_type,
             request_id,
         )
-        await _mark_ai_request_failed(request_type, request_id, str(exc))
+        await _mark_ai_request_failed(
+            request_type,
+            request_id,
+            AI_REQUEST_USER_ERROR_MESSAGE,
+        )
 
 
 async def _mark_ai_request_failed(

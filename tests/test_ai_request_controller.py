@@ -139,6 +139,101 @@ def test_create_eligibility_request_uses_common_lifecycle(monkeypatch) -> None:
     }
 
 
+def test_create_eligibility_request_accepts_manual_confirmations(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    async def fake_db() -> AsyncGenerator[object, None]:
+        db = SimpleNamespace()
+
+        async def commit():
+            captured["committed"] = True
+
+        db.commit = commit
+        yield db
+
+    async def fake_current_user() -> object:
+        return SimpleNamespace(user_id=7)
+
+    async def fake_create_eligibility_request(
+        self,
+        db,
+        *,
+        user_id,
+        policy_identifier,
+        source_type,
+        source_ref_id,
+        raw_query,
+        selected_conditions,
+    ):
+        captured["selected_conditions"] = selected_conditions
+        return SimpleNamespace(
+            request_id="123",
+            status=SimpleNamespace(value="READY"),
+        )
+
+    async def fake_mark_processing(self, db, request_type, request_id):
+        return SimpleNamespace(
+            request_id=str(request_id),
+            status=SimpleNamespace(value="PROCESSING"),
+        )
+
+    async def fake_process_ai_condition_request(
+        request_type: str,
+        request_id: int,
+    ) -> None:
+        return None
+
+    monkeypatch.setattr(
+        AiRequestLifecycleService,
+        "create_eligibility_request",
+        fake_create_eligibility_request,
+    )
+    monkeypatch.setattr(
+        AiRequestLifecycleService,
+        "mark_processing",
+        fake_mark_processing,
+    )
+    monkeypatch.setattr(
+        ai_request_controller,
+        "process_ai_condition_request",
+        fake_process_ai_condition_request,
+    )
+
+    app = FastAPI()
+    app.include_router(eligibility_router)
+    app.dependency_overrides[get_db_session] = fake_db
+    app.dependency_overrides[get_current_user] = fake_current_user
+    register_exception_handlers(app)
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/eligibility/requests",
+            json={
+                "policy_id": "WLF00000024",
+                "user_conditions": {"income": "low"},
+                "manual_confirmations": [
+                    {
+                        "question": "채무 상황 조건 확인이 필요해요.",
+                        "answer": "yes",
+                        "note": "챗봇 추가 답변",
+                    }
+                ],
+            },
+        )
+
+    assert response.status_code == 202
+    assert captured["selected_conditions"] == {
+        "income": "low",
+        "manual_confirmations": [
+            {
+                "question": "채무 상황 조건 확인이 필요해요.",
+                "answer": "yes",
+                "note": "챗봇 추가 답변",
+            }
+        ],
+    }
+
+
 def test_get_eligibility_request_returns_result_response(monkeypatch) -> None:
     captured: dict[str, object] = {}
 
@@ -248,6 +343,166 @@ def test_eligibility_result_response_maps_assessment_to_user_response() -> None:
     assert response.input_summary == {"region": "seoul"}
 
 
+def test_eligibility_result_response_masks_error_message() -> None:
+    service = AiRequestLifecycleService()
+    request = SimpleNamespace(
+        request_id=123,
+        request_status=RequestStatus.FAILED.value,
+        policy_id=24,
+        parsed_query_json={},
+        merged_condition_json={},
+        error_message=(
+            "consuming input failed: server closed the connection unexpectedly"
+        ),
+    )
+
+    response = service.to_eligibility_result_response(
+        request=request,
+        policy={
+            "policy_code": "WLF00000024",
+            "policy_name": "테스트 정책",
+        },
+        assessment=None,
+    )
+
+    assert response.error_message == (
+        "분석 처리 중 일시적인 문제가 발생했어요. 잠시 후 다시 시도해 주세요."
+    )
+
+
+def test_eligibility_manual_check_points_become_follow_up_questions() -> None:
+    service = AiRequestLifecycleService()
+    request = SimpleNamespace(
+        request_id=123,
+        request_status=RequestStatus.COMPLETED.value,
+        policy_id=24,
+        parsed_query_json={"selected_conditions": {"region": "seoul"}},
+        merged_condition_json={},
+        error_message=None,
+    )
+
+    response = service.to_eligibility_result_response(
+        request=request,
+        policy={
+            "policy_code": "WLF00000024",
+            "policy_name": "테스트 정책",
+        },
+        assessment={
+            "assessment_status": "NEEDS_MORE_INFO",
+            "reason_summary": "추가 확인이 필요합니다.",
+            "matched_conditions_json": [],
+            "missing_conditions_json": [],
+            "conflicting_conditions_json": [],
+            "manual_check_points_json": [
+                "환경오염 피해로 인한 생명, 신체 및 재산 피해가 발생되었다고 의심되는 경우",
+                "SERVICE_FIELD_NOT_SUPPORTED",
+            ],
+            "evidences": [],
+        },
+    )
+
+    assert response.criteria == []
+    assert len(response.follow_up_questions) == 1
+    question = response.follow_up_questions[0]
+    assert question.field_name == "manual_confirmation"
+    assert question.question_text.startswith("환경오염 피해")
+    assert question.options == [
+        {"value": "yes", "label": "예, 해당돼요"},
+        {"value": "no", "label": "아니요, 해당되지 않아요"},
+        {"value": "unknown", "label": "잘 모르겠어요"},
+    ]
+
+
+def test_eligibility_evidence_response_has_display_text() -> None:
+    service = AiRequestLifecycleService()
+    request = SimpleNamespace(
+        request_id=123,
+        request_status=RequestStatus.COMPLETED.value,
+        policy_id=24,
+        parsed_query_json={"selected_conditions": {"region": "seoul"}},
+        merged_condition_json={},
+        error_message=None,
+    )
+
+    response = service.to_eligibility_result_response(
+        request=request,
+        policy={
+            "policy_code": "WLF00000024",
+            "policy_name": "테스트 정책",
+        },
+        assessment={
+            "assessment_status": "LIKELY_MATCH",
+            "reason_summary": "지원 가능성이 높습니다.",
+            "matched_conditions_json": [],
+            "missing_conditions_json": [],
+            "conflicting_conditions_json": [],
+            "manual_check_points_json": [],
+            "evidences": [
+                {
+                    "chunk_id": 10,
+                    "evidence_policy_id": "24",
+                    "snippet": (
+                        "정책명: 개인회생 파산 종합지원(지원센터) "
+                        "섹션: 조건 구조 내용: - field: debt_status, operator: IN"
+                    ),
+                    "source_title": "개인회생 파산 종합지원(지원센터)",
+                    "source_url": "https://example.com",
+                    "similarity_score": 0.12,
+                    "evidence_role": "TARGET",
+                }
+            ],
+        },
+    )
+
+    assert response.evidences[0].display_text == (
+        "개인회생 파산 종합지원(지원센터)에서는 채무 상황 조건을 확인했고, "
+        "현재 입력한 정보만으로는 지원 가능성이 높다고 판단했어요."
+    )
+
+
+def test_manual_confirmations_are_applied_to_assessment_condition() -> None:
+    service = AiRequestLifecycleService()
+
+    condition = service._apply_manual_confirmations(
+        {
+            "manual_check_points": ["A 조건", "B 조건", "SERVICE_FIELD_NOT_SUPPORTED"],
+            "matched_conditions": [],
+            "rule_failures": [],
+        },
+        {
+            "manual_confirmations": [
+                {"question": "A 조건", "answer": "yes"},
+                {"question": "B 조건", "answer": "no"},
+                {"question": "SERVICE_FIELD_NOT_SUPPORTED", "answer": "yes"},
+            ]
+        },
+    )
+
+    assert condition["matched_conditions"] == ["A 조건"]
+    assert condition["rule_failures"] == ["B 조건"]
+    assert condition["manual_check_points"] == ["SERVICE_FIELD_NOT_SUPPORTED"]
+
+
+def test_manual_confirmations_are_parsed_for_follow_up_resolution() -> None:
+    service = AiRequestLifecycleService()
+
+    confirmations = service._manual_confirmations(
+        {
+            "manual_confirmations": [
+                {"question": "A 조건", "answer": "yes"},
+                {"question": "B 조건", "answer": "unknown"},
+                {"question": "C 조건", "answer": "invalid"},
+                {"question": "", "answer": "yes"},
+            ]
+        }
+    )
+
+    assert confirmations == [
+        {"question": "A 조건", "answer": "yes"},
+        {"question": "B 조건", "answer": "unknown"},
+    ]
+
+
 def test_process_eligibility_request_saves_policy_assessment(monkeypatch) -> None:
     captured: dict[str, object] = {}
     request = SimpleNamespace(
@@ -261,6 +516,7 @@ def test_process_eligibility_request_saves_policy_assessment(monkeypatch) -> Non
         parsed_query_json={"selected_conditions": {"region": "seoul"}},
         merged_condition_json={},
         profile_conflict_json=[],
+        result_json=None,
         error_message=None,
     )
 
@@ -294,6 +550,11 @@ def test_process_eligibility_request_saves_policy_assessment(monkeypatch) -> Non
             captured["status"] = status
             request.request_status = status.value
             request.error_message = error_message
+            return request
+
+        async def update_result(self, db, request, result_json):
+            captured["result_json"] = result_json
+            request.result_json = result_json
             return request
 
     class FakeConditionAgent:
