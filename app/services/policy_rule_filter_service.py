@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 from typing import Any
 
+from app.services.policy_rule_condition_value import condition_value
 from app.services.policy_rule_grouping import (
     INCOME_LEVEL_TO_PERCENT,
     OUTCOME_FAIL,
@@ -153,67 +154,8 @@ class PolicyRuleFilterService:
         return passthrough + normalized
 
     def _condition_value(self, condition: dict[str, Any], field_name: str) -> Any:
-        stage_keys = ("stage", "target_stage", "life_stage")
-        child_age_keys = ("childAge", "child_age", "child_age_range")
-        income_keys = ("income", "income_level", "income_bracket")
-        region_keys = ("region", "region_code")
-        special_keys = ("special", "special_conditions", "special_flags", "special_condition")
-        # RecommendationCandidateService._condition_value와 동일한 alias 키 집합을 유지한다.
-        key_groups = {
-            "stage": stage_keys,
-            "life_stage": stage_keys,
-            "target_stage": stage_keys,
-            "childAge": child_age_keys,
-            "child_age": child_age_keys,
-            "child_age_range": child_age_keys,
-            "age": ("age", "user_age", *child_age_keys),
-            "household_member_age": (
-                "household_member_age",
-                "household_member_ages",
-                "household_ages",
-                "age",
-                *child_age_keys,
-            ),
-            "income": income_keys,
-            "income_level": income_keys,
-            "income_bracket": income_keys,
-            "median_income_percent": ("median_income_percent", *income_keys),
-            "income_status": ("income_status", "benefit_status"),
-            "benefit_status": ("income_status", "benefit_status"),
-            "region": region_keys,
-            "region_code": region_keys,
-            "special": special_keys,
-            "special_flags": special_keys,
-            "special_conditions": special_keys,
-            "special_condition": special_keys,
-        }
-        for key in key_groups.get(field_name, (field_name,)):
-            value = condition.get(key)
-            if value not in (None, "", []):
-                return self._normalize_condition_value(field_name, value)
-        return None
-
-    def _normalize_condition_value(self, field_name: str, value: Any) -> Any:
-        if field_name == "median_income_percent":
-            mapped = INCOME_LEVEL_TO_PERCENT.get(str(value).strip())
-            return mapped if mapped is not None else value
-        if field_name in {"age", "household_member_age"}:
-            return self._child_age_to_number(value)
-        return value
-
-    def _child_age_to_number(self, value: Any) -> Any:
-        if isinstance(value, (int, float)):
-            return value
-        text = str(value).strip()
-        age_by_code = {
-            "preborn": 0,
-            "0": 0,
-            "1": 1,
-            "2-5": 5,
-            "6-12": 12,
-            "13+": 13,
-        }
-        return age_by_code.get(text, value)
+        # alias 해석은 RecommendationCandidateService와 공유(드리프트 방지).
+        return condition_value(condition, field_name)
 
     # 매처는 RecommendationCandidateService와 동일 동작을 보장하기 위해 공유 모듈에 위임한다.
     def _rule_matches(
