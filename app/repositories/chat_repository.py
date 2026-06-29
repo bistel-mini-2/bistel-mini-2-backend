@@ -66,9 +66,10 @@ class ChatRepository:
 
     @staticmethod
     async def find_sessions_by_user(
-        db: AsyncSession, user_id: int
+        db: AsyncSession, user_id: int, limit: int | None = None
     ) -> list[ChatSession]:
-        result = await db.execute(
+        # limit=None이면 전체 반환(기존 채팅 화면 동작 유지). 지정 시에만 상한 적용.
+        query = (
             select(ChatSession)
             .where(ChatSession.user_id == user_id)
             .order_by(
@@ -76,6 +77,9 @@ class ChatRepository:
                 ChatSession.created_at.desc(),
             )
         )
+        if limit is not None:
+            query = query.limit(max(1, min(limit, 100)))
+        result = await db.execute(query)
         return list(result.scalars().all())
 
     @staticmethod

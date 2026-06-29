@@ -1,4 +1,4 @@
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Query, status
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from app.common.response import success_response
@@ -38,8 +38,12 @@ async def create_chat_session(
 async def list_chat_sessions(
     db: DbSessionDep,
     current_user: CurrentUserDep,
+    limit: int | None = Query(default=None, ge=1, le=100),
 ) -> JSONResponse:
-    response = await ChatService.list_sessions(db, user_id=current_user.user_id)
+    # limit 미지정(채팅 화면)은 전체, 지정(마이페이지 limit=20)은 상한 적용.
+    response = await ChatService.list_sessions(
+        db, user_id=current_user.user_id, limit=limit
+    )
     return success_response(data=response)
 
 
