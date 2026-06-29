@@ -18,6 +18,10 @@ from app.ai.states.chat_state import (
     RecentAssistantPolicy,
     SlotPolicy,
 )
+from app.ai.utils.condition_profile_utils import (
+    condition_profile_notes,
+    summarize_condition_tree,
+)
 from app.common.ai_status import RequestStatus
 from app.common.exceptions import AppException, ErrorCode
 from app.core.config import settings
@@ -513,10 +517,10 @@ def _policy_summary_key_points(policy: dict[str, Any]) -> list[dict[str, str]]:
         condition_json = {}
     condition_text = (
         policy.get("condition_profile_target_summary")
-        or _condition_tree_text(condition_json.get("condition_tree"))
+        or summarize_condition_tree(condition_json.get("condition_tree"))
         or policy.get("condition_profile_source_text")
     )
-    condition_notes = _condition_profile_notes(condition_json)
+    condition_notes = condition_profile_notes(condition_json)
     candidates = (
         ("target", condition_text or policy.get("target_description")),
         ("benefit", policy.get("benefit_description") or policy.get("benefit_summary")),
@@ -532,57 +536,6 @@ def _policy_summary_key_points(policy: dict[str, Any]) -> list[dict[str, str]]:
         if text:
             key_points.append({"label": label, "content": text[:_SNIPPET_LIMIT]})
     return key_points[:3]
-
-
-def _condition_tree_text(value: Any) -> str:
-    parts: list[str] = []
-    for leaf in _condition_tree_leaves(value)[:4]:
-        source_text = leaf.get("source_text")
-        if source_text:
-            parts.append(str(source_text))
-            continue
-        field = leaf.get("field")
-        operator = leaf.get("operator")
-        leaf_value = leaf.get("value")
-        if field and operator:
-            parts.append(f"{field} {operator} {leaf_value}")
-    return " / ".join(parts)
-
-
-def _condition_tree_leaves(value: Any) -> list[dict[str, Any]]:
-    leaves: list[dict[str, Any]] = []
-    if not isinstance(value, dict):
-        return leaves
-    children = value.get("conditions")
-    if isinstance(children, list):
-        for child in children:
-            leaves.extend(_condition_tree_leaves(child))
-    elif value.get("field"):
-        leaves.append(value)
-    return leaves
-
-
-def _condition_profile_notes(condition_json: dict[str, Any]) -> str:
-    notes: list[str] = []
-    for label, key in (
-        ("exclusions", "exclusions"),
-        ("manual review", "unsupported_conditions"),
-        ("unknown", "unknowns"),
-    ):
-        items = condition_json.get(key)
-        if isinstance(items, list) and items:
-            source_text = _first_condition_item_text(items)
-            notes.append(f"{label}: {source_text}" if source_text else label)
-    return " / ".join(notes)
-
-
-def _first_condition_item_text(items: list[Any]) -> str:
-    for item in items:
-        if isinstance(item, dict):
-            value = item.get("source_text") or item.get("reason")
-            if value:
-                return str(value)
-    return ""
 
 
 def _policy_summary_fallback_content(policy: dict[str, Any]) -> str:
