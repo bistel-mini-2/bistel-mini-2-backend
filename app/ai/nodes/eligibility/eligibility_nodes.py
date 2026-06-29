@@ -36,6 +36,7 @@ class EligibilityGraphNodes:
             source_ref_id=state.get("source_ref_id"),
             raw_query=state.get("raw_query"),
             selected_conditions=state.get("selected_conditions"),
+            follow_up_resolved=bool(state.get("follow_up_resolved")),
         )
         return {**state, "request_id": int(snapshot.request_id)}
 

@@ -11,5 +11,6 @@ class EligibilityGraphState(TypedDict):
     selected_conditions: NotRequired[dict[str, Any] | None]
     source_type: str
     source_ref_id: NotRequired[str | None]
+    follow_up_resolved: NotRequired[bool]
     request_id: NotRequired[int]
     result_json: NotRequired[dict[str, Any]]

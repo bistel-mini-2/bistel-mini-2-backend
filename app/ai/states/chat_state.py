@@ -22,6 +22,9 @@ class SlotPolicy(TypedDict):
     slug: str
     policy_name: str
     last_action: str
+    eligibility_request_id: NotRequired[int | None]
+    follow_up_questions: NotRequired[list[dict] | None]
+    eligibility_status: NotRequired[str | None]
 
 
 class ProfileSlot(TypedDict, total=False):
@@ -96,3 +99,4 @@ class ChatGraphState(TypedDict):
     assistant_payload: NotRequired[dict[str, Any]]
     evidences_to_save: NotRequired[list[dict[str, Any]]]
     policy_links_to_save: NotRequired[list[dict[str, Any]]]
+    eligibility_slot_update: NotRequired[dict[str, Any] | None]
