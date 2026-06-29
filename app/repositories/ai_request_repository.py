@@ -144,6 +144,7 @@ class AiRequestRepository:
         parsed_query_json: dict[str, Any] | None = None,
         merged_condition_json: dict[str, Any] | None = None,
         profile_conflict_json: list[dict[str, Any]] | None = None,
+        raw_query: str | None = None,
     ) -> AiRequestModel:
         if parsed_query_json is not None:
             request.parsed_query_json = parsed_query_json
@@ -151,6 +152,8 @@ class AiRequestRepository:
             request.merged_condition_json = merged_condition_json
         if profile_conflict_json is not None:
             request.profile_conflict_json = profile_conflict_json
+        if raw_query is not None:
+            request.raw_query = raw_query
         await db.flush()
         await db.refresh(request)
         return request

@@ -12,13 +12,16 @@ from app.schemas.ai_request_schema import (
     AiRequestSnapshot,
     EligibilityResultResponse,
     EligibilityRequestCreate,
+    RecommendationAnswerSubmit,
     RecommendationPollingResponse,
     RecommendationRequestCreate,
 )
 from app.services.ai_request_lifecycle_service import AiRequestLifecycleService
 
 
-AI_BACKGROUND_TIMEOUT_SECONDS = 180
+# AI 단계(파싱·판정·리랭크)가 충분히 생각할 수 있도록 넉넉하게 둔다.
+# 각 LLM 단계 타임아웃 합(파싱 60 + 판정 90 + 근거검색 20 + 리랭크 180)보다 크게.
+AI_BACKGROUND_TIMEOUT_SECONDS = 360
 logger = logging.getLogger(__name__)
 
 recommendation_router = APIRouter(
@@ -150,6 +153,38 @@ async def create_recommendation_request(
         db=db,
         request_type="recommendation",
         request_id=int(snapshot.request_id),
+    )
+    await db.commit()
+    background_tasks.add_task(
+        process_ai_condition_request,
+        "recommendation",
+        int(snapshot.request_id),
+    )
+    return success_response(
+        data=snapshot,
+        status_code=status.HTTP_202_ACCEPTED,
+        meta=_request_meta(snapshot),
+    )
+
+
+@recommendation_router.post(
+    "/requests/{request_id}/answers",
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def submit_recommendation_answers(
+    request_id: int,
+    payload: RecommendationAnswerSubmit,
+    background_tasks: BackgroundTasks,
+    db: DbSessionDep,
+    current_user: CurrentUserDep,
+) -> JSONResponse:
+    # 추가질문 답변(또는 건너뛰기) → 조건 반영 후 추천 재실행.
+    service = AiRequestLifecycleService()
+    snapshot = await service.submit_recommendation_answers(
+        db=db,
+        request_id=request_id,
+        user_id=current_user.user_id,
+        answers=[answer.model_dump() for answer in payload.answers],
     )
     await db.commit()
     background_tasks.add_task(

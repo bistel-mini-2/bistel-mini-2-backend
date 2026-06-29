@@ -27,7 +27,9 @@ class RecommendationService:
     def __init__(
         self,
         chunk_searcher: PolicyChunkSearcher = search_policy_chunks,
-        result_limit: int = 6,
+        # 최종 노출 추천 수. 모델이 제한적이라 응답시간을 줄이려 4로 둔다.
+        # (풀/리랭크 출력도 이 값에 연동돼 함께 줄어든다.)
+        result_limit: int = 4,
         evidence_timeout_seconds: float = 20,
     ) -> None:
         self.chunk_searcher = chunk_searcher

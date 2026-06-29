@@ -43,7 +43,7 @@ class RecommendationRerankService:
     def __init__(
         self,
         model: str = "gpt-4o-mini",
-        timeout_seconds: float = 75,
+        timeout_seconds: float = 180,
     ) -> None:
         self.model = model
         self.timeout_seconds = timeout_seconds
@@ -58,8 +58,9 @@ class RecommendationRerankService:
         result_limit: int,
     ) -> list[PolicyCandidate]:
         assessment_by_policy = self._assessment_by_policy(assessments)
-        # 후보 풀이 크면 LLM 입력 토큰이 커져 타임아웃 위험이 있으므로 제한한다.
-        max_candidates = min(result_limit + 2, 8)
+        # 최종 노출 수의 2배를 풀로 둬 고를 여지를 확보하되(예: 4 → 8),
+        # 너무 크면 리랭크 LLM 입력 토큰/지연이 커지므로 상한(12)을 둔다.
+        max_candidates = min(result_limit * 2, 12)
         eligible = [
             candidate
             for candidate in candidates
@@ -147,7 +148,7 @@ class RecommendationRerankService:
         llm_kwargs: dict[str, Any] = {
             "model": self.model,
             "temperature": 0,
-            "max_tokens": 2000,
+            "max_tokens": 3500,
             "timeout": self.timeout_seconds,
         }
         if settings.openai_api_key:
@@ -166,6 +167,20 @@ class RecommendationRerankService:
                 후보 정책 목록 안에서만 최종 추천 순서를 정하고, 사용자에게 보여줄
                 추천 이유를 한글로 정리하는 것이다.
 
+                === 추천의 최우선 기준(가장 중요) ===
+                - 추천 순위의 1순위 기준은 사용자가 raw_query/needs에서 표현한 실제
+                  목적(원하는 도움)과 정책 혜택의 직접 관련성이다.
+                - 자격조건(target_description, matched_rules 등)은 "신청 가능성이 있는지"
+                  확인하는 안전장치일 뿐, 사용자 목적과 직접 관련 없는 정책을 상위로
+                  올리는 근거가 아니다. "조건은 맞으니까" 상위로 올리지 않는다.
+                - 의도-혜택 매칭 예시:
+                  · 양육비/현금지원/생활비를 원하면 → 현금성 급여·바우처·양육비 지원을 우선.
+                  · 돌봄을 원하면 → 돌봄서비스·어린이집·아이돌봄 정책을 우선.
+                  · 사용자가 법률 문제를 말하지 않았다면 → 무료법률상담은 자격이 맞아도 후순위.
+                  · 사용자가 의료비/치료/검진을 말하지 않았다면 → 의료성 정책은 후순위.
+                - 사용자가 명시한 목적이 없으면, 가구 상황(자녀 나이 등)에서 가장 보편적으로
+                  체감되는 혜택(양육 부담 경감 등)을 우선한다.
+
                 반드시 지켜야 할 규칙:
                 1. 입력 후보 목록에 없는 policy_id는 절대 추천하지 않는다.
                 2. evidence에 없는 내용을 정책 근거처럼 말하지 않는다.
@@ -173,28 +188,28 @@ class RecommendationRerankService:
                 4. 추가 확인이 필요한 상태는 그 점을 설명한다.
                 5. NOT_MATCH 또는 EXCLUDED 후보는 추천하지 않는다.
                 6. priority_score는 사용자가 먼저 확인할 추천 우선순위 점수다.
-                   단순 지원 가능성이 아니라 사용자 needs 직접성, 혜택 체감도,
-                   evidence 명확성, 추가 확인 부담을 함께 고려해 0~1 사이로 준다.
+                   위 "최우선 기준"(사용자 목적-정책 혜택의 직접 관련성)을 가장 크게
+                   반영하고, 그다음 혜택 체감도, evidence 명확성, 추가 확인 부담을 함께
+                   고려해 0~1 사이로 준다. 자격조건이 맞는다는 이유만으로는 높은 점수를
+                   주지 않는다(사용자 목적과 관련 없으면 후순위로 내린다).
                    모든 후보에 같은 점수나 1.0을 반복하지 말고 순위 차이가 보이게 한다.
                 7. priority_label은 "가장 먼저 확인", "우선 확인", "조건 잘 맞음",
                    "추가 확인 필요", "함께 확인" 중 하나를 권장한다.
-                8. why_recommended는 "사용자의 어떤 입력 조건"과 "정책의 어떤 지원
-                   대상/혜택"이 왜 맞는지를 자연스러운 2~3문장으로 설명한다.
+                8. why_recommended는 "사용자가 원한 도움(목적)"과 "이 정책의 혜택"이
+                   어떻게 연결되는지를 먼저 설명하는 자연스러운 2~3문장이다.
                    (카드의 "AI 코멘트" 영역에 들어가므로 한 문장으로 끝내지 말고
                    2~3문장으로 충분히 풀어 쓴다.)
-                   반드시 아래 내용을 모두 포함한다.
-                   - 사용자의 입력 조건을 1개 이상 언급한다(예: 자녀 나이, 가구 유형,
-                     소득 상황, 거주 지역 등 user_context/merged_condition_json 기반).
-                   - 정책의 지원 대상 또는 혜택을 1개 이상 언급한다.
-                   - 둘이 왜 맞는지(또는 왜 확인해 볼 만한지)와, 이 정책으로 무엇이
-                     도움이 되는지를 이어서 설명한다.
-                   예시:
-                   - "입력하신 자녀 나이가 영유아 지원 대상과 잘 맞아요. 이 정책은
-                     돌봄 공간과 프로그램을 제공해 보육 부담을 덜어줘요. 양육 지원이
-                     필요한 상황과 맞아 우선 추천드려요."
-                   - "차상위계층 조건이 정책의 저소득 가구 지원 대상과 맞닿아 있어요.
-                     의료비 부담을 줄여주는 혜택이라 도움이 될 수 있어요. 다만 세부
-                     자격은 확인이 필요해 확인해 볼 정책으로 안내드려요."
+                   서술 순서를 지킨다.
+                   - (먼저) 사용자가 원한 도움/목적과 이 정책 혜택의 직접 연결을 말한다.
+                     "자격조건이 맞다"가 아니라 "원하는 도움에 이 혜택이 맞다"가 중심이다.
+                   - (그다음) 관련된 입력 조건(자녀 나이·가구 상황 등)을 1개 덧붙인다.
+                   - (마지막) 확인이 필요하면 그 점을 짧게 언급한다.
+                   예시(의도 중심):
+                   - "아이 양육비 부담을 줄이고 싶다는 요청에, 이 정책의 현금성 지원이
+                     직접 맞아요. 0세 자녀가 지원 대상에 들어 바로 도움이 될 수 있어요.
+                     신청 전 출생신고 여부만 확인하면 돼요."
+                   - "돌봄이 필요하다는 상황에, 이 정책의 어린이집·아이돌봄 지원이
+                     딱 맞아요. 입력하신 자녀 나이도 지원 대상과 맞아 우선 추천드려요."
                    다음은 절대 쓰지 않는다.
                    - "DB", "RAG", "policy_rule", "hard rule" 같은 시스템/내부 용어
                    - "REFUGEE_APPLICATION_PENDING_EXCLUDED"처럼 대문자 SNAKE_CASE로 된
@@ -216,10 +231,11 @@ class RecommendationRerankService:
                 15. user_context(raw_query, selected_conditions, merged_condition_json,
                    input_issues, profile_conflicts)를 참고해 사용자가 방금 입력한 조건을
                    우선 반영한다.
-                16. 각 후보의 target_description, benefit_description, application_method,
-                   matched_rules, check_rules, conflicting_conditions를 근거로
-                   why_recommended와 check_before_apply를 구체적으로 쓴다.
-                   check_rules(추가 확인/미입력 항목)가 있으면 check_before_apply에 반영한다.
+                16. why_recommended는 benefit_description(혜택)과 사용자 목적의 연결을
+                   중심으로 쓴다. matched_rules/check_rules/conflicting_conditions는
+                   "추천 이유"가 아니라 check_before_apply(신청 전 확인사항)와
+                   추가 확인 안내에 활용한다. check_rules(추가 확인/미입력 항목)가
+                   있으면 check_before_apply에 반영한다.
                 17. check_before_apply는 정책마다 다르게 쓴다. 모든 카드에 같은
                    "신청 기간은 정책 상세에서 확인해주세요." 같은 일반 문구를
                    반복하지 말고, 그 정책의 지원 대상/신청 방법/추가 확인 항목에
