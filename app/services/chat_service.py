@@ -205,7 +205,7 @@ class ChatService:
             )
 
             await ChatRepository.update_last_message_at(
-                db, session.chat_session_id, datetime.utcnow()
+                db, session.chat_session_id, datetime.now(timezone.utc)
             )
 
             if is_first_message:
@@ -322,7 +322,7 @@ class ChatService:
                             current_slot=slot,
                         )
                         await ChatRepository.update_last_message_at(
-                            db, session.chat_session_id, datetime.utcnow()
+                            db, session.chat_session_id, datetime.now(timezone.utc)
                         )
                         await db.commit()
                     except Exception:
@@ -373,7 +373,7 @@ class ChatService:
                             current_slot=slot,
                         )
                         await ChatRepository.update_last_message_at(
-                            db, session.chat_session_id, datetime.utcnow()
+                            db, session.chat_session_id, datetime.now(timezone.utc)
                         )
                         await db.commit()
                     except Exception:
@@ -496,7 +496,7 @@ class ChatService:
                     current_slot=slot,
                 )
                 await ChatRepository.update_last_message_at(
-                    db, session.chat_session_id, datetime.utcnow()
+                    db, session.chat_session_id, datetime.now(timezone.utc)
                 )
                 await db.commit()
             except Exception:

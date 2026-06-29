@@ -1489,7 +1489,6 @@ class ChatGraphNodes:
             "apply_card": state.get("branch_apply_card"),
             "easy_summary": state.get("branch_easy_summary"),
             "key_points": state.get("branch_key_points", []),
-            "disclaimer": (intent != "unclear") and not is_prompt,
             # 슬롯/확인을 되묻는 중에는 면책 문구·확정 경고 불필요
             "disclaimer": (intent != "unclear") and not is_prompt,
             "slot_request": slot_request,
