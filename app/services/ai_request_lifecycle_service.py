@@ -344,6 +344,12 @@ class AiRequestLifecycleService:
         request = await self._get_request_or_raise(db, "eligibility", request_id)
         if request.user_id != user_id:
             raise self._not_found("eligibility", request_id)
+        if RequestStatus(request.request_status) != RequestStatus.FOLLOW_UP_REQUIRED:
+            raise AppException(
+                status_code=status.HTTP_409_CONFLICT,
+                code=ErrorCode.CONFLICT,
+                message="추가 정보가 필요한 요청에만 답변을 제출할 수 있어요.",
+            )
 
         parsed_query_json = dict(request.parsed_query_json or {})
         previous_selected = parsed_query_json.get("selected_conditions")

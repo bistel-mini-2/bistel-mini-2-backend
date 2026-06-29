@@ -26,7 +26,6 @@ from app.api.favorite_controller import (
     favorites_router,
     user_favorites_router,
 )
-from app.api.graph_view_controller import router as graph_view_router
 from app.api.policy_controller import router as policy_router
 from app.api.policy_condition_profile_controller import (
     router as policy_condition_profile_router,
@@ -96,7 +95,6 @@ app.include_router(compare_router)
 app.include_router(compare_public_router)
 app.include_router(compare_history_router)
 app.include_router(chat_router)
-app.include_router(graph_view_router)
 register_exception_handlers(app)
 
 
