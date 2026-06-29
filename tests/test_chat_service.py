@@ -769,13 +769,14 @@ def test_send_message_stream_emits_tokens_then_done(monkeypatch) -> None:
     ))
     events = _parse_sse_chunks(chunks)
 
-    # token, token, done 순서
-    assert [e["type"] for e in events] == ["token", "token", "done"]
+    # token, token, intent, done 순서 (supervisor_decision 감지 후 intent 이벤트 발행)
+    assert [e["type"] for e in events] == ["token", "token", "intent", "done"]
     assert events[0]["delta"] == "안녕"
     assert events[1]["delta"] == "하세요"
+    assert events[2]["intent"] == "recommendation"
 
     # done payload에 ChatMessageSendResponse 구조 포함
-    payload = events[2]["payload"]
+    payload = events[3]["payload"]
     assert payload["chat_session_id"] == "10"
     assert payload["assistant_message"]["content"] == "테스트 답변"
     assert payload["assistant_message"]["policies"][0]["action_type"] == "RECOMMENDED"

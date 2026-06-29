@@ -2057,12 +2057,25 @@ class ChatGraphNodes:
             fallback_slug=policy_slug,
             fallback_policy_name=policy_name,
         )
+        eligibility_slot_update: dict | None = None
+        if result_json.get("status") == RequestStatus.FOLLOW_UP_REQUIRED.value:
+            eligibility_slot_update = {
+                "slug": policy_slug,
+                "eligibility_request_id": result_json.get("request_id"),
+                "follow_up_questions": (
+                    result_json.get("follow_up_questions")
+                    or result_json.get("questions")
+                    or []
+                ),
+                "eligibility_status": RequestStatus.FOLLOW_UP_REQUIRED.value,
+            }
         return {
             **state,
             "branch_content": content,
             "branch_user_status": user_status,
             "branch_policies": policies,
             "branch_evidences": result_evidences or evidences,
+            "eligibility_slot_update": eligibility_slot_update,
         }
 
     async def _run_eligibility_lifecycle(

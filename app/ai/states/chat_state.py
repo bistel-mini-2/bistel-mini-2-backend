@@ -17,11 +17,14 @@ class HistoryMessage(TypedDict):
     content: str | None
 
 
-class SlotPolicy(TypedDict):
+class SlotPolicy(TypedDict, total=False):
     policy_id: int
     slug: str
     policy_name: str
     last_action: str
+    eligibility_request_id: int | None
+    follow_up_questions: list[dict] | None
+    eligibility_status: str | None
 
 
 class ProfileSlot(TypedDict, total=False):
@@ -96,3 +99,4 @@ class ChatGraphState(TypedDict):
     assistant_payload: NotRequired[dict[str, Any]]
     evidences_to_save: NotRequired[list[dict[str, Any]]]
     policy_links_to_save: NotRequired[list[dict[str, Any]]]
+    eligibility_slot_update: NotRequired[dict[str, Any] | None]
