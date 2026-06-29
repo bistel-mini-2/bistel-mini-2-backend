@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 class EligibilityEvidenceRewriteItem(BaseModel):
     index: int
-    display_text: str = Field(min_length=1, max_length=220)
+    display_text: str = Field(min_length=1, max_length=420)
 
 
 class EligibilityEvidenceRewriteResult(BaseModel):
@@ -94,7 +94,7 @@ class EligibilityEvidenceAgent:
             structured_llm = ChatOpenAI(
                 model="gpt-4o-mini",
                 temperature=0,
-                max_completion_tokens=800,
+                max_completion_tokens=1500,
                 timeout=timeout_seconds,
                 max_retries=0,
             ).with_structured_output(EligibilityEvidenceRewriteResult)
@@ -155,7 +155,7 @@ class EligibilityEvidenceAgent:
             if 0 <= item.index < len(rewritten):
                 text = self.clean_user_text(item.display_text)
                 if text and not self.is_internal_text(text):
-                    rewritten[item.index] = self._short_text(text, 220)
+                    rewritten[item.index] = self._short_text(text, 400)
         return rewritten
 
     def clean_user_text(self, value: Any) -> str:
@@ -247,54 +247,69 @@ class EligibilityEvidenceAgent:
         conflicts = self._condition_summary(context.conflicting_conditions)
         manual = self._condition_summary(context.manual_check_points)
 
+        # 첫 문장: 이 근거가 정책의 어떤 기준을 다루는지 짚어 준다.
+        basis_sentence = f"{policy_text}{basis_text}을 정해 두고 있어요."
+
         if context.assessment_status == AssessmentStatus.LIKELY_MATCH:
             if matched:
-                return (
-                    f"{policy_text}{basis_text}을 확인했어요. 입력한 정보가 "
-                    f"{self._condition_phrase(matched)}과 맞아 지원 가능성이 높다고 판단했어요."
+                judgement = (
+                    f"입력하신 정보가 {self._condition_phrase(matched)}과 맞아, "
+                    "이 기준에서는 지원 가능성이 높다고 판단했어요."
                 )
-            return (
-                f"{policy_text}{basis_text}을 확인했고, 현재 입력한 정보만으로는 "
-                "지원 가능성이 높다고 판단했어요."
-            )
+            else:
+                judgement = (
+                    "현재 입력하신 정보만으로는 이 기준에 어긋나는 부분이 없어, "
+                    "지원 가능성이 높다고 판단했어요."
+                )
+            return self._join_reason_sentences(basis_sentence, judgement)
 
         if context.assessment_status == AssessmentStatus.NOT_MATCH:
             if missing:
-                return (
-                    f"{policy_text}{basis_text}을 확인했지만, {self._condition_phrase(missing)}이 "
-                    "맞지 않아 지원이 어려울 수 있어요."
+                judgement = (
+                    f"그런데 입력하신 정보에서는 {self._condition_phrase(missing)}이 맞지 않아, "
+                    "이 정책은 지원이 어려울 수 있어요."
                 )
-            return (
-                f"{policy_text}{basis_text}을 확인했지만, 현재 입력한 정보와 "
-                "맞지 않는 조건이 있어 지원이 어려울 수 있어요."
-            )
+            else:
+                judgement = (
+                    "그런데 현재 입력하신 정보와 맞지 않는 조건이 있어, "
+                    "이 정책은 지원이 어려울 수 있어요."
+                )
+            return self._join_reason_sentences(basis_sentence, judgement)
 
         if context.assessment_status == AssessmentStatus.CONFLICTING_PROFILE:
             if conflicts:
-                return (
-                    f"{policy_text}{basis_text}을 확인했지만, {conflicts} 정보가 "
-                    "서로 달라 먼저 입력값을 정리해야 해요."
+                judgement = (
+                    f"다만 {conflicts} 정보가 서로 달라, 먼저 입력값을 정리한 뒤에 "
+                    "정확히 판단할 수 있어요."
                 )
-            return (
-                f"{policy_text}{basis_text}을 확인했지만, 입력값이 서로 달라 "
-                "먼저 확인이 필요해요."
-            )
+            else:
+                judgement = (
+                    "다만 입력하신 값이 서로 달라, 먼저 입력값을 정리한 뒤에 "
+                    "정확히 판단할 수 있어요."
+                )
+            return self._join_reason_sentences(basis_sentence, judgement)
 
         if manual:
-            return (
-                f"{policy_text}{basis_text}을 확인하려면 {self._condition_phrase(manual)} 여부를 "
-                "추가로 알려줘야 해요."
+            judgement = (
+                f"이 기준에 해당하는지 확인하려면 {self._condition_phrase(manual)} 여부를 "
+                "추가로 알려주셔야 정확히 판단할 수 있어요."
             )
+            return self._join_reason_sentences(basis_sentence, judgement)
 
         if missing:
-            return (
-                f"{policy_text}{basis_text}을 판단하려면 {self._condition_phrase(missing)} 정보가 "
+            judgement = (
+                f"이 기준을 판단하려면 {self._condition_phrase(missing)} 정보가 "
                 "추가로 필요해요."
             )
+            return self._join_reason_sentences(basis_sentence, judgement)
 
         if fallback_text:
-            return self._short_text(fallback_text, 220)
+            return self._short_text(fallback_text, 400)
         return "정책 원문을 기준으로 지원 가능성을 확인했어요."
+
+    def _join_reason_sentences(self, *sentences: str) -> str:
+        text = " ".join(sentence.strip() for sentence in sentences if sentence.strip())
+        return self._short_text(text, 400)
 
     def _looks_like_structured_condition(self, text: str) -> bool:
         return bool(
@@ -335,7 +350,7 @@ class EligibilityEvidenceAgent:
         return """
 당신은 복지정책 지원 가능성 분석 결과를 사용자에게 설명하는 문장 작성자입니다.
 입력으로 이미 계산된 판정 상태, 사용자 조건, 정책 근거 chunk가 주어집니다.
-자격 판정을 새로 하거나 결과를 바꾸지 말고, evidence별 display_text만 자연스러운 한국어 1문장으로 바꾸세요.
+자격 판정을 새로 하거나 결과를 바꾸지 말고, evidence별 display_text를 사용자가 판단 근거를 분명히 이해할 수 있는 한국어 설명으로 바꾸세요.
 
 규칙:
 1. 사용자에게 보여줄 문장만 작성합니다.
@@ -343,7 +358,10 @@ class EligibilityEvidenceAgent:
 3. 긴 원문을 그대로 복사하지 말고 "채무 상황 조건", "소득 조건", "연령 조건", "가족 상황 조건"처럼 이해하기 쉬운 기준명으로 요약합니다.
 4. "확정", "반드시 가능"처럼 단정하지 말고 "가능성이 높아요", "추가 확인이 필요해요", "어려울 수 있어요"처럼 표현합니다.
 5. 각 evidence index를 유지하고, 입력 evidence 개수와 같은 순서로 반환합니다.
-6. 각 display_text는 80~160자 정도의 한국어 한 문장으로 작성합니다.
+6. 각 display_text는 다음 세 가지가 모두 드러나도록 2~3개의 짧은 문장(전체 150~320자)으로 작성합니다.
+   ① 정책이 무엇을 요구하는 기준인지, ② 사용자가 입력한 정보가 그 기준과 어떻게 연결되는지, ③ 그래서 어떤 판단을 했는지.
+7. 근거가 막연하게 들리지 않도록 정책 근거 chunk에 실제로 적힌 구체적인 기준(대상·소득·연령·서류 등)을 한 가지 이상 자연스럽게 녹여 씁니다.
+8. 줄바꿈 기호(\\n)나 번호·불릿 없이, 자연스럽게 이어지는 문장으로만 작성합니다.
 """.strip()
 
     def _short_text(self, value: str, limit: int) -> str:

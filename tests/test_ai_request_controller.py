@@ -229,6 +229,7 @@ def test_create_eligibility_request_accepts_manual_confirmations(monkeypatch) ->
                 "question": "채무 상황 조건 확인이 필요해요.",
                 "answer": "yes",
                 "note": "챗봇 추가 답변",
+                "source": None,
             }
         ],
     }
@@ -406,11 +407,54 @@ def test_eligibility_manual_check_points_become_follow_up_questions() -> None:
     question = response.follow_up_questions[0]
     assert question.field_name == "manual_confirmation"
     assert question.question_text.startswith("환경오염 피해")
+    assert question.question_text.endswith("해당하시나요?")
     assert question.options == [
         {"value": "yes", "label": "예, 해당돼요"},
         {"value": "no", "label": "아니요, 해당되지 않아요"},
         {"value": "unknown", "label": "잘 모르겠어요"},
     ]
+
+
+def test_eligibility_manual_check_internal_codes_become_user_questions() -> None:
+    service = AiRequestLifecycleService()
+    request = SimpleNamespace(
+        request_id=123,
+        request_status=RequestStatus.COMPLETED.value,
+        policy_id=24,
+        parsed_query_json={"selected_conditions": {"region": "seoul"}},
+        merged_condition_json={},
+        error_message=None,
+    )
+
+    response = service.to_eligibility_result_response(
+        request=request,
+        policy={
+            "policy_code": "WLF00000024",
+            "policy_name": "테스트 정책",
+        },
+        assessment={
+            "assessment_status": "NEEDS_MORE_INFO",
+            "reason_summary": "추가 확인이 필요합니다.",
+            "matched_conditions_json": [],
+            "missing_conditions_json": [],
+            "conflicting_conditions_json": [],
+            "manual_check_points_json": [
+                "OVERSEAS_STAY_90_DAYS_PAYMENT_SUSPENDED",
+                "REFUGEE_APPLICATION_PENDING_EXCLUDED",
+                "SERVICE_FIELD_NOT_SUPPORTED",
+            ],
+            "evidences": [],
+        },
+    )
+
+    question_texts = [
+        question.question_text for question in response.follow_up_questions
+    ]
+    assert question_texts == [
+        "최근 90일 이상 해외에 체류하여 급여 지급이 정지된 상태인가요?",
+        "현재 난민 인정 심사 중인 상태인가요?",
+    ]
+    assert response.manual_check_points == []
 
 
 def test_eligibility_evidence_response_has_display_text() -> None:
@@ -481,6 +525,35 @@ def test_manual_confirmations_are_applied_to_assessment_condition() -> None:
     assert condition["matched_conditions"] == ["A 조건"]
     assert condition["rule_failures"] == ["B 조건"]
     assert condition["manual_check_points"] == ["SERVICE_FIELD_NOT_SUPPORTED"]
+
+
+def test_manual_confirmation_matches_rewritten_question_text() -> None:
+    service = AiRequestLifecycleService()
+
+    condition = service._apply_manual_confirmations(
+        {
+            "manual_check_points": ["OVERSEAS_STAY_90_DAYS_PAYMENT_SUSPENDED"],
+            "matched_conditions": [],
+            "rule_failures": [],
+        },
+        {
+            "manual_confirmations": [
+                {
+                    "question": (
+                        "최근 90일 이상 해외에 체류하여 급여 지급이 정지된 상태인가요?"
+                    ),
+                    "answer": "yes",
+                },
+            ]
+        },
+    )
+
+    # 제외형 조건(해당 시 지원에서 빠짐)이므로 yes는 충족이 아니라 미충족으로 반영된다.
+    assert condition["matched_conditions"] == []
+    assert condition["rule_failures"] == [
+        "최근 90일 이상 해외에 체류하여 급여 지급이 정지된 상태인가요?"
+    ]
+    assert condition["manual_check_points"] == []
 
 
 def test_manual_confirmations_are_parsed_for_follow_up_resolution() -> None:

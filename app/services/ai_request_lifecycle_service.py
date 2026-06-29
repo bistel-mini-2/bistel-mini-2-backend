@@ -9,6 +9,9 @@ from app.ai.agents.eligibility_evidence_agent import (
     EligibilityEvidenceAgent,
     EligibilityEvidenceContext,
 )
+from app.ai.agents.eligibility_follow_up_question_agent import (
+    EligibilityFollowUpQuestionAgent,
+)
 from app.ai.tools.policy_chunk_search_tool import search_policy_chunks
 from app.ai.graphs.recommendation_graph import RecommendationGraphRunner
 from app.ai.agents.condition_agent import ConditionAgent
@@ -75,6 +78,9 @@ class AiRequestLifecycleService:
         rule_filter_service: PolicyRuleFilterService | None = None,
         policy_chunk_searcher: Any | None = None,
         eligibility_evidence_agent: EligibilityEvidenceAgent | None = None,
+        eligibility_follow_up_question_agent: (
+            EligibilityFollowUpQuestionAgent | None
+        ) = None,
     ) -> None:
         self.repository = repository or AiRequestRepository()
         self.assessment_repository = assessment_repository or PolicyAssessmentRepository()
@@ -86,6 +92,9 @@ class AiRequestLifecycleService:
         self.policy_chunk_searcher = policy_chunk_searcher or search_policy_chunks
         self.eligibility_evidence_agent = (
             eligibility_evidence_agent or EligibilityEvidenceAgent()
+        )
+        self.eligibility_follow_up_question_agent = (
+            eligibility_follow_up_question_agent or EligibilityFollowUpQuestionAgent()
         )
 
     async def create_request(
@@ -628,6 +637,16 @@ class AiRequestLifecycleService:
             request=request,
             result_json=eligibility_result_json,
         )
+        # 부족 정보 추가 질문을 LLM으로 1회 생성해 저장한다(원본 point가 키).
+        # 응답/답변 매칭은 저장된 질문을 재사용하므로 매번 재생성하지 않는다.
+        await self._save_follow_up_question_overrides(
+            db=db,
+            request=request,
+            manual_check_points=[
+                *self._string_values(assessment_result.manual_check_points),
+                *self._string_values(assessment_result.missing_conditions),
+            ],
+        )
 
         async with psycopg_pool.connection() as conn:
             await PolicyAssessmentRepository.save_assessment(
@@ -636,6 +655,27 @@ class AiRequestLifecycleService:
                 assessment_type=ASSESSMENT_TYPE_ELIGIBILITY,
                 eligibility_request_id=request_id,
             )
+
+    async def _save_follow_up_question_overrides(
+        self,
+        db: AsyncSession,
+        request: AiRequestModel,
+        manual_check_points: list[str],
+    ) -> None:
+        overrides = await self.eligibility_follow_up_question_agent.rewrite_questions(
+            points=manual_check_points,
+        )
+        if not overrides:
+            return
+        parsed_query_json = {
+            **(request.parsed_query_json or {}),
+            "manual_question_overrides": overrides,
+        }
+        await self.repository.update_payload(
+            db=db,
+            request=request,
+            parsed_query_json=parsed_query_json,
+        )
 
     async def resolve_policy_id(
         self,
@@ -813,6 +853,7 @@ class AiRequestLifecycleService:
         manual_check_points = self._string_values(condition.get("manual_check_points"))
         matched_conditions = self._string_values(condition.get("matched_conditions"))
         rule_failures = self._string_values(condition.get("rule_failures"))
+        missing_conditions = self._string_values(condition.get("missing_conditions"))
 
         for confirmation in confirmations:
             if not isinstance(confirmation, dict):
@@ -823,12 +864,40 @@ class AiRequestLifecycleService:
             if not question or self._is_internal_condition_text(question):
                 continue
 
-            manual_check_points = [
-                item for item in manual_check_points if item != question
+            # source(원본 point)가 오면 그 키로, 없으면 질문 텍스트로 매칭한다.
+            source = confirmation.get("source")
+            # 같은 확인 항목이 manual_check_points와 missing_conditions 양쪽에 들어올 수 있다
+            # (rule_filter가 hard_filter+미입력을 missing으로도 보고함). 답변을 받은 항목은
+            # 둘 다에서 제거해야 한다. missing에 남으면 status가 계속 NEEDS_MORE_INFO로 고착돼
+            # 같은 추가 확인 단계로 되돌아간다.
+            matched_points = [
+                item
+                for item in manual_check_points
+                if self._matches_manual_point(item, source, question)
             ]
-            if answer == "yes":
+            matched_missing = [
+                item
+                for item in missing_conditions
+                if self._matches_manual_point(item, source, question)
+            ]
+            manual_check_points = [
+                item for item in manual_check_points if item not in matched_points
+            ]
+            missing_conditions = [
+                item for item in missing_conditions if item not in matched_missing
+            ]
+            # 제외형(해당하면 지원에서 빠지는) 조건은 질문이 제외 여부를 묻기 때문에
+            # yes가 충족이 아니라 미충족을 뜻한다. 매칭된 원본 point가 제외형이면 효과를 뒤집는다.
+            effective_answer = (
+                self._flip_answer(answer)
+                if self._is_exclusion_confirmation(
+                    matched_points + matched_missing, source
+                )
+                else answer
+            )
+            if effective_answer == "yes":
                 matched_conditions.append(question)
-            elif answer == "no":
+            elif effective_answer == "no":
                 rule_failures.append(question)
             else:
                 manual_check_points.append(question)
@@ -838,6 +907,7 @@ class AiRequestLifecycleService:
             "matched_conditions": self._deduplicate_strings(matched_conditions),
             "rule_failures": self._deduplicate_strings(rule_failures),
             "manual_check_points": self._deduplicate_strings(manual_check_points),
+            "missing_conditions": self._deduplicate_strings(missing_conditions),
         }
 
     def _manual_confirmations(self, selected_conditions: Any) -> list[dict[str, Any]]:
@@ -1014,17 +1084,52 @@ class AiRequestLifecycleService:
         conflicting_conditions = self._string_list(
             assessment.get("conflicting_conditions_json")
         )
-        manual_check_points = self._user_condition_list(
+        raw_manual_check_points = self._string_list(
             assessment.get("manual_check_points_json")
         )
+        raw_missing_conditions = self._string_list(
+            assessment.get("missing_conditions_json")
+        )
+        manual_check_points = self._user_condition_list(raw_manual_check_points)
+        question_overrides = self._manual_question_overrides(request)
         manual_questions = self._manual_check_follow_up_questions(
-            manual_check_points,
+            raw_manual_check_points,
+            overrides=question_overrides,
             start_index=len(parsed_questions),
         )
+        # 사용자가 직접 답할 수 있는 누락 조건도 정식 질문으로 만들어 source_point를 부여한다.
+        # criteria(status=check)만으로는 프론트가 질문화해도 source_point가 없어 답변이
+        # 원본 항목과 매칭되지 않아 missing이 영구히 남는다(NEEDS_MORE_INFO 루프).
+        # 답변 불가한 내부 토큰은 to_question이 걸러내므로 질문에서 자동 제외된다.
+        missing_questions = self._manual_check_follow_up_questions(
+            raw_missing_conditions,
+            overrides=question_overrides,
+            start_index=len(parsed_questions) + len(manual_questions),
+        )
         questions = self._deduplicate_follow_up_questions(
-            [*parsed_questions, *manual_questions]
+            [*parsed_questions, *manual_questions, *missing_questions]
         )
         stored_evidences = self._stored_eligibility_evidences(request)
+        # 추가 정보를 더 입력받아야 하는 단계(follow-up 질문 존재)에서는
+        # 아직 판단이 확정되지 않았으므로 판단 근거(evidences)를 노출하지 않는다.
+        evidences = (
+            []
+            if questions
+            else self._eligibility_evidence_items(
+                evidences=[
+                    evidence
+                    for evidence in assessment.get("evidences", [])
+                    if isinstance(evidence, dict)
+                ],
+                stored_evidences=stored_evidences,
+                fallback_policy_id=request.policy_id,
+                assessment_status=assessment_status,
+                matched_conditions=matched_conditions,
+                missing_conditions=missing_conditions,
+                conflicting_conditions=conflicting_conditions,
+                manual_check_points=manual_check_points,
+            )
+        )
 
         return EligibilityResultResponse(
             request_id=str(request.request_id),
@@ -1047,20 +1152,7 @@ class AiRequestLifecycleService:
             missing_conditions=missing_conditions,
             conflicting_conditions=conflicting_conditions,
             manual_check_points=manual_check_points,
-            evidences=self._eligibility_evidence_items(
-                evidences=[
-                    evidence
-                    for evidence in assessment.get("evidences", [])
-                    if isinstance(evidence, dict)
-                ],
-                stored_evidences=stored_evidences,
-                fallback_policy_id=request.policy_id,
-                assessment_status=assessment_status,
-                matched_conditions=matched_conditions,
-                missing_conditions=missing_conditions,
-                conflicting_conditions=conflicting_conditions,
-                manual_check_points=manual_check_points,
-            ),
+            evidences=evidences,
             questions=questions,
             follow_up_questions=questions,
             input_summary=input_summary,
@@ -1524,17 +1616,24 @@ class AiRequestLifecycleService:
     def _manual_check_follow_up_questions(
         self,
         manual_check_points: list[str],
+        overrides: dict[str, str] | None = None,
         start_index: int = 0,
     ) -> list[EligibilityFollowUpQuestionItem]:
+        overrides = overrides or {}
         questions: list[EligibilityFollowUpQuestionItem] = []
         for index, point in enumerate(manual_check_points):
-            text = self._clean_user_condition_text(point)
-            if not text or self._is_internal_condition_text(text):
+            # 저장된 LLM 질문이 있으면 그대로 쓰고, 없으면 템플릿으로 fallback한다.
+            text = overrides.get(point) or (
+                self.eligibility_follow_up_question_agent.to_question(point)
+            )
+            if not text:
                 continue
             questions.append(
                 EligibilityFollowUpQuestionItem(
                     follow_up_id=f"manual-{start_index + index + 1}",
                     field_name="manual_confirmation",
+                    # 답변 병합이 LLM 문장이 아니라 원본 point를 키로 매칭하도록 함께 내려준다.
+                    source_point=point,
                     question_text=text,
                     reason="정확한 지원 가능성 판정을 위해 직접 확인이 필요해요.",
                     priority=start_index + index + 1,
@@ -1546,6 +1645,16 @@ class AiRequestLifecycleService:
                 )
             )
         return questions
+
+    def _manual_question_overrides(self, request: AiRequestModel) -> dict[str, str]:
+        overrides = (request.parsed_query_json or {}).get("manual_question_overrides")
+        if not isinstance(overrides, dict):
+            return {}
+        return {
+            str(key): str(value)
+            for key, value in overrides.items()
+            if isinstance(value, str) and value.strip()
+        }
 
     def _deduplicate_follow_up_questions(
         self,
@@ -1588,7 +1697,50 @@ class AiRequestLifecycleService:
         return self.eligibility_evidence_agent.condition_label(value)
 
     def _is_internal_condition_text(self, value: Any) -> bool:
-        return self.eligibility_evidence_agent.is_internal_text(value)
+        return self.eligibility_evidence_agent.is_internal_text(
+            value
+        ) or self.eligibility_follow_up_question_agent.is_internal_code(value)
+
+    def _matches_manual_point(
+        self,
+        point: Any,
+        source: Any,
+        question: str,
+    ) -> bool:
+        # source(원본 point 키)가 있으면 LLM 문장과 무관하게 키로 매칭한다.
+        if source is not None and str(source).strip():
+            if str(point).strip() == str(source).strip():
+                return True
+            if self._clean_user_condition_text(point) == self._clean_user_condition_text(
+                source
+            ):
+                return True
+        return self._is_same_manual_confirmation(point, question)
+
+    def _is_exclusion_confirmation(
+        self,
+        matched_points: list[str],
+        source: Any,
+    ) -> bool:
+        """매칭된 원본 point(또는 source)가 제외형 조건인지 판단한다."""
+        agent = self.eligibility_follow_up_question_agent
+        if source is not None and agent.is_exclusion_point(source):
+            return True
+        return any(agent.is_exclusion_point(point) for point in matched_points)
+
+    @staticmethod
+    def _flip_answer(answer: str) -> str:
+        if answer == "yes":
+            return "no"
+        if answer == "no":
+            return "yes"
+        return answer
+
+    def _is_same_manual_confirmation(self, point: Any, question: str) -> bool:
+        point_text = self._clean_user_condition_text(point)
+        if point_text == question:
+            return True
+        return self.eligibility_follow_up_question_agent.to_question(point_text) == question
 
     def _deduplicate_strings(self, values: list[str]) -> list[str]:
         return self.eligibility_evidence_agent.deduplicate_strings(values)
