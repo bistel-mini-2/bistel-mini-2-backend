@@ -28,7 +28,7 @@ from app.services.recommendation_result_normalizer import (
 
 # LLM rerank 입력 토큰을 제한해 타임아웃을 방지하기 위한 상한값.
 LLM_EVIDENCE_MAX_ITEMS = 2
-LLM_EVIDENCE_SNIPPET_LIMIT = 28
+LLM_EVIDENCE_SNIPPET_LIMIT = 280
 
 
 @dataclass
