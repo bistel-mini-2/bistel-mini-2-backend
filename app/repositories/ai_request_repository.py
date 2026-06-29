@@ -129,6 +129,24 @@ class AiRequestRepository:
         result = await db.execute(select(model).where(model.request_id == request_id))
         return result.scalar_one_or_none()
 
+    async def list_completed_by_user(
+        self,
+        db: AsyncSession,
+        request_type: str,
+        user_id: int,
+        limit: int = 20,
+    ) -> list[AiRequestModel]:
+        """사용자의 완료된 요청을 최신순으로 조회한다(추천 이력용)."""
+        model = self._model_for(request_type)
+        result = await db.execute(
+            select(model)
+            .where(model.user_id == user_id)
+            .where(model.request_status == RequestStatus.COMPLETED.value)
+            .order_by(model.created_at.desc(), model.request_id.desc())
+            .limit(max(1, min(limit, 100)))
+        )
+        return list(result.scalars().all())
+
     async def update_status(
         self,
         db: AsyncSession,

@@ -1,7 +1,7 @@
 import asyncio
 import logging
 
-from fastapi import APIRouter, BackgroundTasks, status
+from fastapi import APIRouter, BackgroundTasks, Query, status
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
@@ -13,6 +13,7 @@ from app.schemas.ai_request_schema import (
     EligibilityResultResponse,
     EligibilityRequestCreate,
     RecommendationAnswerSubmit,
+    RecommendationHistoryResponse,
     RecommendationPollingResponse,
     RecommendationRequestCreate,
 )
@@ -204,6 +205,22 @@ async def submit_recommendation_answers(
         status_code=status.HTTP_202_ACCEPTED,
         meta=_request_meta(snapshot),
     )
+
+
+@recommendation_router.get("/requests")
+async def list_recommendation_history(
+    db: DbSessionDep,
+    current_user: CurrentUserDep,
+    limit: int = Query(default=20, ge=1, le=100),
+) -> JSONResponse:
+    # 로그인 사용자의 완료된 추천 이력(최신순).
+    service = AiRequestLifecycleService()
+    response = await service.get_recommendation_history(
+        db=db,
+        user_id=current_user.user_id,
+        limit=limit,
+    )
+    return success_response(data=response)
 
 
 @recommendation_router.get("/requests/{request_id}")

@@ -12,8 +12,11 @@ from app.repositories.recommendation_candidate_repository import (
     RecommendationCandidateRepository,
 )
 from app.services.policy_rag_service import PolicyRagService
+from app.services.policy_rule_condition_value import (
+    condition_value,
+    normalize_condition_value,
+)
 from app.services.policy_rule_grouping import (
-    INCOME_LEVEL_TO_PERCENT,
     OUTCOME_FAIL,
     OUTCOME_MANUAL,
     OUTCOME_MATCH,
@@ -1059,12 +1062,8 @@ class RecommendationCandidateService:
         return rule_values(rule_value)
 
     def _income_percent(self, value: Any) -> float | None:
-        if value in (None, "", [], "unknown"):
-            return None
-        normalized = str(value).strip()
-        if normalized in INCOME_LEVEL_TO_PERCENT:
-            return float(INCOME_LEVEL_TO_PERCENT[normalized])
-        return self._to_number(normalized)
+        # income 구간 코드 → 중위소득 % 변환도 공유 헬퍼로 일원화.
+        return normalize_condition_value("income", value)
 
     def _policy_income_limit_percent(self, text_value: str) -> float | None:
         limits: list[float] = []
@@ -1083,33 +1082,8 @@ class RecommendationCandidateService:
         return any(keyword in text_value for keyword in LOW_INCOME_POLICY_KEYWORDS)
 
     def _condition_value(self, condition: dict[str, Any], field_name: str) -> Any:
-        aliases = {
-            "region_code": ("region", "region_code"),
-            "region": ("region", "region_code"),
-            "life_stage": ("stage", "life_stage", "target_stage"),
-            "target_stage": ("stage", "life_stage", "target_stage"),
-            "stage": ("stage", "life_stage", "target_stage"),
-            "income_level": ("income", "income_level", "income_bracket"),
-            "income": ("income", "income_level", "income_bracket"),
-            "income_bracket": ("income", "income_level", "income_bracket"),
-            "median_income_percent": ("income", "income_level", "income_bracket"),
-            "income_status": ("income_status", "benefit_status"),
-            "benefit_status": ("income_status", "benefit_status"),
-            "childAge": ("childAge", "child_age", "child_age_range"),
-            "child_age": ("childAge", "child_age", "child_age_range"),
-            "child_age_range": ("childAge", "child_age", "child_age_range"),
-            "special": ("special", "special_flags", "special_conditions", "special_condition"),
-            "special_flags": ("special", "special_flags", "special_conditions", "special_condition"),
-            "special_conditions": ("special", "special_flags", "special_conditions", "special_condition"),
-            "special_condition": ("special", "special_flags", "special_conditions", "special_condition"),
-            "age": ("age", "user_age"),
-            "household_member_age": (
-                "household_member_age",
-                "household_member_ages",
-                "household_ages",
-            ),
-        }
-        return self._first(condition, *(aliases.get(field_name, (field_name,))))
+        # alias 해석은 PolicyRuleFilterService와 공유(드리프트 방지).
+        return condition_value(condition, field_name)
 
     def _should_keep_candidate(
         self,
