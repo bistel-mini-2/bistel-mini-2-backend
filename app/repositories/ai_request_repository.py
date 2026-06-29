@@ -88,15 +88,18 @@ class AiRequestRepository:
         source_ref_id: str | None = None,
         raw_query: str | None = None,
         selected_conditions: dict[str, Any] | None = None,
+        follow_up_resolved: bool = False,
         policy_id: int | None = None,
     ) -> AiRequestModel:
         await self.ensure_request_schema(db)
         model = self._model_for(request_type)
-        parsed_query_json = (
-            {"selected_conditions": selected_conditions}
-            if selected_conditions is not None
-            else None
-        )
+        parsed_query_json: dict[str, Any] = {}
+        if selected_conditions is not None:
+            parsed_query_json["selected_conditions"] = selected_conditions
+        if follow_up_resolved:
+            parsed_query_json["follow_up_resolved"] = True
+        if not parsed_query_json:
+            parsed_query_json = None
         values: dict[str, Any] = {
             "user_id": user_id,
             "source_type": source_type,

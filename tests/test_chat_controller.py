@@ -20,10 +20,13 @@ from app.schemas.chat_schema import (
     ChatMessageItem,
     ChatMessageListResponse,
     ChatMessageSendResponse,
+    ChatSessionBulkDeleteResponse,
     ChatSessionCreateResponse,
+    ChatSessionDeleteResponse,
     ChatSessionTitleUpdateResponse,
 )
 from app.services.chat_service import ChatService
+from app.services.chat_service import _to_message_item
 
 
 def _build_app() -> FastAPI:
@@ -111,6 +114,63 @@ def test_update_chat_session_title_rejects_over_max_length(monkeypatch) -> None:
     assert resp.status_code == 422
     assert resp.json()["error"]["code"] == "VALIDATION_ERROR"
     update_mock.assert_not_awaited()
+
+
+def test_delete_chat_session_returns_deleted_response(monkeypatch) -> None:
+    delete_mock = AsyncMock(return_value=ChatSessionDeleteResponse(
+        chat_session_id="9",
+        deleted=True,
+    ))
+    monkeypatch.setattr(ChatService, "delete_session", delete_mock)
+
+    with TestClient(_build_app()) as client:
+        resp = client.delete("/api/v1/chat/sessions/9")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["success"] is True
+    assert body["data"] == {"chat_session_id": "9", "deleted": True}
+    delete_mock.assert_awaited_once()
+    assert delete_mock.await_args.kwargs["user_id"] == 5
+    assert delete_mock.await_args.kwargs["chat_session_id"] == 9
+
+
+def test_bulk_delete_chat_sessions_returns_deleted_ids(monkeypatch) -> None:
+    bulk_delete_mock = AsyncMock(return_value=ChatSessionBulkDeleteResponse(
+        deleted_count=2,
+        deleted_session_ids=["9", "10"],
+    ))
+    monkeypatch.setattr(ChatService, "bulk_delete_sessions", bulk_delete_mock)
+
+    with TestClient(_build_app()) as client:
+        resp = client.post(
+            "/api/v1/chat/sessions/bulk-delete",
+            json={"chat_session_ids": [9, 10]},
+        )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["success"] is True
+    assert body["data"]["deleted_count"] == 2
+    assert body["data"]["deleted_session_ids"] == ["9", "10"]
+    bulk_delete_mock.assert_awaited_once()
+    assert bulk_delete_mock.await_args.kwargs["user_id"] == 5
+    assert bulk_delete_mock.await_args.kwargs["chat_session_ids"] == [9, 10]
+
+
+def test_bulk_delete_chat_sessions_rejects_empty_ids(monkeypatch) -> None:
+    bulk_delete_mock = AsyncMock()
+    monkeypatch.setattr(ChatService, "bulk_delete_sessions", bulk_delete_mock)
+
+    with TestClient(_build_app()) as client:
+        resp = client.post(
+            "/api/v1/chat/sessions/bulk-delete",
+            json={"chat_session_ids": []},
+        )
+
+    assert resp.status_code == 422
+    assert resp.json()["error"]["code"] == "VALIDATION_ERROR"
+    bulk_delete_mock.assert_not_awaited()
 
 
 def test_send_chat_message_serializes_normalized_fields(monkeypatch) -> None:
@@ -231,6 +291,79 @@ def test_list_chat_messages_includes_normalized_join(monkeypatch) -> None:
     assert assistant_msg["evidences"][0]["chunk_id"] == "101"
     assert assistant_msg["evidences"][0]["evidence_role"] == "summary"
     assert assistant_msg["actions"] == ["recommend"]
+
+
+def test_to_message_item_uses_structured_policy_fallback_without_duplicate_kwargs() -> None:
+    message = SimpleNamespace(
+        chat_message_id=12,
+        role="assistant",
+        message_type="TEXT",
+        content="답변",
+        sequence_no=2,
+        created_at=None,
+        structured_json={
+            "policies": [
+                {
+                    "policy_id": "42",
+                    "slug": "WLF1",
+                    "policy_name": "정책1",
+                    "summary": "요약",
+                    "action_type": "RECOMMENDED",
+                }
+            ],
+            "actions": ["recommend"],
+            "disclaimer": True,
+        },
+    )
+
+    item = _to_message_item(message, policies=[], evidences=[])
+
+    assert item.chat_message_id == "12"
+    assert item.policies[0].policy_id == "42"
+    assert item.policies[0].summary == "요약"
+    assert item.policies[0].action_type == "RECOMMENDED"
+    assert item.actions == ["recommend"]
+
+
+def test_to_message_item_merges_cached_policy_summary_into_joined_policy() -> None:
+    message = SimpleNamespace(
+        chat_message_id=12,
+        role="assistant",
+        message_type="TEXT",
+        content="답변",
+        sequence_no=2,
+        created_at=None,
+        structured_json={
+            "policies": [
+                {
+                    "policy_id": "42",
+                    "slug": "WLF1",
+                    "policy_name": "정책1",
+                    "summary": "저장된 카드 설명",
+                    "tag": "추천 이유",
+                    "tagTone": "coral",
+                    "action_type": "RECOMMENDED",
+                }
+            ],
+        },
+    )
+
+    item = _to_message_item(
+        message,
+        policies=[
+            {
+                "policy_id": "42",
+                "slug": "WLF1",
+                "policy_name": "정책1",
+                "action_type": "RECOMMENDED",
+            }
+        ],
+        evidences=[],
+    )
+
+    assert item.policies[0].summary == "저장된 카드 설명"
+    assert item.policies[0].tag == "추천 이유"
+    assert item.policies[0].tagTone == "coral"
 
 
 # --- SSE streaming endpoint ----------------------------------------------

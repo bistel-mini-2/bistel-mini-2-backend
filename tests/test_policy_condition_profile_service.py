@@ -110,6 +110,101 @@ def _run_ingest(
     return saved
 
 
+def test_condition_profile_preserves_income_and_target_or_tree(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    target = _make_target(
+        policy_id=236,
+        policy_code="WLF00000236",
+        policy_name="농식품바우처",
+        main_category="생활지원",
+        sub_category="임신·출산",
+        benefit_type="이용권",
+        life_array="임신 · 출산, 영유아, 아동, 청소년",
+        target_individual_array="저소득",
+        raw_target_detail=(
+            "생계급여 수급가구 중 임산부 또는 34세 이하 인지를 포함하고 있는 가구"
+        ),
+        raw_selection_criteria="기준중위소득 32% 이하",
+        caution="보건복지부 영양플러스 사업 이용자는 제외",
+    )
+    extraction = _PolicyConditionExtractionModel(
+        target_summary="생계급여 수급가구 중 임산부 또는 34세 이하 가구원이 있는 가구",
+        condition_tree={
+            "operator": "AND",
+            "conditions": [
+                {
+                    "group_key": "income",
+                    "operator": "AND",
+                    "conditions": [
+                        {
+                            "type": "income",
+                            "field": "income_status",
+                            "operator": "IN",
+                            "value": ["basic_livelihood_recipient"],
+                            "source_text": "생계급여 수급가구",
+                            "confidence": 0.95,
+                        },
+                        {
+                            "type": "income",
+                            "field": "median_income",
+                            "operator": "LTE",
+                            "value": {"percent": 32},
+                            "source_text": "기준중위소득 32% 이하",
+                            "confidence": 0.95,
+                        },
+                    ],
+                },
+                {
+                    "group_key": "target",
+                    "operator": "OR",
+                    "conditions": [
+                        {
+                            "type": "stage",
+                            "field": "stage",
+                            "operator": "IN",
+                            "value": ["pregnant"],
+                            "source_text": "임산부",
+                            "confidence": 0.95,
+                        },
+                        {
+                            "type": "age",
+                            "field": "household_member_age",
+                            "operator": "LTE",
+                            "value": {"years": 34},
+                            "source_text": "34세 이하",
+                            "confidence": 0.9,
+                        },
+                    ],
+                },
+            ],
+        },
+        exclusions=[
+            {
+                "type": "program_overlap",
+                "value": "보건복지부 영양플러스 사업 이용자",
+                "source_text": "보건복지부 영양플러스 사업 이용자는 제외",
+                "confidence": 0.85,
+            }
+        ],
+        confidence=0.93,
+        review_required=False,
+        quality_flags=[],
+    )
+
+    saved = _run_ingest(monkeypatch, target=target, extraction=extraction)
+
+    assert saved["policy_id"] == 236
+    assert saved["review_required"] is False
+    assert "raw_target_detail" in saved["source_fields"]
+
+    condition_tree = saved["condition_json"]["condition_tree"]
+    assert condition_tree["operator"] == "AND"
+    assert condition_tree["conditions"][0]["operator"] == "AND"
+    assert condition_tree["conditions"][1]["operator"] == "OR"
+    assert saved["condition_json"]["exclusions"][0]["type"] == "program_overlap"
+
+
 def _all_leaves(node: Any, acc: list[dict[str, Any]]) -> list[dict[str, Any]]:
     if isinstance(node, dict):
         if isinstance(node.get("conditions"), list):

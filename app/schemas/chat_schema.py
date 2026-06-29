@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -49,6 +50,25 @@ class ChatSessionListResponse(BaseModel):
     sessions: list[ChatSessionListItem]
 
 
+class ChatSessionDeleteResponse(BaseModel):
+    chat_session_id: str
+    deleted: bool = True
+
+
+class ChatSessionBulkDeleteRequest(BaseModel):
+    chat_session_ids: list[int] = Field(..., min_length=1)
+
+    @field_validator("chat_session_ids")
+    @classmethod
+    def _dedupe_session_ids(cls, value: list[int]) -> list[int]:
+        return list(dict.fromkeys(value))
+
+
+class ChatSessionBulkDeleteResponse(BaseModel):
+    deleted_count: int
+    deleted_session_ids: list[str]
+
+
 class AssistantMessagePolicy(BaseModel):
     policy_id: str
     slug: str
@@ -57,6 +77,10 @@ class AssistantMessagePolicy(BaseModel):
     tag: str | None = None
     tagTone: str | None = None
     action_type: str | None = None
+    recommendation_request_id: str | None = None
+    source_ref_id: str | None = None
+    selected_conditions: dict[str, Any] | None = None
+    merged_condition_json: dict[str, Any] | None = None
 
 
 class AssistantMessageEvidence(BaseModel):
@@ -70,6 +94,11 @@ class AssistantMessageEvidence(BaseModel):
     @classmethod
     def _lower_evidence_role(cls, v: str | None) -> str | None:
         return v.lower() if v else v
+
+
+class AssistantMessageKeyPoint(BaseModel):
+    label: str
+    content: str
 
 
 class ApplyCard(BaseModel):
@@ -86,12 +115,16 @@ class AssistantMessage(BaseModel):
     chat_message_id: str
     content: str
     user_status: str | None = None
+    easy_summary: str | None = None
+    key_points: list[AssistantMessageKeyPoint] = Field(default_factory=list)
     sources: list[str] = Field(default_factory=list)
     policies: list[AssistantMessagePolicy] = Field(default_factory=list)
     actions: list[str] = Field(default_factory=list)
     evidences: list[AssistantMessageEvidence] = Field(default_factory=list)
     apply_card: ApplyCard | None = None
     disclaimer: bool | None = None
+    slot_request: dict | None = None
+    profile_confirm: dict | None = None
 
 
 class ChatMessageSendRequest(BaseModel):
@@ -112,12 +145,16 @@ class ChatMessageItem(BaseModel):
     sequence_no: int
     created_at: datetime | None
     user_status: str | None = None
+    easy_summary: str | None = None
+    key_points: list[AssistantMessageKeyPoint] = Field(default_factory=list)
     sources: list[str] = Field(default_factory=list)
     policies: list[AssistantMessagePolicy] = Field(default_factory=list)
     actions: list[str] = Field(default_factory=list)
     evidences: list[AssistantMessageEvidence] = Field(default_factory=list)
     apply_card: ApplyCard | None = None
     disclaimer: bool | None = None
+    slot_request: dict | None = None
+    profile_confirm: dict | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

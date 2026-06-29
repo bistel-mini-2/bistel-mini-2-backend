@@ -23,14 +23,17 @@ from app.schemas.chat_schema import (
     AssistantMessage,
     AssistantMessageEvidence,
     AssistantMessagePolicy,
+    ChatSessionBulkDeleteResponse,
     ChatMessageItem,
     ChatMessageListResponse,
     ChatMessageSendResponse,
     ChatSessionCreateResponse,
+    ChatSessionDeleteResponse,
     ChatSessionListItem,
     ChatSessionListResponse,
     ChatSessionTitleUpdateResponse,
 )
+from app.services import chat_cancel_registry
 from app.services.chat_title_service import assign_title_if_missing
 
 
@@ -88,6 +91,54 @@ class ChatService:
         )
 
     @staticmethod
+    async def delete_session(
+        db: AsyncSession,
+        user_id: int,
+        chat_session_id: int,
+    ) -> ChatSessionDeleteResponse:
+        session = await _get_owned_session_or_raise(db, user_id, chat_session_id)
+        chat_cancel_registry.cancel(session.chat_session_id)
+        await ChatRepository.delete_session(db, session)
+        await db.commit()
+        return ChatSessionDeleteResponse(
+            chat_session_id=str(session.chat_session_id),
+            deleted=True,
+        )
+
+    @staticmethod
+    async def bulk_delete_sessions(
+        db: AsyncSession,
+        user_id: int,
+        chat_session_ids: list[int],
+    ) -> ChatSessionBulkDeleteResponse:
+        ids = list(dict.fromkeys(chat_session_ids))
+        sessions = await ChatRepository.find_sessions_by_user_and_ids(
+            db, user_id, ids
+        )
+        found_ids = {session.chat_session_id for session in sessions}
+        if len(found_ids) != len(ids):
+            raise AppException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                code=ErrorCode.NOT_FOUND,
+                message="Chat session not found",
+            )
+
+        chat_cancel_registry.cancel_many(ids)
+        deleted_count = await ChatRepository.delete_sessions_by_ids(db, ids)
+        if deleted_count != len(ids):
+            await db.rollback()
+            raise AppException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                code=ErrorCode.NOT_FOUND,
+                message="Chat session not found",
+            )
+        await db.commit()
+        return ChatSessionBulkDeleteResponse(
+            deleted_count=deleted_count,
+            deleted_session_ids=[str(chat_session_id) for chat_session_id in ids],
+        )
+
+    @staticmethod
     async def list_messages(
         db: AsyncSession, user_id: int, chat_session_id: int
     ) -> ChatMessageListResponse:
@@ -108,44 +159,60 @@ class ChatService:
         chat_session_id: int,
         content: str,
     ) -> ChatMessageSendResponse:
-        session = await _get_owned_session_or_raise(db, user_id, chat_session_id)
+        cancel_event = chat_cancel_registry.register(chat_session_id)
+        try:
+            session = await _get_owned_session_or_raise(db, user_id, chat_session_id)
 
-        history = await _load_history(db, session.chat_session_id)
-        is_first_message = not history and not session.title
-        recent_assistant_policy = await ChatRepository.find_recent_assistant_policy(
-            db, session.chat_session_id
-        )
-        user_message = await _save_user_message(db, session.chat_session_id, content)
-        await db.commit()
+            history = await _load_history(db, session.chat_session_id)
+            is_first_message = not history and not session.title
+            recent_assistant_policy = await ChatRepository.find_recent_assistant_policy(
+                db, session.chat_session_id
+            )
+            user_message = await _save_user_message(
+                db, session.chat_session_id, content
+            )
+            await db.commit()
 
-        graph_result = await _run_supervisor_graph(
-            user_id=user_id,
-            user_content=content,
-            history=history,
-            slot=session.slot_json or {},
-            recent_assistant_policy=recent_assistant_policy,
-        )
+            graph_result = await _run_supervisor_graph(
+                user_id=user_id,
+                user_content=content,
+                history=history,
+                slot=session.slot_json or {},
+                recent_assistant_policy=recent_assistant_policy,
+            )
 
-        assistant_message, assistant_response = await _persist_assistant_outputs(
-            db,
-            session_id=session.chat_session_id,
-            user_message_id=user_message.chat_message_id,
-            graph_result=graph_result,
-            current_slot=session.slot_json or {},
-        )
+            if await _is_cancelled_or_deleted(
+                db, session.chat_session_id, cancel_event
+            ):
+                await db.rollback()
+                raise AppException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    code=ErrorCode.NOT_FOUND,
+                    message="Chat session not found",
+                )
 
-        await ChatRepository.update_last_message_at(
-            db, session.chat_session_id, datetime.utcnow()
-        )
+            assistant_message, assistant_response = await _persist_assistant_outputs(
+                db,
+                session_id=session.chat_session_id,
+                user_message_id=user_message.chat_message_id,
+                graph_result=graph_result,
+                current_slot=session.slot_json or {},
+            )
 
-        if is_first_message:
-            _schedule_title_generation(session.chat_session_id, content)
+            await ChatRepository.update_last_message_at(
+                db, session.chat_session_id, datetime.utcnow()
+            )
 
-        return ChatMessageSendResponse(
-            chat_session_id=str(session.chat_session_id),
-            user_message_id=str(user_message.chat_message_id),
-            assistant_message=assistant_response,
-        )
+            if is_first_message:
+                _schedule_title_generation(session.chat_session_id, content)
+
+            return ChatMessageSendResponse(
+                chat_session_id=str(session.chat_session_id),
+                user_message_id=str(user_message.chat_message_id),
+                assistant_message=assistant_response,
+            )
+        finally:
+            chat_cancel_registry.unregister(chat_session_id, cancel_event)
 
     @staticmethod
     async def ensure_owned_session(
@@ -159,86 +226,102 @@ class ChatService:
         session: ChatSession,
         content: str,
     ) -> AsyncIterator[str]:
-        history = await _load_history(db, session.chat_session_id)
-        is_first_message = not history and not session.title
-        recent_assistant_policy = await ChatRepository.find_recent_assistant_policy(
-            db, session.chat_session_id
-        )
-
-        graph_state = {
-            "user_id": session.user_id,
-            "user_content": content,
-            "history": history,
-            "slot": session.slot_json or {},
-            "recent_assistant_policy": recent_assistant_policy,
-        }
-
-        final_state: dict[str, Any] = {}
-        stream_failed = False
+        cancel_event = chat_cancel_registry.register(session.chat_session_id)
         try:
-            async for event in chat_supervisor_graph.astream_events(
-                graph_state, version="v2"
+            history = await _load_history(db, session.chat_session_id)
+            is_first_message = not history and not session.title
+            recent_assistant_policy = await ChatRepository.find_recent_assistant_policy(
+                db, session.chat_session_id
+            )
+
+            graph_state = {
+                "user_id": session.user_id,
+                "user_content": content,
+                "history": history,
+                "slot": session.slot_json or {},
+                "recent_assistant_policy": recent_assistant_policy,
+            }
+
+            final_state: dict[str, Any] = {}
+            stream_failed = False
+            try:
+                async for event in chat_supervisor_graph.astream_events(
+                    graph_state, version="v2"
+                ):
+                    if cancel_event.is_set():
+                        await db.rollback()
+                        yield _sse_event(_cancelled_event_payload())
+                        return
+
+                    kind = event.get("event")
+                    if kind == "on_chat_model_stream":
+                        if BRANCH_LLM_TAG not in (event.get("tags") or []):
+                            continue
+                        delta = _extract_token_text(event.get("data", {}).get("chunk"))
+                        if delta:
+                            yield _sse_event({"type": "token", "delta": delta})
+                    elif kind == "on_chain_end":
+                        output = event.get("data", {}).get("output")
+                        if isinstance(output, dict):
+                            final_state.update(output)
+            except Exception:
+                stream_failed = True
+                logger.exception("Chat supervisor graph streaming failed")
+
+            if stream_failed or not final_state.get("assistant_payload"):
+                yield _sse_event({
+                    "type": "error",
+                    "code": ErrorCode.INTERNAL_SERVER_ERROR.value,
+                    "message": "답변을 생성하는 중 문제가 발생했어요. 잠시 후 다시 시도해 주세요.",
+                })
+                return
+
+            if await _is_cancelled_or_deleted(
+                db, session.chat_session_id, cancel_event
             ):
-                kind = event.get("event")
-                if kind == "on_chat_model_stream":
-                    if BRANCH_LLM_TAG not in (event.get("tags") or []):
-                        continue
-                    delta = _extract_token_text(event.get("data", {}).get("chunk"))
-                    if delta:
-                        yield _sse_event({"type": "token", "delta": delta})
-                elif kind == "on_chain_end":
-                    output = event.get("data", {}).get("output")
-                    if isinstance(output, dict):
-                        final_state.update(output)
-        except Exception:
-            stream_failed = True
-            logger.exception("Chat supervisor graph streaming failed")
+                await db.rollback()
+                yield _sse_event(_cancelled_event_payload())
+                return
 
-        if stream_failed or not final_state.get("assistant_payload"):
+            try:
+                user_message = await _save_user_message(
+                    db, session.chat_session_id, content
+                )
+                _, assistant_response = await _persist_assistant_outputs(
+                    db,
+                    session_id=session.chat_session_id,
+                    user_message_id=user_message.chat_message_id,
+                    graph_result=final_state,
+                    current_slot=session.slot_json or {},
+                )
+                await ChatRepository.update_last_message_at(
+                    db, session.chat_session_id, datetime.utcnow()
+                )
+                await db.commit()
+            except Exception:
+                await db.rollback()
+                logger.exception("Persisting chat messages failed during stream")
+                yield _sse_event({
+                    "type": "error",
+                    "code": ErrorCode.INTERNAL_SERVER_ERROR.value,
+                    "message": "답변을 저장하는 중 문제가 발생했어요. 잠시 후 다시 시도해 주세요.",
+                })
+                return
+
+            if is_first_message:
+                _schedule_title_generation(session.chat_session_id, content)
+
+            response = ChatMessageSendResponse(
+                chat_session_id=str(session.chat_session_id),
+                user_message_id=str(user_message.chat_message_id),
+                assistant_message=assistant_response,
+            )
             yield _sse_event({
-                "type": "error",
-                "code": ErrorCode.INTERNAL_SERVER_ERROR.value,
-                "message": "답변을 생성하는 중 문제가 발생했어요. 잠시 후 다시 시도해 주세요.",
+                "type": "done",
+                "payload": response.model_dump(mode="json"),
             })
-            return
-
-        try:
-            user_message = await _save_user_message(
-                db, session.chat_session_id, content
-            )
-            _, assistant_response = await _persist_assistant_outputs(
-                db,
-                session_id=session.chat_session_id,
-                user_message_id=user_message.chat_message_id,
-                graph_result=final_state,
-                current_slot=session.slot_json or {},
-            )
-            await ChatRepository.update_last_message_at(
-                db, session.chat_session_id, datetime.utcnow()
-            )
-            await db.commit()
-        except Exception:
-            await db.rollback()
-            logger.exception("Persisting chat messages failed during stream")
-            yield _sse_event({
-                "type": "error",
-                "code": ErrorCode.INTERNAL_SERVER_ERROR.value,
-                "message": "답변을 저장하는 중 문제가 발생했어요. 잠시 후 다시 시도해 주세요.",
-            })
-            return
-
-        if is_first_message:
-            _schedule_title_generation(session.chat_session_id, content)
-
-        response = ChatMessageSendResponse(
-            chat_session_id=str(session.chat_session_id),
-            user_message_id=str(user_message.chat_message_id),
-            assistant_message=assistant_response,
-        )
-        yield _sse_event({
-            "type": "done",
-            "payload": response.model_dump(mode="json"),
-        })
+        finally:
+            chat_cancel_registry.unregister(session.chat_session_id, cancel_event)
 
 
 # --- helpers ---------------------------------------------------------------
@@ -246,6 +329,24 @@ class ChatService:
 
 def _sse_event(payload: dict[str, Any]) -> str:
     return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+
+def _cancelled_event_payload() -> dict[str, str]:
+    return {
+        "type": "error",
+        "code": ErrorCode.NOT_FOUND.value,
+        "message": "삭제된 채팅 세션입니다.",
+    }
+
+
+async def _is_cancelled_or_deleted(
+    db: AsyncSession,
+    chat_session_id: int,
+    cancel_event: asyncio.Event,
+) -> bool:
+    if cancel_event.is_set():
+        return True
+    return not await ChatRepository.session_exists(db, chat_session_id)
 
 
 def _extract_token_text(chunk: Any) -> str:
@@ -388,6 +489,8 @@ async def _persist_assistant_outputs(
         policy_links=policy_links_to_save,
         branch_policies=payload.get("policies", []),
         slug_to_policy_id=slug_to_policy_id,
+        profile=graph_result.get("profile"),
+        pending=graph_result.get("pending"),
     )
     if next_slot is not None:
         await ChatRepository.update_session_slot(db, session_id, next_slot)
@@ -410,6 +513,8 @@ def _build_next_slot(
     policy_links: list[dict],
     branch_policies: list[dict],
     slug_to_policy_id: dict[str, int],
+    profile: dict | None = None,
+    pending: dict | None = None,
 ) -> dict | None:
     slug_to_action: dict[str, str] = {}
     for link in policy_links:
@@ -442,22 +547,36 @@ def _build_next_slot(
             "last_action": action,
         })
 
-    if not new_entries:
+    # 저장할 게 아무것도 없으면(새 정책·프로필·pending 모두 없음) 업데이트 생략.
+    if not new_entries and profile is None and pending is None:
         return None
 
-    existing = list(current_slot.get("recent_policies") or [])
-    merged: list[dict] = list(new_entries)
-    for entry in existing:
-        slug = entry.get("slug")
-        if not slug or slug in seen:
-            continue
-        seen.add(slug)
-        merged.append(entry)
-        if len(merged) >= _SLOT_MAX_POLICIES:
-            break
+    if new_entries:
+        existing = list(current_slot.get("recent_policies") or [])
+        merged: list[dict] = list(new_entries)
+        for entry in existing:
+            slug = entry.get("slug")
+            if not slug or slug in seen:
+                continue
+            seen.add(slug)
+            merged.append(entry)
+            if len(merged) >= _SLOT_MAX_POLICIES:
+                break
+        recent_policies = merged[:_SLOT_MAX_POLICIES]
+    else:
+        # 새 정책이 없으면 기존 목록 유지 (프로필/pending만 갱신).
+        recent_policies = list(current_slot.get("recent_policies") or [])
+
+    # profile/pending은 그래프가 값을 주면 그 값을, 안 주면 기존 값을 유지.
+    # (pending은 명시적으로 None을 주면 "이어받기 종료"로 해석되어 비워진다.)
+    next_profile = (
+        profile if profile is not None else current_slot.get("profile") or {}
+    )
 
     return {
-        "recent_policies": merged[:_SLOT_MAX_POLICIES],
+        "recent_policies": recent_policies,
+        "profile": next_profile,
+        "pending": pending,
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -479,10 +598,15 @@ def _build_structured_json(decision: dict, payload: dict) -> dict:
     return {
         "_supervisor": decision,
         "user_status": payload.get("user_status"),
+        "easy_summary": payload.get("easy_summary"),
+        "key_points": payload.get("key_points", []),
         "sources": payload.get("sources", []),
+        "policies": payload.get("policies", []),
         "actions": payload.get("actions", []),
         "apply_card": payload.get("apply_card"),
         "disclaimer": payload.get("disclaimer"),
+        "slot_request": payload.get("slot_request"),
+        "profile_confirm": payload.get("profile_confirm"),
     }
 
 
@@ -542,6 +666,18 @@ def _build_assistant_response(
             tag=p.get("tag"),
             tagTone=p.get("tagTone"),
             action_type=slug_to_action.get(p.get("slug")),
+            recommendation_request_id=(
+                str(p.get("recommendation_request_id"))
+                if p.get("recommendation_request_id") is not None
+                else None
+            ),
+            source_ref_id=(
+                str(p.get("source_ref_id"))
+                if p.get("source_ref_id") is not None
+                else None
+            ),
+            selected_conditions=p.get("selected_conditions"),
+            merged_condition_json=p.get("merged_condition_json"),
         )
         for p in payload.get("policies", [])
     ]
@@ -561,12 +697,16 @@ def _build_assistant_response(
         chat_message_id=str(assistant_message.chat_message_id),
         content=payload.get("content") or "",
         user_status=payload.get("user_status"),
+        easy_summary=payload.get("easy_summary"),
+        key_points=payload.get("key_points", []),
         sources=payload.get("sources", []),
         policies=policies,
         actions=payload.get("actions", []),
         evidences=evidences,
         apply_card=apply_card,
         disclaimer=payload.get("disclaimer"),
+        slot_request=payload.get("slot_request"),
+        profile_confirm=payload.get("profile_confirm"),
     )
 
 
@@ -595,6 +735,35 @@ def _to_message_item(
     evidences: list[dict],
 ) -> ChatMessageItem:
     meta = _unwrap_message_meta(message.structured_json)
+    # DB 정책이 없으면 structured_json에 캐시된 원본 payload 정책으로 fallback
+    meta_policies = meta.pop("policies", [])
+    if policies:
+        meta_by_slug = {
+            policy.get("slug"): policy
+            for policy in meta_policies
+            if policy.get("slug")
+        }
+        meta_by_id = {
+            str(policy.get("policy_id")): policy
+            for policy in meta_policies
+            if policy.get("policy_id") is not None
+        }
+        resolved_policies = []
+        for policy in policies:
+            cached = (
+                meta_by_slug.get(policy.get("slug"))
+                or meta_by_id.get(str(policy.get("policy_id")))
+                or {}
+            )
+            resolved_policies.append({
+                **cached,
+                **policy,
+                "summary": policy.get("summary") or cached.get("summary"),
+                "tag": policy.get("tag") or cached.get("tag"),
+                "tagTone": policy.get("tagTone") or cached.get("tagTone"),
+            })
+    else:
+        resolved_policies = meta_policies
     return ChatMessageItem(
         chat_message_id=str(message.chat_message_id),
         role=message.role,
@@ -602,7 +771,7 @@ def _to_message_item(
         content=message.content,
         sequence_no=message.sequence_no,
         created_at=message.created_at,
-        policies=[AssistantMessagePolicy(**p) for p in policies],
+        policies=[AssistantMessagePolicy(**p) for p in resolved_policies],
         evidences=[AssistantMessageEvidence(**e) for e in evidences],
         **meta,
     )
@@ -615,10 +784,15 @@ def _unwrap_message_meta(structured_json: dict | None) -> dict:
     apply_card = ApplyCard(**apply_card_payload) if apply_card_payload else None
     return {
         "user_status": structured_json.get("user_status"),
+        "easy_summary": structured_json.get("easy_summary"),
+        "key_points": structured_json.get("key_points", []),
         "sources": structured_json.get("sources", []),
+        "policies": structured_json.get("policies", []),
         "actions": structured_json.get("actions", []),
         "apply_card": apply_card,
         "disclaimer": structured_json.get("disclaimer"),
+        "slot_request": structured_json.get("slot_request"),
+        "profile_confirm": structured_json.get("profile_confirm"),
     }
 
 
@@ -626,10 +800,14 @@ def _fallback_payload() -> dict:
     return {
         "content": "죄송합니다. 답변을 생성하는 중 문제가 발생했어요. 잠시 후 다시 시도해 주세요.",
         "user_status": None,
+        "easy_summary": None,
+        "key_points": [],
         "sources": [],
         "policies": [],
         "evidences": [],
         "actions": [],
         "apply_card": None,
         "disclaimer": False,
+        "slot_request": None,
+        "profile_confirm": None,
     }

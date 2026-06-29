@@ -118,6 +118,7 @@ def _patch_repo_for_send(monkeypatch, *, session: ChatSession) -> dict[str, Asyn
         "bulk_save_message_policies": AsyncMock(),
         "bulk_save_message_evidences": AsyncMock(),
         "update_session_slot": AsyncMock(),
+        "session_exists": AsyncMock(return_value=True),
     }
     for name, mock in mocks.items():
         monkeypatch.setattr(ChatRepository, name, mock)
@@ -184,10 +185,10 @@ def test_send_message_persists_normalized_outputs(monkeypatch) -> None:
     run_graph.assert_awaited_once()
     assert run_graph.await_args.kwargs["recent_assistant_policy"] == recent_policy
 
-    # structured_json에 policies/evidences 빠지고 메타만 보관
+    # structured_json에는 복원 시 카드 메타가 유지되도록 policies 원본 payload를 보관한다.
     assistant_msg_obj = mocks["_saved_messages"][1]
     assert assistant_msg_obj.role == "assistant"
-    assert "policies" not in assistant_msg_obj.structured_json
+    assert assistant_msg_obj.structured_json["policies"] == _graph_result()["assistant_payload"]["policies"]
     assert "evidences" not in assistant_msg_obj.structured_json
     assert assistant_msg_obj.structured_json["_supervisor"]["intent"] == "recommend"
     assert assistant_msg_obj.structured_json["actions"] == ["recommend"]
@@ -260,6 +261,133 @@ def test_update_session_title_raises_404_for_missing_session(monkeypatch) -> Non
 
     assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
     update_mock.assert_not_awaited()
+
+
+def test_delete_session_cancels_running_work_and_deletes_owned_session(monkeypatch) -> None:
+    session = _session(user_id=1, chat_session_id=10)
+    db = AsyncMock()
+    find_mock = AsyncMock(return_value=session)
+    delete_mock = AsyncMock()
+    cancel_mock = MagicMock()
+    monkeypatch.setattr(ChatRepository, "find_session_by_id", find_mock)
+    monkeypatch.setattr(ChatRepository, "delete_session", delete_mock)
+    monkeypatch.setattr(
+        chat_service_module.chat_cancel_registry, "cancel", cancel_mock,
+    )
+
+    response = asyncio.run(
+        ChatService.delete_session(
+            db=db,
+            user_id=1,
+            chat_session_id=10,
+        )
+    )
+
+    assert response.chat_session_id == "10"
+    assert response.deleted is True
+    cancel_mock.assert_called_once_with(10)
+    delete_mock.assert_awaited_once_with(db, session)
+    db.commit.assert_awaited_once()
+
+
+def test_bulk_delete_sessions_is_all_or_nothing(monkeypatch) -> None:
+    db = AsyncMock()
+    monkeypatch.setattr(
+        ChatRepository,
+        "find_sessions_by_user_and_ids",
+        AsyncMock(return_value=[_session(user_id=1, chat_session_id=10)]),
+    )
+    delete_mock = AsyncMock()
+    cancel_many_mock = MagicMock()
+    monkeypatch.setattr(ChatRepository, "delete_sessions_by_ids", delete_mock)
+    monkeypatch.setattr(
+        chat_service_module.chat_cancel_registry, "cancel_many", cancel_many_mock,
+    )
+
+    with pytest.raises(AppException) as exc_info:
+        asyncio.run(
+            ChatService.bulk_delete_sessions(
+                db=db,
+                user_id=1,
+                chat_session_ids=[10, 11],
+            )
+        )
+
+    assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
+    cancel_many_mock.assert_not_called()
+    delete_mock.assert_not_awaited()
+    db.commit.assert_not_awaited()
+
+
+def test_bulk_delete_sessions_cancels_and_deletes_all_owned_sessions(monkeypatch) -> None:
+    db = AsyncMock()
+    sessions = [
+        _session(user_id=1, chat_session_id=10),
+        _session(user_id=1, chat_session_id=11),
+    ]
+    monkeypatch.setattr(
+        ChatRepository,
+        "find_sessions_by_user_and_ids",
+        AsyncMock(return_value=sessions),
+    )
+    monkeypatch.setattr(
+        ChatRepository,
+        "delete_sessions_by_ids",
+        AsyncMock(return_value=2),
+    )
+    cancel_many_mock = MagicMock()
+    monkeypatch.setattr(
+        chat_service_module.chat_cancel_registry, "cancel_many", cancel_many_mock,
+    )
+
+    response = asyncio.run(
+        ChatService.bulk_delete_sessions(
+            db=db,
+            user_id=1,
+            chat_session_ids=[10, 11, 10],
+        )
+    )
+
+    assert response.deleted_count == 2
+    assert response.deleted_session_ids == ["10", "11"]
+    cancel_many_mock.assert_called_once_with([10, 11])
+    ChatRepository.delete_sessions_by_ids.assert_awaited_once_with(db, [10, 11])
+    db.commit.assert_awaited_once()
+
+
+def test_send_message_raises_404_without_assistant_save_when_session_deleted_midflight(monkeypatch) -> None:
+    session = _session()
+    mocks = _patch_repo_for_send(monkeypatch, session=session)
+    mocks["session_exists"].return_value = False
+    db = AsyncMock()
+
+    monkeypatch.setattr(
+        PolicyRepository,
+        "find_ids_by_codes",
+        AsyncMock(return_value={"WLF1": 42}),
+    )
+    monkeypatch.setattr(
+        chat_service_module,
+        "_run_supervisor_graph",
+        AsyncMock(return_value=_graph_result()),
+    )
+
+    with pytest.raises(AppException) as exc_info:
+        asyncio.run(
+            ChatService.send_message(
+                db=db,
+                user_id=1,
+                chat_session_id=10,
+                content="추천해줘",
+            )
+        )
+
+    assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
+    assert len(mocks["_saved_messages"]) == 1
+    mocks["bulk_save_message_policies"].assert_not_awaited()
+    mocks["bulk_save_message_evidences"].assert_not_awaited()
+    mocks["update_last_message_at"].assert_not_awaited()
+    db.rollback.assert_awaited_once()
 
 
 def test_send_message_skips_unknown_policy_slug(monkeypatch) -> None:
@@ -477,6 +605,20 @@ def test_list_messages_includes_normalized_data(monkeypatch) -> None:
         make_msg(201, "user", 1),
         make_msg(202, "assistant", 2),
     ]
+    messages[1].structured_json = {
+        "policies": [
+            {
+                "policy_id": "42",
+                "slug": "WLF1",
+                "policy_name": "정책1",
+                "recommendation_request_id": "237",
+                "source_ref_id": "237",
+                "selected_conditions": {"region": "seoul"},
+                "merged_condition_json": {"region": "seoul", "income": "mid1"},
+            }
+        ],
+        "actions": ["recommend"],
+    }
 
     monkeypatch.setattr(
         ChatRepository, "find_session_by_id", AsyncMock(return_value=session),
@@ -493,6 +635,7 @@ def test_list_messages_includes_normalized_data(monkeypatch) -> None:
                     "policy_id": "42",
                     "slug": "WLF1",
                     "policy_name": "정책1",
+                    "summary": "정책 설명",
                     "action_type": "RECOMMENDED",
                 },
             ],
@@ -530,6 +673,14 @@ def test_list_messages_includes_normalized_data(monkeypatch) -> None:
     assert assistant_item.role == "assistant"
     assert len(assistant_item.policies) == 1
     assert assistant_item.policies[0].action_type == "RECOMMENDED"
+    assert assistant_item.policies[0].summary == "정책 설명"
+    assert assistant_item.policies[0].recommendation_request_id == "237"
+    assert assistant_item.policies[0].source_ref_id == "237"
+    assert assistant_item.policies[0].selected_conditions == {"region": "seoul"}
+    assert assistant_item.policies[0].merged_condition_json == {
+        "region": "seoul",
+        "income": "mid1",
+    }
     assert len(assistant_item.evidences) == 1
     # evidence_role validator로 lowercase 변환
     assert assistant_item.evidences[0].evidence_role == "summary"
@@ -669,3 +820,44 @@ def test_send_message_stream_error_event_when_graph_raises(monkeypatch) -> None:
     mocks["bulk_save_message_evidences"].assert_not_awaited()
     mocks["update_last_message_at"].assert_not_awaited()
     db.commit.assert_not_awaited()
+
+
+def test_send_message_stream_cancelled_before_persist_saves_nothing(monkeypatch) -> None:
+    session = _session()
+    db = AsyncMock()
+    mocks = _patch_repo_for_send(monkeypatch, session=session)
+    cancel_event = asyncio.Event()
+    cancel_event.set()
+
+    monkeypatch.setattr(
+        chat_service_module.chat_cancel_registry,
+        "register",
+        MagicMock(return_value=cancel_event),
+    )
+    unregister_mock = MagicMock()
+    monkeypatch.setattr(
+        chat_service_module.chat_cancel_registry,
+        "unregister",
+        unregister_mock,
+    )
+    monkeypatch.setattr(
+        chat_service_module,
+        "chat_supervisor_graph",
+        _FakeGraph(events=[
+            _token_event("저장되면 안 됨"),
+            _chain_end_event(_graph_result()),
+        ]),
+    )
+
+    chunks = asyncio.run(_collect(
+        ChatService.send_message_stream(db=db, session=session, content="x")
+    ))
+    events = _parse_sse_chunks(chunks)
+
+    assert [e["type"] for e in events] == ["error"]
+    assert events[0]["code"] == "NOT_FOUND"
+    mocks["save_message"].assert_not_awaited()
+    mocks["bulk_save_message_policies"].assert_not_awaited()
+    mocks["bulk_save_message_evidences"].assert_not_awaited()
+    db.commit.assert_not_awaited()
+    unregister_mock.assert_called_once_with(10, cancel_event)

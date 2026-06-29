@@ -95,11 +95,17 @@ class _FakeRepository:
         source_ref_id: str | None = None,
         raw_query: str | None = None,
         selected_conditions: dict[str, Any] | None = None,
+        follow_up_resolved: bool = False,
         policy_id: int | None = None,
     ) -> SimpleNamespace:
         self.request.user_id = user_id
         self.request.source_type = source_type
         self.request.raw_query = raw_query
+        if follow_up_resolved:
+            self.request.parsed_query_json = {
+                **(self.request.parsed_query_json or {}),
+                "follow_up_resolved": True,
+            }
         return self.request
 
     async def find_by_id(
@@ -289,7 +295,10 @@ def test_branch_recommend_follow_up_returns_fallback(
     result = asyncio.run(nodes.branch_recommend(_state()))
 
     runner.run.assert_not_awaited()
-    assert "맞춤 추천 화면" in result["branch_content"]
+    assert result["branch_content"] == "맞춤 추천을 위해 정보가 조금 더 필요해요."
+    assert result["slot_request"]["flow_type"] == "recommend"
+    assert result["slot_request"]["fields"][0]["key"] == "region"
+    assert result["pending"]["intent"] == "recommend"
     assert result["branch_policies"] == []
     assert result["branch_evidences"] == []
 
