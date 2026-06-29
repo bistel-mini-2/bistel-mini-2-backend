@@ -578,6 +578,8 @@ def _build_structured_json(decision: dict, payload: dict) -> dict:
     return {
         "_supervisor": decision,
         "user_status": payload.get("user_status"),
+        "easy_summary": payload.get("easy_summary"),
+        "key_points": payload.get("key_points", []),
         "sources": payload.get("sources", []),
         "actions": payload.get("actions", []),
         "apply_card": payload.get("apply_card"),
@@ -660,6 +662,8 @@ def _build_assistant_response(
         chat_message_id=str(assistant_message.chat_message_id),
         content=payload.get("content") or "",
         user_status=payload.get("user_status"),
+        easy_summary=payload.get("easy_summary"),
+        key_points=payload.get("key_points", []),
         sources=payload.get("sources", []),
         policies=policies,
         actions=payload.get("actions", []),
@@ -714,6 +718,8 @@ def _unwrap_message_meta(structured_json: dict | None) -> dict:
     apply_card = ApplyCard(**apply_card_payload) if apply_card_payload else None
     return {
         "user_status": structured_json.get("user_status"),
+        "easy_summary": structured_json.get("easy_summary"),
+        "key_points": structured_json.get("key_points", []),
         "sources": structured_json.get("sources", []),
         "actions": structured_json.get("actions", []),
         "apply_card": apply_card,
@@ -725,6 +731,8 @@ def _fallback_payload() -> dict:
     return {
         "content": "죄송합니다. 답변을 생성하는 중 문제가 발생했어요. 잠시 후 다시 시도해 주세요.",
         "user_status": None,
+        "easy_summary": None,
+        "key_points": [],
         "sources": [],
         "policies": [],
         "evidences": [],

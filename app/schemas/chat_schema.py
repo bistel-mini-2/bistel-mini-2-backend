@@ -91,6 +91,11 @@ class AssistantMessageEvidence(BaseModel):
         return v.lower() if v else v
 
 
+class AssistantMessageKeyPoint(BaseModel):
+    label: str
+    content: str
+
+
 class ApplyCard(BaseModel):
     policy_id: str
     policy_name: str
@@ -105,6 +110,8 @@ class AssistantMessage(BaseModel):
     chat_message_id: str
     content: str
     user_status: str | None = None
+    easy_summary: str | None = None
+    key_points: list[AssistantMessageKeyPoint] = Field(default_factory=list)
     sources: list[str] = Field(default_factory=list)
     policies: list[AssistantMessagePolicy] = Field(default_factory=list)
     actions: list[str] = Field(default_factory=list)
@@ -131,6 +138,8 @@ class ChatMessageItem(BaseModel):
     sequence_no: int
     created_at: datetime | None
     user_status: str | None = None
+    easy_summary: str | None = None
+    key_points: list[AssistantMessageKeyPoint] = Field(default_factory=list)
     sources: list[str] = Field(default_factory=list)
     policies: list[AssistantMessagePolicy] = Field(default_factory=list)
     actions: list[str] = Field(default_factory=list)

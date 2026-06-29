@@ -50,6 +50,8 @@ class ChatGraphState(TypedDict):
     supervisor_decision: NotRequired[SupervisorDecision]
     branch_content: NotRequired[str]
     branch_user_status: NotRequired[str | None]
+    branch_easy_summary: NotRequired[str | None]
+    branch_key_points: NotRequired[list[dict[str, Any]]]
     branch_policies: NotRequired[list[dict[str, Any]]]
     branch_evidences: NotRequired[list[dict[str, Any]]]
     branch_apply_card: NotRequired[dict[str, Any] | None]

@@ -22,6 +22,8 @@ from app.common.ai_status import RequestStatus
 from app.common.exceptions import AppException, ErrorCode
 from app.core.config import settings
 from app.db.session import AsyncSessionLocal
+from app.repositories.policy_repository import PolicyRepository
+from app.schemas.ai_contract import EvidenceChunk
 from app.schemas.ai_request_schema import AiRequestSnapshot
 from app.schemas.apply_schema import ApplyPreparationResponse
 from app.services.apply_preparation_service import ApplyPreparationService
@@ -30,6 +32,7 @@ from app.services.policy_rag_service import PolicyRagService
 if TYPE_CHECKING:
     from app.ai.graphs.comparison_graph import ComparisonGraphRunner
     from app.ai.graphs.eligibility_graph import EligibilityGraphRunner
+    from app.ai.graphs.policy_summary_graph import PolicySummaryGraphRunner
     from app.services.ai_request_lifecycle_service import AiRequestLifecycleService
 
 
@@ -438,6 +441,155 @@ def _pick_compare_targets(
     return candidates[0], candidates[1]
 
 
+def _evidence_chunk_to_chat_evidence(
+    chunk: EvidenceChunk | dict[str, Any],
+) -> dict[str, Any]:
+    if isinstance(chunk, EvidenceChunk):
+        item = chunk.model_dump()
+    else:
+        item = dict(chunk)
+    return {
+        "chunk_id": item.get("chunk_id"),
+        "snippet": str(item.get("snippet") or "")[:_SNIPPET_LIMIT],
+        "source_title": item.get("source_title"),
+        "source_url": item.get("source_url"),
+        "evidence_role": _normalize_evidence_role(item.get("evidence_role")),
+    }
+
+
+def _adapt_policy_summary_result(
+    result: dict[str, Any],
+    *,
+    policy: dict[str, Any],
+    fallback_evidences: list[dict[str, Any]],
+) -> tuple[
+    str,
+    str,
+    list[dict[str, str]],
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+]:
+    easy_summary = str(
+        result.get("easy_summary")
+        or result.get("summary")
+        or policy.get("easy_summary")
+        or policy.get("summary")
+        or ""
+    ).strip()
+    key_points = [
+        {
+            "label": str(item.get("label") or ""),
+            "content": str(item.get("content") or ""),
+        }
+        for item in result.get("key_points") or []
+        if isinstance(item, dict) and item.get("content")
+    ]
+    if not key_points:
+        key_points = _policy_summary_key_points(policy)
+
+    evidences = [
+        _evidence_chunk_to_chat_evidence(chunk)
+        for chunk in result.get("evidence_chunks") or []
+        if isinstance(chunk, (EvidenceChunk, dict))
+    ]
+    if not evidences:
+        evidences = fallback_evidences
+
+    policy_card = {
+        "policy_id": policy.get("policy_id") or policy.get("slug"),
+        "slug": policy.get("slug"),
+        "policy_name": policy.get("name") or policy.get("policy_name") or "",
+        "summary": easy_summary or None,
+        "tag": None,
+        "tagTone": None,
+    }
+    content = easy_summary or _policy_summary_fallback_content(policy)
+    return content, easy_summary, key_points[:3], [policy_card], evidences[:_EVIDENCES_MAX]
+
+
+def _policy_summary_key_points(policy: dict[str, Any]) -> list[dict[str, str]]:
+    condition_json = policy.get("condition_profile_json")
+    if not isinstance(condition_json, dict):
+        condition_json = {}
+    condition_text = (
+        policy.get("condition_profile_target_summary")
+        or _condition_tree_text(condition_json.get("condition_tree"))
+        or policy.get("condition_profile_source_text")
+    )
+    condition_notes = _condition_profile_notes(condition_json)
+    candidates = (
+        ("target", condition_text or policy.get("target_description")),
+        ("benefit", policy.get("benefit_description") or policy.get("benefit_summary")),
+        (
+            "application",
+            policy.get("application_method") or policy.get("application_period_text"),
+        ),
+        ("condition_check", condition_notes),
+    )
+    key_points: list[dict[str, str]] = []
+    for label, value in candidates:
+        text = " ".join(str(value or "").split())
+        if text:
+            key_points.append({"label": label, "content": text[:_SNIPPET_LIMIT]})
+    return key_points[:3]
+
+
+def _condition_tree_text(value: Any) -> str:
+    parts: list[str] = []
+    for leaf in _condition_tree_leaves(value)[:4]:
+        source_text = leaf.get("source_text")
+        if source_text:
+            parts.append(str(source_text))
+            continue
+        field = leaf.get("field")
+        operator = leaf.get("operator")
+        leaf_value = leaf.get("value")
+        if field and operator:
+            parts.append(f"{field} {operator} {leaf_value}")
+    return " / ".join(parts)
+
+
+def _condition_tree_leaves(value: Any) -> list[dict[str, Any]]:
+    leaves: list[dict[str, Any]] = []
+    if not isinstance(value, dict):
+        return leaves
+    children = value.get("conditions")
+    if isinstance(children, list):
+        for child in children:
+            leaves.extend(_condition_tree_leaves(child))
+    elif value.get("field"):
+        leaves.append(value)
+    return leaves
+
+
+def _condition_profile_notes(condition_json: dict[str, Any]) -> str:
+    notes: list[str] = []
+    for label, key in (
+        ("exclusions", "exclusions"),
+        ("manual review", "unsupported_conditions"),
+        ("unknown", "unknowns"),
+    ):
+        items = condition_json.get(key)
+        if isinstance(items, list) and items:
+            source_text = _first_condition_item_text(items)
+            notes.append(f"{label}: {source_text}" if source_text else label)
+    return " / ".join(notes)
+
+
+def _first_condition_item_text(items: list[Any]) -> str:
+    for item in items:
+        if isinstance(item, dict):
+            value = item.get("source_text") or item.get("reason")
+            if value:
+                return str(value)
+    return ""
+
+
+def _policy_summary_fallback_content(policy: dict[str, Any]) -> str:
+    name = policy.get("name") or policy.get("policy_name") or "policy"
+    return f"{name} summary is not available yet."
+
+
 def _pick_apply_target(
     policies: list[dict[str, Any]],
     *,
@@ -616,11 +768,13 @@ class ChatGraphNodes:
         lifecycle_service: AiRequestLifecycleService | None = None,
         eligibility_graph: EligibilityGraphRunner | None = None,
         comparison_graph: ComparisonGraphRunner | None = None,
+        policy_summary_graph: PolicySummaryGraphRunner | None = None,
     ) -> None:
         self.rag_service = rag_service or PolicyRagService()
         self.lifecycle_service = lifecycle_service
         self.eligibility_graph = eligibility_graph
         self.comparison_graph = comparison_graph
+        self.policy_summary_graph = policy_summary_graph
 
     async def supervisor(self, state: ChatGraphState) -> ChatGraphState:
         llm = _llm().with_structured_output(_IntentDecision)
@@ -830,7 +984,101 @@ class ChatGraphNodes:
         }
 
     async def branch_policy_summary(self, state: ChatGraphState) -> ChatGraphState:
-        return await self._branch_with_rag("policy_summary", state)
+        decision = state.get("supervisor_decision") or {}
+        resolved_slug = decision.get("resolved_policy_slug")
+        fallback_evidences: list[dict[str, Any]] = []
+
+        if resolved_slug:
+            slot_policy = _find_slot_policy_by_slug(state.get("slot"), resolved_slug)
+            policy_slug = str(resolved_slug)
+            policy_name = (slot_policy or {}).get("policy_name")
+            logger.info(
+                "chat_slot_resolved",
+                extra={
+                    "intent": "policy_summary",
+                    "slot_used": True,
+                    "rag_skipped": True,
+                },
+            )
+        else:
+            policies, fallback_evidences = await self._rag_lookup(state["user_content"])
+            policy_slug, policy_name = _pick_apply_target(policies)
+            logger.info(
+                "chat_slot_resolved",
+                extra={
+                    "intent": "policy_summary",
+                    "slot_used": False,
+                    "rag_skipped": False,
+                },
+            )
+
+        if not policy_slug:
+            content = await self._generate_branch_answer(
+                "policy_summary",
+                state,
+                fallback_evidences,
+            )
+            return {
+                **state,
+                "branch_content": content,
+                "branch_policies": [],
+                "branch_evidences": fallback_evidences,
+            }
+
+        policy = await self._load_policy_detail(policy_slug)
+        if policy is None:
+            content = await self._generate_branch_answer(
+                "policy_summary",
+                state,
+                fallback_evidences,
+            )
+            return {
+                **state,
+                "branch_content": content,
+                "branch_policies": [
+                    {
+                        "policy_id": policy_slug,
+                        "slug": policy_slug,
+                        "policy_name": policy_name or "",
+                        "summary": None,
+                        "tag": None,
+                        "tagTone": None,
+                    }
+                ],
+                "branch_evidences": fallback_evidences,
+            }
+
+        try:
+            summary_result = await self._policy_summary_graph().run(policy)
+        except Exception:
+            logger.exception("Policy summary graph failed; using RAG fallback")
+            content = await self._generate_branch_answer(
+                "policy_summary",
+                state,
+                fallback_evidences,
+            )
+            return {
+                **state,
+                "branch_content": content,
+                "branch_policies": [],
+                "branch_evidences": fallback_evidences,
+            }
+
+        content, easy_summary, key_points, policies, evidences = (
+            _adapt_policy_summary_result(
+                summary_result,
+                policy=policy,
+                fallback_evidences=fallback_evidences,
+            )
+        )
+        return {
+            **state,
+            "branch_content": content,
+            "branch_easy_summary": easy_summary,
+            "branch_key_points": key_points,
+            "branch_policies": policies,
+            "branch_evidences": evidences,
+        }
 
     async def branch_unclear(self, state: ChatGraphState) -> ChatGraphState:
         content = await self._generate_branch_answer("unclear", state, evidences=[])
@@ -861,6 +1109,8 @@ class ChatGraphNodes:
             "evidences": state.get("branch_evidences", []),
             "actions": [api_action] if api_action else [],
             "apply_card": state.get("branch_apply_card"),
+            "easy_summary": state.get("branch_easy_summary"),
+            "key_points": state.get("branch_key_points", []),
             "disclaimer": intent != "unclear",
         }
         return {**state, "assistant_payload": payload}
@@ -1082,6 +1332,24 @@ class ChatGraphNodes:
 
             self.comparison_graph = ComparisonGraphRunner()
         return self.comparison_graph
+
+    def _policy_summary_graph(self) -> PolicySummaryGraphRunner:
+        if self.policy_summary_graph is None:
+            from app.ai.graphs.policy_summary_graph import PolicySummaryGraphRunner
+
+            self.policy_summary_graph = PolicySummaryGraphRunner()
+        return self.policy_summary_graph
+
+    async def _load_policy_detail(self, policy_slug: str) -> dict[str, Any] | None:
+        try:
+            async with AsyncSessionLocal() as db:
+                return await PolicyRepository.find_policy_detail(
+                    db,
+                    policy_slug=policy_slug,
+                )
+        except Exception:
+            logger.exception("chat policy summary detail lookup failed")
+            return None
 
     async def _run_apply_preparation(
         self,
