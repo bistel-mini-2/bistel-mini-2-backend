@@ -250,9 +250,10 @@ class ChatService:
                 yield _sse_event({"type": "intent", "intent": follow_up_intent})
 
                 if follow_up_intent == "general":
-                    # FOLLOW_UP 답변 경로: eligibility 재분석 실행
+                    # FOLLOW_UP 답변 경로: 답변을 yes/no/unknown으로 매핑 후 eligibility 재분석
+                    manual_confirmations = await _map_follow_up_answers(follow_up_policy, content)
                     result_json = await _run_follow_up_eligibility(
-                        session.user_id, content, follow_up_policy
+                        session.user_id, content, follow_up_policy, manual_confirmations
                     )
                     if result_json is None:
                         yield _sse_event({
@@ -277,6 +278,15 @@ class ChatService:
                             "evidences": e_evidences,
                             "actions": ["eligibility"],
                             "disclaimer": True,
+                            "eligibility_result": {
+                                "status": result_status,
+                                "user_status": result_json.get("user_status"),
+                                "assessment_status": result_json.get("assessment_status"),
+                                "follow_up_questions": result_json.get("follow_up_questions") or [],
+                                "summary": result_json.get("summary"),
+                                "request_id": result_json.get("request_id"),
+                                "criteria": result_json.get("criteria") or result_json.get("criteria_results") or [],
+                            },
                         },
                         "supervisor_decision": {"intent": "eligibility", "raw": "follow_up_answer"},
                         "evidences_to_save": [
@@ -658,10 +668,69 @@ async def _save_user_message(
     )
 
 
+_FOLLOW_UP_ANSWER_SYSTEM = """\
+사용자가 지원 가능성 분석 추가 질문에 답변했습니다.
+
+정책: {policy_name}
+추가 질문 목록:
+{follow_up_questions}
+
+사용자 답변을 분석해 각 질문에 대한 답변을 아래 기준으로 분류하세요.
+- yes: 해당 조건을 충족한다고 명시하거나 긍정적으로 답변
+- no: 해당 조건을 충족하지 않는다고 명시하거나 부정적으로 답변
+- unknown: 언급되지 않았거나 불명확한 경우
+
+모든 질문에 대해 반드시 하나씩 응답하세요.
+"""
+
+
+class _FollowUpAnswerItem(BaseModel):
+    question: str
+    answer: Literal["yes", "no", "unknown"]
+
+
+class _FollowUpAnswerMapping(BaseModel):
+    mappings: list[_FollowUpAnswerItem]
+
+
+async def _map_follow_up_answers(
+    follow_up_policy: dict,
+    user_content: str,
+) -> list[dict]:
+    questions = follow_up_policy.get("follow_up_questions") or []
+    question_texts = [
+        q.get("question_text") or q.get("field_name") or ""
+        for q in questions
+        if isinstance(q, dict)
+    ]
+    question_texts = [q for q in question_texts if q]
+    if not question_texts:
+        return []
+    llm = _follow_up_llm().with_structured_output(_FollowUpAnswerMapping)
+    system = _FOLLOW_UP_ANSWER_SYSTEM.format(
+        policy_name=follow_up_policy.get("policy_name") or "해당 정책",
+        follow_up_questions="\n".join(f"- {q}" for q in question_texts),
+    )
+    try:
+        result = await llm.ainvoke([
+            SystemMessage(content=system),
+            HumanMessage(content=user_content),
+        ])
+        return [
+            {"question": item.question, "answer": item.answer}
+            for item in result.mappings
+            if item.question and item.answer
+        ]
+    except Exception:
+        logger.exception("FOLLOW_UP answer mapping failed; proceeding with raw_query only")
+        return []
+
+
 async def _run_follow_up_eligibility(
     user_id: int,
     content: str,
     follow_up_policy: dict,
+    manual_confirmations: list[dict] | None = None,
 ) -> dict | None:
     from app.ai.graphs.eligibility_graph import eligibility_graph_runner
     from app.db.session import AsyncSessionLocal
@@ -671,6 +740,9 @@ async def _run_follow_up_eligibility(
         str(follow_up_policy["eligibility_request_id"])
         if follow_up_policy.get("eligibility_request_id") is not None
         else None
+    )
+    selected_conditions = (
+        {"manual_confirmations": manual_confirmations} if manual_confirmations else None
     )
     try:
         async with AsyncSessionLocal() as db:
@@ -684,6 +756,7 @@ async def _run_follow_up_eligibility(
                         source_type="CHAT",
                         source_ref_id=source_ref_id,
                         follow_up_resolved=True,
+                        selected_conditions=selected_conditions,
                     ),
                     timeout=60,
                 )
@@ -909,6 +982,7 @@ def _build_structured_json(decision: dict, payload: dict) -> dict:
         "disclaimer": payload.get("disclaimer"),
         "slot_request": payload.get("slot_request"),
         "profile_confirm": payload.get("profile_confirm"),
+        "eligibility_result": payload.get("eligibility_result"),
     }
 
 
@@ -1009,6 +1083,7 @@ def _build_assistant_response(
         disclaimer=payload.get("disclaimer"),
         slot_request=payload.get("slot_request"),
         profile_confirm=payload.get("profile_confirm"),
+        eligibility_result=payload.get("eligibility_result"),
     )
 
 
@@ -1095,6 +1170,7 @@ def _unwrap_message_meta(structured_json: dict | None) -> dict:
         "disclaimer": structured_json.get("disclaimer"),
         "slot_request": structured_json.get("slot_request"),
         "profile_confirm": structured_json.get("profile_confirm"),
+        "eligibility_result": structured_json.get("eligibility_result"),
     }
 
 
