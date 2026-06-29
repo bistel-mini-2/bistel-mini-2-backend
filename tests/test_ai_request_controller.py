@@ -713,6 +713,11 @@ def test_recommendation_result_eligibility_skips_saved_profile(monkeypatch) -> N
             request.error_message = error_message
             return request
 
+        async def update_result(self, db, request, result_json):
+            captured["result_json"] = result_json
+            request.result_json = result_json
+            return request
+
     class FakeConditionAgent:
         async def analyze(self, condition_input):
             captured["condition_profile_snapshot"] = condition_input.profile_snapshot
