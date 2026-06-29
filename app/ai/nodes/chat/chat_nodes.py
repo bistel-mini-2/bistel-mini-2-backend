@@ -1164,6 +1164,7 @@ class ChatGraphNodes:
             answer = _interpret_confirm(state["user_content"])
             if answer == "yes":
                 awaiting = []  # 저장 프로필로 추천 (엔진이 profile_snapshot 사용)
+                profile = {**profile, "db_profile_confirmed": True}
             elif answer == "no":
                 awaiting = list(REQUIRED_SLOTS.get("recommend", ()))  # 조건 칩 폼으로
             else:
@@ -1234,7 +1235,9 @@ class ChatGraphNodes:
 
     async def branch_recommend(self, state: ChatGraphState) -> ChatGraphState:
         selected_conditions = _profile_to_selected_conditions(state.get("profile"))
-        follow_up_already_asked = _recommend_follow_up_already_asked(state.get("slot"))
+        follow_up_already_asked = _recommend_follow_up_already_asked(
+            state.get("slot")
+        ) or bool((state.get("profile") or {}).get("db_profile_confirmed"))
         snapshot, lifecycle_error = await self._run_recommendation_lifecycle(
             user_id=state["user_id"],
             user_content=state["user_content"],
