@@ -17,14 +17,14 @@ class HistoryMessage(TypedDict):
     content: str | None
 
 
-class SlotPolicy(TypedDict, total=False):
+class SlotPolicy(TypedDict):
     policy_id: int
     slug: str
     policy_name: str
     last_action: str
-    eligibility_request_id: int | None
-    follow_up_questions: list[dict] | None
-    eligibility_status: str | None
+    eligibility_request_id: NotRequired[int | None]
+    follow_up_questions: NotRequired[list[dict] | None]
+    eligibility_status: NotRequired[str | None]
 
 
 class ProfileSlot(TypedDict, total=False):
