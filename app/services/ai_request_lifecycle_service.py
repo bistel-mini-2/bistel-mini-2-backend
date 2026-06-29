@@ -39,7 +39,10 @@ from app.schemas.ai_request_schema import (
     EligibilityFollowUpQuestionItem,
     EligibilityResultResponse,
     FollowUpQuestionItem,
+    RecommendationAnswer,
     RecommendationEvidenceItem,
+    RecommendationHistoryItem,
+    RecommendationHistoryResponse,
     RecommendationPollingResponse,
     RecommendationPollingStatus,
     RecommendationResultItem,
@@ -207,6 +210,18 @@ class AiRequestLifecycleService:
 
         parsed_query_json = dict(request.parsed_query_json or {})
         parsed_query_json["follow_up_resolved"] = True
+        # 답변을 구조화 저장(이력에서 Q/A로 보여주기 위함). 빈 답변은 제외.
+        parsed_query_json["follow_up_answers"] = [
+            {
+                "question_text": " ".join(
+                    str(answer.get("question_text") or "").split()
+                ),
+                "answer": " ".join(str(answer.get("answer") or "").split()),
+            }
+            for answer in answers
+            if isinstance(answer, dict)
+            and str(answer.get("answer") or "").strip()
+        ]
         augmented_raw_query = self._augment_raw_query(request.raw_query, answers)
         await self.repository.update_payload(
             db=db,
@@ -274,6 +289,169 @@ class AiRequestLifecycleService:
             raise self._not_found("recommendation", request_id)
         return self.to_recommendation_polling_response(request)
 
+    async def get_recommendation_history(
+        self,
+        db: AsyncSession,
+        user_id: int,
+        limit: int = 20,
+    ) -> RecommendationHistoryResponse:
+        """사용자의 완료된 추천 요청을 요약 목록으로 반환한다(이력)."""
+        requests = await self.repository.list_completed_by_user(
+            db=db,
+            request_type="recommendation",
+            user_id=user_id,
+            limit=limit,
+        )
+        return RecommendationHistoryResponse(
+            items=[self._recommendation_history_item(request) for request in requests]
+        )
+
+    def _recommendation_history_item(
+        self,
+        request: AiRequestModel,
+    ) -> RecommendationHistoryItem:
+        result_json = normalize_recommendation_result_json(
+            request.result_json
+            if hasattr(request, "result_json") and request.result_json is not None
+            else {}
+        )
+        results = result_json.get("results") or result_json.get("recommendations") or []
+        results = [item for item in results if isinstance(item, dict)]
+        # 추천된 정책명 전부(카드에 칩으로 모두 노출). 안전 상한만 둔다.
+        policy_names = [
+            str(item.get("policy_name") or "").strip()
+            for item in results[:12]
+            if str(item.get("policy_name") or "").strip()
+        ]
+        created_at = getattr(request, "created_at", None)
+        return RecommendationHistoryItem(
+            request_id=str(request.request_id),
+            created_at=created_at.isoformat() if created_at is not None else None,
+            summary=self._history_summary(request),
+            policy_count=len(results),
+            top_policy_names=policy_names,
+            follow_up_answers=self._history_follow_up_answers(request),
+        )
+
+    def _history_follow_up_answers(
+        self,
+        request: AiRequestModel,
+    ) -> list[RecommendationAnswer]:
+        # 추가질문 게이트에서 받은 답변(있으면)을 Q/A로 노출한다.
+        parsed = getattr(request, "parsed_query_json", None) or {}
+        rows = parsed.get("follow_up_answers") if isinstance(parsed, dict) else None
+        answers: list[RecommendationAnswer] = []
+        for row in rows if isinstance(rows, list) else []:
+            if not isinstance(row, dict):
+                continue
+            answer_text = " ".join(str(row.get("answer") or "").split())
+            if not answer_text:
+                continue
+            answers.append(
+                RecommendationAnswer(
+                    question_text=" ".join(
+                        str(row.get("question_text") or "").split()
+                    ),
+                    answer=answer_text,
+                )
+            )
+        return answers
+
+    # 이력 요약용 조건 코드 → 사용자 친화 라벨.
+    _HISTORY_CHILD_AGE_LABELS = {
+        "preborn": "임신 중",
+        "0": "0세",
+        "1": "1세",
+        "2-5": "2~5세",
+        "6-12": "6~12세",
+        "13+": "13세 이상",
+    }
+    _HISTORY_STAGE_LABELS = {
+        "pregnant": "임신 중",
+        "newborn": "신생아",
+        "infant": "영유아",
+        "child": "아동",
+        "teen": "청소년",
+    }
+    _HISTORY_INCOME_LABELS = {
+        "low": "소득 50% 이하",
+        "mid1": "소득 51~100%",
+        "mid2": "소득 101~150%",
+        "high": "소득 150% 초과",
+    }
+    _HISTORY_REGION_LABELS = {
+        "national": "전국",
+        "seoul": "서울",
+        "busan": "부산",
+        "daegu": "대구",
+        "incheon": "인천",
+        "gwangju": "광주",
+        "daejeon": "대전",
+        "ulsan": "울산",
+        "sejong": "세종",
+        "gyeonggi": "경기",
+        "gangwon": "강원",
+        "chungbuk": "충북",
+        "chungnam": "충남",
+        "jeonbuk": "전북",
+        "jeonnam": "전남",
+        "gyeongbuk": "경북",
+        "gyeongnam": "경남",
+        "jeju": "제주",
+    }
+    _HISTORY_SPECIAL_LABELS = {
+        "single": "한부모",
+        "multi": "다문화",
+        "disabled": "장애",
+        "many": "다자녀",
+        "dual": "맞벌이",
+        "low_income": "저소득",
+        "veteran": "보훈",
+    }
+
+    def _history_summary(self, request: AiRequestModel) -> str:
+        # 제목용 입력 요약: 폼 입력값(조건)에서 자녀 나이·소득·지역·특수상황을 만든다.
+        # raw_query는 추가질문 답변이 덧붙어 지저분하므로 제목에는 쓰지 않는다.
+        condition = self._history_condition(request)
+        parts: list[str] = []
+
+        child_age = str(condition.get("childAge") or condition.get("child_age") or "")
+        stage = str(condition.get("stage") or condition.get("life_stage") or "")
+        if child_age in self._HISTORY_CHILD_AGE_LABELS:
+            parts.append(f"자녀 {self._HISTORY_CHILD_AGE_LABELS[child_age]}")
+        elif stage in self._HISTORY_STAGE_LABELS:
+            parts.append(self._HISTORY_STAGE_LABELS[stage])
+
+        income = str(condition.get("income") or condition.get("income_level") or "")
+        if income in self._HISTORY_INCOME_LABELS:
+            parts.append(self._HISTORY_INCOME_LABELS[income])
+
+        region = str(condition.get("region") or condition.get("region_code") or "")
+        if region in self._HISTORY_REGION_LABELS:
+            parts.append(self._HISTORY_REGION_LABELS[region])
+
+        special = condition.get("special")
+        special_values = special if isinstance(special, list) else [special]
+        special_labels = [
+            self._HISTORY_SPECIAL_LABELS[str(value)]
+            for value in special_values
+            if str(value) in self._HISTORY_SPECIAL_LABELS
+        ]
+        if special_labels:
+            parts.append(" · ".join(special_labels))
+
+        summary = " · ".join(parts)
+        return summary[:80] if summary else "입력하신 가족 상황 기반 추천"
+
+    def _history_condition(self, request: AiRequestModel) -> dict[str, Any]:
+        # 정규화된 merged_condition_json 우선, 없으면 parsed_query_json.selected_conditions.
+        merged = getattr(request, "merged_condition_json", None)
+        if isinstance(merged, dict) and merged:
+            return merged
+        parsed = getattr(request, "parsed_query_json", None) or {}
+        selected = parsed.get("selected_conditions") if isinstance(parsed, dict) else None
+        return selected if isinstance(selected, dict) else {}
+
     async def get_eligibility_result(
         self,
         db: AsyncSession,
@@ -310,6 +488,8 @@ class AiRequestLifecycleService:
         follow_up_resolved = bool(parsed_query_json.get("follow_up_resolved")) or bool(
             manual_confirmations
         )
+        # 게이트에서 받은 답변(이력 표시용)은 재실행 후에도 보존한다.
+        follow_up_answers = parsed_query_json.get("follow_up_answers") or []
         profile_snapshot = await self._condition_profile_snapshot(
             db=db,
             request_type=request_type,
@@ -341,8 +521,9 @@ class AiRequestLifecycleService:
                 candidate.model_dump(mode="json")
                 for candidate in condition_result.follow_up_candidates
             ],
-            # 재실행 시 게이트가 다시 발생하지 않도록 플래그를 보존한다.
+            # 재실행 시 게이트가 다시 발생하지 않도록 플래그/답변을 보존한다.
             "follow_up_resolved": follow_up_resolved,
+            "follow_up_answers": follow_up_answers,
         }
         await self.repository.update_payload(
             db=db,

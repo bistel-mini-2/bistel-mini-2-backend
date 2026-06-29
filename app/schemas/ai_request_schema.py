@@ -163,6 +163,21 @@ class RecommendationPollingResponse(BaseModel):
     error_message: str | None = None
 
 
+class RecommendationHistoryItem(BaseModel):
+    request_id: str
+    created_at: str | None = None
+    # 입력 요약(폼 입력값 기반 조건 요약)과 추천 결과 요약.
+    summary: str = ""
+    policy_count: int = 0
+    top_policy_names: list[str] = Field(default_factory=list)
+    # 추가질문 게이트에서 받은 Q/A(있을 때만).
+    follow_up_answers: list[RecommendationAnswer] = Field(default_factory=list)
+
+
+class RecommendationHistoryResponse(BaseModel):
+    items: list[RecommendationHistoryItem] = Field(default_factory=list)
+
+
 class EligibilityCriteriaItem(BaseModel):
     label: str
     status: Literal["ok", "check", "no"]

@@ -56,9 +56,9 @@ class ChatService:
 
     @staticmethod
     async def list_sessions(
-        db: AsyncSession, user_id: int
+        db: AsyncSession, user_id: int, limit: int | None = None
     ) -> ChatSessionListResponse:
-        sessions = await ChatRepository.find_sessions_by_user(db, user_id)
+        sessions = await ChatRepository.find_sessions_by_user(db, user_id, limit)
         return ChatSessionListResponse(
             sessions=[
                 ChatSessionListItem(
