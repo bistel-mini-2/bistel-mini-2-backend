@@ -862,3 +862,173 @@ def test_send_message_stream_cancelled_before_persist_saves_nothing(monkeypatch)
     mocks["bulk_save_message_evidences"].assert_not_awaited()
     db.commit.assert_not_awaited()
     unregister_mock.assert_called_once_with(10, cancel_event)
+
+
+# --- FOLLOW_UP 시나리오 -------------------------------------------------------
+
+
+def _follow_up_session() -> ChatSession:
+    """FOLLOW_UP_REQUIRED 슬롯이 있는 세션."""
+    session = _session()
+    session.slot_json = {
+        "recent_policies": [
+            {
+                "policy_id": 42,
+                "slug": "WLF1",
+                "policy_name": "정책1",
+                "last_action": "ELIGIBILITY",
+                "eligibility_status": "FOLLOW_UP_REQUIRED",
+                "eligibility_request_id": 99,
+                "follow_up_questions": [{"question_text": "소득이 얼마인가요?"}],
+            }
+        ]
+    }
+    return session
+
+
+def test_follow_up_recommendation_clears_eligibility_slot(monkeypatch) -> None:
+    """버그 1: FOLLOW_UP → recommendation 경로 시 슬롯의 eligibility_status가 None으로 클리어."""
+    session = _follow_up_session()
+    db = AsyncMock()
+    mocks = _patch_repo_for_send(monkeypatch, session=session)
+    monkeypatch.setattr(PolicyRepository, "find_ids_by_codes", AsyncMock(return_value={"WLF1": 42}))
+
+    monkeypatch.setattr(
+        chat_service_module,
+        "_classify_follow_up_intent",
+        AsyncMock(return_value="recommendation"),
+    )
+
+    graph_result = _graph_result()
+    monkeypatch.setattr(
+        chat_service_module,
+        "chat_supervisor_graph",
+        _FakeGraph(events=[_chain_end_event(graph_result)]),
+    )
+
+    chunks = asyncio.run(_collect(
+        ChatService.send_message_stream(db=db, session=session, content="다른 정책 추천해줘")
+    ))
+    events = _parse_sse_chunks(chunks)
+
+    assert events[0]["type"] == "intent"
+    assert events[0]["intent"] == "recommendation"
+    assert events[-1]["type"] == "done"
+
+    # 슬롯 저장 호출 확인 — eligibility_status가 None으로 클리어됨
+    mocks["update_session_slot"].assert_awaited_once()
+    saved_slot = mocks["update_session_slot"].await_args.args[2]
+    policy_entry = saved_slot["recent_policies"][0]
+    assert policy_entry["slug"] == "WLF1"
+    assert policy_entry["eligibility_status"] is None
+    assert policy_entry["follow_up_questions"] == []
+
+
+def test_follow_up_general_uses_outer_db_and_rollback_on_failure(monkeypatch) -> None:
+    """버그 2: _run_follow_up_eligibility가 외부 db를 받고, 저장 실패 시 rollback이 호출됨."""
+    session = _follow_up_session()
+    db = AsyncMock()
+    mocks = _patch_repo_for_send(monkeypatch, session=session)
+    # 저장 단계에서 실패 시뮬레이션
+    mocks["save_message"].side_effect = Exception("저장 실패")
+
+    monkeypatch.setattr(
+        chat_service_module,
+        "_classify_follow_up_intent",
+        AsyncMock(return_value="general"),
+    )
+    monkeypatch.setattr(
+        chat_service_module,
+        "_map_follow_up_answers",
+        AsyncMock(return_value=[]),
+    )
+    run_follow_up_mock = AsyncMock(return_value={
+        "status": "ELIGIBLE",
+        "request_id": 100,
+        "user_status": "eligible",
+        "assessment_status": None,
+        "follow_up_questions": [],
+        "summary": None,
+        "criteria": [],
+        "policies": [],
+        "evidences": [],
+    })
+    monkeypatch.setattr(chat_service_module, "_run_follow_up_eligibility", run_follow_up_mock)
+    monkeypatch.setattr(
+        chat_service_module,
+        "_adapt_eligibility_result",
+        MagicMock(return_value=("분석 완료", "eligible", [], [])),
+    )
+
+    chunks = asyncio.run(_collect(
+        ChatService.send_message_stream(db=db, session=session, content="네, 소득은 200만원입니다")
+    ))
+    events = _parse_sse_chunks(chunks)
+
+    # 저장 실패 → error SSE
+    assert events[-1]["type"] == "error"
+    # 외부 db에 rollback 호출됨 (eligibility 분석도 함께 롤백)
+    db.rollback.assert_awaited()
+    # 핵심: _run_follow_up_eligibility 첫 번째 인자가 외부 db (트랜잭션 통합 검증)
+    assert run_follow_up_mock.await_args.args[0] is db
+
+
+def test_intent_emitted_only_once_when_chain_end_fires_twice(monkeypatch) -> None:
+    """버그 3: on_chain_end가 supervisor_decision을 두 번 포함해도 intent SSE는 한 번만."""
+    session = _session()
+    db = AsyncMock()
+    mocks = _patch_repo_for_send(monkeypatch, session=session)
+    monkeypatch.setattr(PolicyRepository, "find_ids_by_codes", AsyncMock(return_value={"WLF1": 42}))
+
+    graph_result = _graph_result()
+    # 두 번의 on_chain_end — 두 번째도 supervisor_decision 포함 (브랜치 노드가 **state로 spread하는 상황)
+    fake_events = [
+        _token_event("안녕"),
+        _chain_end_event(graph_result),                      # supervisor 노드 완료 → intent 발행
+        _token_event("하세요"),
+        _chain_end_event(graph_result),                      # 브랜치 노드 완료 → 무시
+    ]
+    monkeypatch.setattr(
+        chat_service_module,
+        "chat_supervisor_graph",
+        _FakeGraph(events=fake_events),
+    )
+
+    chunks = asyncio.run(_collect(
+        ChatService.send_message_stream(db=db, session=session, content="추천해줘")
+    ))
+    events = _parse_sse_chunks(chunks)
+
+    intent_events = [e for e in events if e["type"] == "intent"]
+    assert len(intent_events) == 1, "intent SSE는 정확히 한 번만 발행되어야 함"
+    assert intent_events[0]["intent"] == "recommendation"
+
+
+def test_build_next_slot_logs_warning_on_slug_mismatch(caplog) -> None:
+    """버그 4: eligibility_slot_update의 slug가 recent_policies에 없으면 경고 로그."""
+    import logging
+    from app.services.chat_service import _build_next_slot
+
+    with caplog.at_level(logging.WARNING, logger="app.services.chat_service"):
+        result = _build_next_slot(
+            policy_links=[],
+            branch_policies=[],
+            slug_to_policy_id={},
+            current_slot={
+                "recent_policies": [
+                    {"policy_id": 1, "slug": "WLF1", "policy_name": "정책1", "last_action": "ELIGIBILITY"},
+                ]
+            },
+            eligibility_slot_update={
+                "slug": "NONEXISTENT",   # recent_policies에 없는 slug
+                "eligibility_request_id": 99,
+                "follow_up_questions": [],
+                "eligibility_status": "ELIGIBLE",
+            },
+        )
+
+    assert any("NONEXISTENT" in r.message for r in caplog.records), \
+        "slug 미매칭 시 slug 이름을 포함한 경고 로그가 있어야 함"
+    # 슬롯은 변경 없이 유지
+    assert result is not None
+    assert result["recent_policies"][0]["slug"] == "WLF1"
