@@ -20,10 +20,7 @@ from app.ai.states.chat_state import (
     RecentAssistantPolicy,
     SlotPolicy,
 )
-from app.ai.utils.condition_profile_utils import (
-    condition_profile_notes,
-    summarize_condition_tree,
-)
+from app.ai.utils.policy_summary_utils import build_policy_summary_key_points
 from app.common.ai_status import RequestStatus
 from app.common.exceptions import AppException, ErrorCode
 from app.core.config import settings
@@ -920,7 +917,10 @@ def _adapt_policy_summary_result(
         if isinstance(item, dict) and item.get("content")
     ]
     if not key_points:
-        key_points = _policy_summary_key_points(policy)
+        key_points = build_policy_summary_key_points(
+            policy,
+            content_limit=_SNIPPET_LIMIT,
+        )
 
     evidences = [
         _evidence_chunk_to_chat_evidence(chunk)
@@ -940,34 +940,6 @@ def _adapt_policy_summary_result(
     }
     content = easy_summary or _policy_summary_fallback_content(policy)
     return content, easy_summary, key_points[:3], [policy_card], evidences[:_EVIDENCES_MAX]
-
-
-def _policy_summary_key_points(policy: dict[str, Any]) -> list[dict[str, str]]:
-    condition_json = policy.get("condition_profile_json")
-    if not isinstance(condition_json, dict):
-        condition_json = {}
-    condition_text = (
-        policy.get("condition_profile_target_summary")
-        or summarize_condition_tree(condition_json.get("condition_tree"))
-        or policy.get("condition_profile_source_text")
-    )
-    condition_notes = condition_profile_notes(condition_json)
-    candidates = (
-        ("target", condition_text or policy.get("target_description")),
-        ("benefit", policy.get("benefit_description") or policy.get("benefit_summary")),
-        (
-            "application",
-            policy.get("application_method") or policy.get("application_period_text"),
-        ),
-        ("condition_check", condition_notes),
-    )
-    key_points: list[dict[str, str]] = []
-    for label, value in candidates:
-        text = " ".join(str(value or "").split())
-        if text:
-            key_points.append({"label": label, "content": text[:_SNIPPET_LIMIT]})
-    return key_points[:3]
-
 
 def _policy_summary_fallback_content(policy: dict[str, Any]) -> str:
     name = policy.get("name") or policy.get("policy_name") or "policy"

@@ -6,10 +6,7 @@ from langgraph.graph import END, START, StateGraph
 from app.ai.agents.policy_summary_agent import PolicySummaryAgent
 from app.ai.states.policy_summary_state import PolicySummaryGraphState
 from app.ai.tools.policy_chunk_search_tool import search_policy_chunks
-from app.ai.utils.condition_profile_utils import (
-    summarize_condition_profile_notes,
-    summarize_condition_tree,
-)
+from app.ai.utils.policy_summary_utils import build_policy_summary_key_points
 from app.schemas.ai_contract import EvidenceChunk
 
 
@@ -33,7 +30,10 @@ class PolicySummaryGraphRunner:
         return {
             "summary": summary,
             "easy_summary": summary,
-            "key_points": _build_key_points(policy),
+            "key_points": build_policy_summary_key_points(
+                policy,
+                content_limit=160,
+            ),
             "evidence": list(final_state.get("evidence") or []),
             "evidence_chunks": list(final_state.get("evidence_chunks") or []),
         }
@@ -70,55 +70,6 @@ class PolicySummaryGraphRunner:
             "evidence": result.evidence,
         }
 
-
-def _build_key_points(policy: dict[str, Any]) -> list[dict[str, str]]:
-    candidates = _condition_profile_key_point_candidates(policy)
-    key_points: list[dict[str, str]] = []
-    for label, value in candidates:
-        text = " ".join(str(value or "").split())
-        if not text:
-            continue
-        key_points.append({"label": label, "content": _short(text, 160)})
-    return key_points[:3]
-
-
-def _condition_profile_key_point_candidates(
-    policy: dict[str, Any],
-) -> tuple[tuple[str, Any], ...]:
-    condition_json = _condition_json(policy)
-    condition_source = policy.get("condition_profile_source_text")
-    target_summary = policy.get("condition_profile_target_summary")
-    condition_tree = condition_json.get("condition_tree")
-    exclusions = condition_json.get("exclusions")
-    unsupported = condition_json.get("unsupported_conditions")
-    unknowns = condition_json.get("unknowns")
-
-    target = (
-        target_summary
-        or summarize_condition_tree(condition_tree)
-        or condition_source
-        or policy.get("target_description")
-    )
-    verification_notes = summarize_condition_profile_notes(
-        exclusions=exclusions,
-        unsupported=unsupported,
-        unknowns=unknowns,
-    )
-    return (
-        ("target", target),
-        (
-            "benefit",
-            policy.get("benefit_description") or policy.get("benefit_summary"),
-        ),
-        (
-            "application",
-            policy.get("application_method")
-            or policy.get("application_period_text"),
-        ),
-        ("condition_check", verification_notes),
-    )
-
-
 def _build_evidence_query(policy: dict[str, Any]) -> str:
     condition_json = _condition_json(policy)
     condition_profile_text = " ".join(
@@ -152,9 +103,3 @@ def _json_text(value: Any) -> str:
     if not value:
         return ""
     return json.dumps(value, ensure_ascii=False, default=str)
-
-
-def _short(value: str, limit: int) -> str:
-    if len(value) <= limit:
-        return value
-    return value[: limit - 3].rstrip() + "..."
