@@ -123,6 +123,7 @@ class AiRequestLifecycleService:
         source_ref_id: str | None = None,
         raw_query: str | None = None,
         selected_conditions: dict[str, Any] | None = None,
+        follow_up_resolved: bool = False,
     ) -> AiRequestSnapshot:
         return await self.create_request(
             db=db,
@@ -132,6 +133,7 @@ class AiRequestLifecycleService:
             source_ref_id=source_ref_id,
             raw_query=raw_query,
             selected_conditions=selected_conditions,
+            follow_up_resolved=follow_up_resolved,
             policy_id=await self.resolve_policy_id(db, policy_identifier),
         )
 

@@ -2057,9 +2057,9 @@ class ChatGraphNodes:
             fallback_slug=policy_slug,
             fallback_policy_name=policy_name,
         )
-        eligibility_slot_update: dict | None = None
-        if result_json.get("status") == RequestStatus.FOLLOW_UP_REQUIRED.value:
-            eligibility_slot_update = {
+        result_status = result_json.get("status")
+        if result_status == RequestStatus.FOLLOW_UP_REQUIRED.value:
+            eligibility_slot_update: dict | None = {
                 "slug": policy_slug,
                 "eligibility_request_id": result_json.get("request_id"),
                 "follow_up_questions": (
@@ -2068,6 +2068,13 @@ class ChatGraphNodes:
                     or []
                 ),
                 "eligibility_status": RequestStatus.FOLLOW_UP_REQUIRED.value,
+            }
+        else:
+            eligibility_slot_update = {
+                "slug": policy_slug,
+                "eligibility_request_id": result_json.get("request_id"),
+                "follow_up_questions": [],
+                "eligibility_status": result_status,
             }
         return {
             **state,

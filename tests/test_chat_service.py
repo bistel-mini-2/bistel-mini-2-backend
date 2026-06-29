@@ -769,11 +769,11 @@ def test_send_message_stream_emits_tokens_then_done(monkeypatch) -> None:
     ))
     events = _parse_sse_chunks(chunks)
 
-    # token, token, intent, done 순서 (supervisor_decision 감지 후 intent 이벤트 발행)
-    assert [e["type"] for e in events] == ["token", "token", "intent", "done"]
-    assert events[0]["delta"] == "안녕"
-    assert events[1]["delta"] == "하세요"
-    assert events[2]["intent"] == "recommendation"
+    # intent, token, token, done 순서 (버퍼링: supervisor_decision 확정 후 intent 먼저, 이후 토큰 flush)
+    assert [e["type"] for e in events] == ["intent", "token", "token", "done"]
+    assert events[0]["intent"] == "recommendation"
+    assert events[1]["delta"] == "안녕"
+    assert events[2]["delta"] == "하세요"
 
     # done payload에 ChatMessageSendResponse 구조 포함
     payload = events[3]["payload"]
@@ -799,7 +799,7 @@ def test_send_message_stream_error_event_when_graph_raises(monkeypatch) -> None:
         AsyncMock(return_value={}),
     )
 
-    # 토큰 한 개 emit 후 raise — final_state 미수집 → error 이벤트로 종료
+    # intent 확정 전 raise — 토큰은 버퍼에만 있고 flush 전에 실패 → error 이벤트만 종료
     monkeypatch.setattr(
         chat_service_module,
         "chat_supervisor_graph",
@@ -811,8 +811,8 @@ def test_send_message_stream_error_event_when_graph_raises(monkeypatch) -> None:
     ))
     events = _parse_sse_chunks(chunks)
 
-    assert [e["type"] for e in events] == ["token", "error"]
-    assert events[1]["code"] == "INTERNAL_SERVER_ERROR"
+    assert [e["type"] for e in events] == ["error"]
+    assert events[0]["code"] == "INTERNAL_SERVER_ERROR"
 
     # 유저 메시지·assistant 메시지·정규화 row가 모두 저장되지 않아야 함
     # (P1-1 수정: 그래프 실패 시 user message도 남지 않도록 commit을 함께 묶음)

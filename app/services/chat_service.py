@@ -16,7 +16,7 @@ from app.ai.graphs.chat_supervisor_graph import (
     HISTORY_LIMIT,
     chat_supervisor_graph,
 )
-from app.ai.nodes.chat.chat_nodes import BRANCH_LLM_TAG
+from app.ai.nodes.chat.chat_nodes import BRANCH_LLM_TAG, _adapt_eligibility_result
 from app.ai.states.chat_state import HistoryMessage
 from app.core.config import settings
 from app.common.exceptions import AppException, ErrorCode
@@ -249,7 +249,90 @@ class ChatService:
                 )
                 yield _sse_event({"type": "intent", "intent": follow_up_intent})
 
-                if follow_up_intent == "eligibility_clarification":
+                if follow_up_intent == "general":
+                    # FOLLOW_UP 답변 경로: eligibility 재분석 실행
+                    result_json = await _run_follow_up_eligibility(
+                        session.user_id, content, follow_up_policy
+                    )
+                    if result_json is None:
+                        yield _sse_event({
+                            "type": "error",
+                            "code": ErrorCode.INTERNAL_SERVER_ERROR.value,
+                            "message": "답변을 분석하는 중 문제가 발생했어요. 잠시 후 다시 시도해 주세요.",
+                        })
+                        return
+                    policy_slug = follow_up_policy["slug"]
+                    policy_name = follow_up_policy.get("policy_name")
+                    content_text, user_status, e_policies, e_evidences = _adapt_eligibility_result(
+                        result_json,
+                        fallback_slug=policy_slug,
+                        fallback_policy_name=policy_name,
+                    )
+                    result_status = result_json.get("status")
+                    follow_up_graph_result: dict[str, Any] = {
+                        "assistant_payload": {
+                            "content": content_text,
+                            "user_status": user_status,
+                            "policies": e_policies,
+                            "evidences": e_evidences,
+                            "actions": ["eligibility"],
+                            "disclaimer": True,
+                        },
+                        "supervisor_decision": {"intent": "eligibility", "raw": "follow_up_answer"},
+                        "evidences_to_save": [
+                            {
+                                "chunk_id": ev["chunk_id"],
+                                "snippet": ev.get("snippet"),
+                                "evidence_role": ev.get("evidence_role"),
+                            }
+                            for ev in e_evidences
+                            if ev.get("chunk_id") is not None
+                        ],
+                        "policy_links_to_save": [
+                            {"policy_slug": policy_slug, "action_type": "ELIGIBILITY"}
+                        ],
+                        "eligibility_slot_update": {
+                            "slug": policy_slug,
+                            "eligibility_request_id": result_json.get("request_id"),
+                            "follow_up_questions": result_json.get("follow_up_questions") or [],
+                            "eligibility_status": result_status,
+                        },
+                    }
+                    yield _sse_event({"type": "token", "delta": content_text})
+                    try:
+                        user_message = await _save_user_message(
+                            db, session.chat_session_id, content
+                        )
+                        _, assistant_response = await _persist_assistant_outputs(
+                            db,
+                            session_id=session.chat_session_id,
+                            user_message_id=user_message.chat_message_id,
+                            graph_result=follow_up_graph_result,
+                            current_slot=slot,
+                        )
+                        await ChatRepository.update_last_message_at(
+                            db, session.chat_session_id, datetime.utcnow()
+                        )
+                        await db.commit()
+                    except Exception:
+                        await db.rollback()
+                        logger.exception("Persisting follow_up eligibility answer failed")
+                        yield _sse_event({
+                            "type": "error",
+                            "code": ErrorCode.INTERNAL_SERVER_ERROR.value,
+                            "message": "답변을 저장하는 중 문제가 발생했어요. 잠시 후 다시 시도해 주세요.",
+                        })
+                        return
+                    if is_first_message:
+                        _schedule_title_generation(session.chat_session_id, content)
+                    response = ChatMessageSendResponse(
+                        chat_session_id=str(session.chat_session_id),
+                        user_message_id=str(user_message.chat_message_id),
+                        assistant_message=assistant_response,
+                    )
+                    yield _sse_event({"type": "done", "payload": response.model_dump(mode="json")})
+                    return
+                elif follow_up_intent == "eligibility_clarification":
                     clarification_text = _build_eligibility_clarification_text(
                         follow_up_policy.get("follow_up_questions") or []
                     )
@@ -311,6 +394,7 @@ class ChatService:
             final_state: dict[str, Any] = {}
             stream_failed = False
             intent_emitted = follow_up_policy is not None  # FOLLOW_UP 경로는 이미 발행
+            token_buffer: list[str] = []
             try:
                 async for event in chat_supervisor_graph.astream_events(
                     graph_state, version="v2"
@@ -326,7 +410,10 @@ class ChatService:
                             continue
                         delta = _extract_token_text(event.get("data", {}).get("chunk"))
                         if delta:
-                            yield _sse_event({"type": "token", "delta": delta})
+                            if intent_emitted:
+                                yield _sse_event({"type": "token", "delta": delta})
+                            else:
+                                token_buffer.append(delta)
                     elif kind == "on_chain_end":
                         output = event.get("data", {}).get("output")
                         if isinstance(output, dict):
@@ -339,6 +426,9 @@ class ChatService:
                                     {"type": "intent", "intent": _INTENT_TO_SSE[sv_intent]}
                                 )
                                 intent_emitted = True
+                                for buffered_delta in token_buffer:
+                                    yield _sse_event({"type": "token", "delta": buffered_delta})
+                                token_buffer.clear()
             except Exception:
                 stream_failed = True
                 logger.exception("Chat supervisor graph streaming failed")
@@ -566,6 +656,45 @@ async def _save_user_message(
             sequence_no=sequence_no,
         ),
     )
+
+
+async def _run_follow_up_eligibility(
+    user_id: int,
+    content: str,
+    follow_up_policy: dict,
+) -> dict | None:
+    from app.ai.graphs.eligibility_graph import eligibility_graph_runner
+    from app.db.session import AsyncSessionLocal
+
+    policy_slug = follow_up_policy["slug"]
+    source_ref_id = (
+        str(follow_up_policy["eligibility_request_id"])
+        if follow_up_policy.get("eligibility_request_id") is not None
+        else None
+    )
+    try:
+        async with AsyncSessionLocal() as db:
+            try:
+                result_json = await asyncio.wait_for(
+                    eligibility_graph_runner.run(
+                        db=db,
+                        user_id=user_id,
+                        policy_identifier=policy_slug,
+                        raw_query=content,
+                        source_type="CHAT",
+                        source_ref_id=source_ref_id,
+                        follow_up_resolved=True,
+                    ),
+                    timeout=60,
+                )
+                await db.commit()
+                return result_json
+            except Exception:
+                await db.rollback()
+                raise
+    except Exception:
+        logger.exception("FOLLOW_UP eligibility re-analysis failed")
+        return None
 
 
 async def _run_supervisor_graph(
