@@ -15,6 +15,8 @@ from app.ai.states.chat_state import (
     ChatSlot,
     HistoryMessage,
     Intent,
+    PendingState,
+    ProfileSlot,
     RecentAssistantPolicy,
     SlotPolicy,
 )
@@ -22,6 +24,7 @@ from app.common.ai_status import RequestStatus
 from app.common.exceptions import AppException, ErrorCode
 from app.core.config import settings
 from app.db.session import AsyncSessionLocal
+from app.repositories.family_profile_repository import FamilyProfileRepository
 from app.schemas.ai_request_schema import AiRequestSnapshot
 from app.schemas.apply_schema import ApplyPreparationResponse
 from app.services.apply_preparation_service import ApplyPreparationService
@@ -43,19 +46,31 @@ logger = logging.getLogger(__name__)
 
 
 SUPERVISOR_SYSTEM_TEMPLATE = """당신은 임신·출산·육아 정책 챗봇의 Supervisor입니다.
-사용자 메시지를 다음 6개 intent 중 하나로 분류하세요.
+사용자 메시지를 다음 7개 intent 중 하나로 분류하세요.
 
-- recommend: 본인 상황에 맞는 정책 추천 요청 (예: "맞는 정책 알려줘")
-- eligibility: 특정 정책의 지원 자격이나 가능성 (예: "나도 받을 수 있어?")
-- compare: 정책 2개 비교 (예: "A랑 B 중 뭐가 나아?")
-- apply: 신청 방법·필요 서류·기한 (예: "어떻게 신청해?")
-- policy_summary: 정책 내용 설명·요약 또는 일반 정책 정보 질의 (예: "이 정책이 뭐야?")
+- recommend: 특정 정책을 지목하지 않고 "나에게 맞는 정책 목록"을 원하는 요청
+  예: "맞는 정책 알려줘", "임신 중인데 받을 수 있는 지원이 뭐야?", "어떤 혜택이 있어?"
+- eligibility: **특정 정책 1개**를 지목하고 본인이 그 정책의 지원 대상인지 묻는 요청
+  예: "부모급여 나도 받을 수 있어?", "첫만남이용권 조건이 어떻게 돼?", "이 정책 대상이 돼?"
+  ※ 정책 이름이 없어도 직전 맥락(슬롯)에 정책 1개가 있으면 eligibility로 분류.
+- compare: 정책 2개 이상을 명시적으로 비교 (예: "A랑 B 중 뭐가 나아?")
+- apply: 신청 방법·필요 서류·기한 (예: "어떻게 신청해?", "서류 뭐 필요해?")
+- summary: 정책, 추천 결과, 지원가능성 분석 결과, 신청 안내, 비교 결과를 요약해 달라는 요청
+  예: "요약해줘", "이 정책 요약", "방금 추천한 거 요약", "내 상황 기준으로 요약"
+- policy_summary: 일반 정책 정보 질의 (예: "부모급여가 뭐야?")
 - unclear: 위에 명확히 속하지 않거나 정책과 무관
+
+[recommend vs eligibility 구분 핵심]
+- recommend: "어떤 정책들이 있어?" (목록 요청, 정책 미지목)
+- eligibility: "이 정책 나도 돼?" (자격 확인, 정책 1개 지목)
 
 직전 대화 맥락도 함께 고려해서 결정합니다.
 
 [직전 거론 정책]
 {slot_context}
+
+[이미 알고 있는 사용자 조건]
+{profile_context}
 
 다음 중 하나에 해당하면 resolved_policy_slug 필드에 위 정책의 slug를 정확히 그대로 반환하세요:
 1. 사용자가 지시어로 직전 정책을 가리킴: "그 정책", "거기", "방금 그거", "이거" 등
@@ -63,7 +78,394 @@ SUPERVISOR_SYSTEM_TEMPLATE = """당신은 임신·출산·육아 정책 챗봇�
 
 새 정책을 명시했거나 슬롯 정보가 비어있거나 정책과 무관한 메시지면 resolved_policy_slug는 null입니다.
 슬롯에 정책이 여러 개고 어느 것을 가리키는지 모호하면 첫 번째 정책의 slug를 선택하지 말고 null로 두세요.
+
+[사용자 조건 추출 — extracted_profile]
+이번 메시지에서 아래 조건이 새로 드러나면 extracted_profile에 **코드값**으로 채우세요(없으면 null).
+한글로 말하면 알맞은 코드로 변환합니다. 추정하지 말고 명시된 것만 추출하세요.
+- stage(생애단계): pregnant(임신·출산) | newborn | infant(영유아) | child(아동) | teen(청소년)
+- child_age(자녀 나이): preborn(태아) | 0 | 1 | 2-5 | 6-12 | 13+
+- income(소득): low(중위50%↓) | mid1(중위100%↓) | mid2(중위150%↓) | high | unknown(모름)
+- region(지역): seoul | busan | daegu | incheon | gwangju | daejeon | ulsan | sejong | gyeonggi | gangwon | chungbuk | chungnam | jeonbuk | jeonnam | gyeongbuk | gyeongnam | jeju | national
+- special(특이사항, 배열): single(한부모) | multi(다문화) | disabled(장애) | many(다자녀) | dual(맞벌이) | low_income(저소득) | veteran
+이미 알고 있는 조건과 같으면 다시 넣지 않아도 됩니다.
 """
+
+
+# 슬롯 필링: intent별 필수 조건. 비어 있으면 그 intent로 가기 전에 되묻는다.
+# (추천만 게이팅 — 너무 많은 intent를 막으면 오히려 흐름이 딱딱해진다.)
+# 1차 입력은 "자녀 나이(child_age)" — 육아 서비스에서 더 구체적이고, 엔진의
+# core 필드 stage_or_childAge 를 충족한다. child_age 는 stage 로 파생해 lifeArray 직접
+# 필터를 유지한다(_CHILD_AGE_TO_STAGE). region 은 정책 데이터에 없어 게이트 제외.
+REQUIRED_SLOTS: dict[Intent, tuple[str, ...]] = {
+    "recommend": ("child_age",),
+}
+
+# 추천 입력 위저드의 스텝 순서. 필수(child_age) + 선택(income, special).
+RECOMMEND_WIZARD_FIELDS: tuple[str, ...] = ("child_age", "income", "region", "special")
+
+# 자녀 나이 → 생애단계(stage) 파생. child_age 는 직접 필터가 아니라서 stage 로 변환해
+# policy_raw_import.lifeArray 필터를 살린다.
+_CHILD_AGE_TO_STAGE: dict[str, str] = {
+    "preborn": "pregnant",
+    "0": "infant",
+    "1": "infant",
+    "2-5": "infant",
+    "6-12": "child",
+    "13+": "teen",
+}
+
+_SLOT_LABELS: dict[str, str] = {
+    "stage": "생애단계",
+    "child_age": "자녀 나이",
+    "income": "소득",
+    "region": "지역",
+    "special": "가구 특성",
+    "summary_target": "요약 대상",
+}
+
+_SLOT_QUESTIONS: dict[str, str] = {
+    "stage": "지금 생애단계가 어떻게 되세요?",
+    "region": "어느 지역에 사세요?",
+    "child_age": "자녀 나이가 어떻게 되나요?",
+    "income": "소득 구간을 알려주실 수 있을까요?",
+    "special": "해당하는 가구 특성이 있나요? (없으면 건너뛰기)",
+    "summary_target": "무엇을 요약할까요?",
+}
+
+# 칩 옵션은 {label(표시), value(엔진 코드)} 쌍이다. value 는 반드시
+# app/common/policy_types.py 의 enum 코드와 일치해야 한다(= 단일 소스).
+# 칩 전송 시 value 가 그대로 selected_conditions 로 들어가므로 한글 라벨을
+# 다시 파싱할 필요가 없다.
+#
+# stage 는 육아 도메인 범위(FamilyStage)로 한정: pregnant/newborn/infant/child/teen.
+# (newborn·infant 는 라벨이 모두 "영유아"라 infant 하나로 통합)
+_SLOT_OPTIONS: dict[str, list[dict[str, str]]] = {
+    "stage": [
+        {"label": "임신·출산", "value": "pregnant"},
+        {"label": "영유아", "value": "infant"},
+        {"label": "아동", "value": "child"},
+        {"label": "청소년", "value": "teen"},
+    ],
+    # 아래 3개는 엔진 코드에는 맞췄으나 노출 범위/라벨은 확정 전(검토 필요).
+    "child_age": [
+        {"label": "태아", "value": "preborn"},
+        {"label": "0세", "value": "0"},
+        {"label": "1세", "value": "1"},
+        {"label": "2~5세", "value": "2-5"},
+        {"label": "6~12세", "value": "6-12"},
+        {"label": "13세 이상", "value": "13+"},
+    ],
+    "income": [
+        {"label": "중위 50% 이하", "value": "low"},
+        {"label": "중위 100% 이하", "value": "mid1"},
+        {"label": "중위 150% 이하", "value": "mid2"},
+        {"label": "중위 150% 초과", "value": "high"},
+        {"label": "모름", "value": "unknown"},
+    ],
+    "region": [
+        {"label": "전국", "value": "national"},
+        {"label": "서울", "value": "seoul"},
+        {"label": "경기", "value": "gyeonggi"},
+        {"label": "인천", "value": "incheon"},
+        {"label": "부산", "value": "busan"},
+        {"label": "대구", "value": "daegu"},
+        {"label": "대전", "value": "daejeon"},
+        {"label": "광주", "value": "gwangju"},
+        {"label": "울산", "value": "ulsan"},
+        {"label": "세종", "value": "sejong"},
+        {"label": "강원", "value": "gangwon"},
+        {"label": "충북", "value": "chungbuk"},
+        {"label": "충남", "value": "chungnam"},
+        {"label": "전북", "value": "jeonbuk"},
+        {"label": "전남", "value": "jeonnam"},
+        {"label": "경북", "value": "gyeongbuk"},
+        {"label": "경남", "value": "gyeongnam"},
+        {"label": "제주", "value": "jeju"},
+    ],
+    # special 은 다중 선택(가구 특성). 정책 DB(trgterIndvdlArray) 직접 필터.
+    "special": [
+        {"label": "한부모", "value": "single"},
+        {"label": "다문화", "value": "multi"},
+        {"label": "장애", "value": "disabled"},
+        {"label": "다자녀", "value": "many"},
+        {"label": "맞벌이", "value": "dual"},
+        {"label": "저소득", "value": "low_income"},
+        {"label": "국가유공", "value": "veteran"},
+    ],
+    "summary_target": [
+        {"label": "이 정책", "value": "policy"},
+        {"label": "방금 추천 결과", "value": "recommendation_result"},
+        {"label": "지원가능성 분석 결과", "value": "eligibility_result"},
+    ],
+}
+
+_PROFILE_LABELS = {
+    "stage": "가족 구성",
+    "child_age": "자녀 연령대",
+    "income": "가구 소득",
+    "region": "거주 지역",
+    "special": "특수 상황",
+}
+
+_PROFILE_OPTION_LABELS: dict[str, dict[str, str]] = {
+    "stage": {
+        "pregnant": "임신 준비·임신 중",
+        "newborn": "출산 직후·신생아",
+        "infant": "영유아",
+        "child": "아동",
+        "teen": "청소년",
+    },
+    "child_age": {
+        "preborn": "출생 전",
+        "0": "0세 (12개월 미만)",
+        "1": "1세",
+        "2-5": "2~5세",
+        "6-12": "6~12세",
+        "13+": "13세 이상",
+    },
+    "income": {
+        "low": "중위소득 50% 이하",
+        "mid1": "중위소득 51~100%",
+        "mid2": "중위소득 101~150%",
+        "high": "중위소득 150% 초과",
+        "unknown": "잘 모르겠어요",
+    },
+    "region": {
+        "national": "전국",
+        "seoul": "서울",
+        "busan": "부산",
+        "daegu": "대구",
+        "incheon": "인천",
+        "gwangju": "광주",
+        "daejeon": "대전",
+        "ulsan": "울산",
+        "sejong": "세종",
+        "gyeonggi": "경기",
+        "gangwon": "강원",
+        "chungbuk": "충북",
+        "chungnam": "충남",
+        "jeonbuk": "전북",
+        "jeonnam": "전남",
+        "gyeongbuk": "경북",
+        "gyeongnam": "경남",
+        "jeju": "제주",
+    },
+    "special": {
+        "single": "한부모·조손 가정",
+        "multi": "다문화·탈북민 가정",
+        "disabled": "장애인 가구",
+        "many": "다자녀 가정(2명 이상)",
+        "dual": "맞벌이 가구",
+        "low_income": "저소득 가구",
+        "single_parent": "한부모·조손 가정",
+        "multi_child": "다자녀 가정(2명 이상)",
+        "veteran": "국가유공",
+    },
+}
+
+_INCOME_BRACKET_TO_PROFILE_CODE = {
+    "50": "low",
+    "100": "mid1",
+    "150": "mid2",
+    "999": "high",
+}
+
+
+def _filled_slots(profile: ProfileSlot | None) -> set[str]:
+    if not profile:
+        return set()
+    filled: set[str] = set()
+    for key in ("stage", "child_age", "income", "region"):
+        if profile.get(key):
+            filled.add(key)
+    if profile.get("special"):
+        filled.add("special")
+    return filled
+
+
+def _missing_required(intent: Intent, profile: ProfileSlot | None) -> list[str]:
+    required = REQUIRED_SLOTS.get(intent, ())
+    filled = _filled_slots(profile)
+    # 사용자가 한 번 "건너뛰기"한 슬롯은 다시 묻지 않는다.
+    skipped = set((profile or {}).get("skipped") or [])
+    return [s for s in required if s not in filled and s not in skipped]
+
+
+def _merge_profile(
+    base: ProfileSlot | None, extracted: dict[str, Any] | None
+) -> ProfileSlot:
+    merged: dict[str, Any] = dict(base or {})
+    if not extracted:
+        return merged  # type: ignore[return-value]
+    for key in ("stage", "child_age", "income", "region"):
+        value = extracted.get(key)
+        if value:
+            merged[key] = value
+    special = extracted.get("special")
+    if special:
+        existing = list(merged.get("special") or [])
+        for item in special:
+            if item and item not in existing:
+                existing.append(item)
+        merged["special"] = existing
+    return merged  # type: ignore[return-value]
+
+
+def _format_profile_context(profile: ProfileSlot | None) -> str:
+    if not profile:
+        return "(없음)"
+    parts: list[str] = []
+    for key, label in _SLOT_LABELS.items():
+        if key == "special":
+            continue
+        if profile.get(key):
+            parts.append(f"- {label}: {_profile_value_label(key, profile[key])}")
+    if profile.get("special"):
+        parts.append(f"- 특이사항: {_profile_value_label('special', profile['special'])}")
+    return "\n".join(parts) if parts else "(없음)"
+
+
+def _build_slot_question(awaiting: list[str], profile: ProfileSlot | None) -> str:
+    if not awaiting:
+        return "조금 더 알려주시면 맞춤으로 찾아드릴게요."
+    first = awaiting[0]
+    question = _SLOT_QUESTIONS.get(first, f"{first}을(를) 알려주세요.")
+    if len(awaiting) == 1:
+        return f"맞춤 추천을 위해 하나만 여쭤볼게요. {question}"
+    rest = ", ".join(_SLOT_LABELS.get(slot, slot) for slot in awaiting[1:])
+    return f"맞춤 추천을 위해 몇 가지만 여쭤볼게요. 먼저 {question} (이어서 {rest}도 확인할게요.)"
+
+
+def _profile_to_selected_conditions(profile: ProfileSlot | None) -> dict[str, Any]:
+    """수집한 프로필(코드값)을 추천 엔진의 selected_conditions 형태로 변환.
+    키는 ConditionAgent 가 읽는 이름(stage/childAge/income/region/special)에 맞춘다.
+    skipped/None/빈 값은 제외한다.
+    """
+    if not profile:
+        return {}
+    out: dict[str, Any] = {}
+    stage = profile.get("stage")
+    child_age = profile.get("child_age")
+    if child_age:
+        out["childAge"] = child_age
+        # child_age 는 직접 필터가 아니므로 stage 로 파생(명시 stage 가 없을 때).
+        if not stage:
+            stage = _CHILD_AGE_TO_STAGE.get(child_age)
+    if stage:
+        out["stage"] = stage
+    if profile.get("income"):
+        out["income"] = profile["income"]
+    if profile.get("region"):
+        out["region"] = profile["region"]
+    special = profile.get("special")
+    if special:
+        out["special"] = [s for s in special if s]
+    return out
+
+
+# 회원 프로필 확인(yes/no) 프롬프트
+_CONFIRM_OPTIONS = [
+    {"label": "네, 이대로", "value": "yes"},
+    {"label": "아니요, 다시 입력", "value": "no"},
+]
+_CONFIRM_NO_HINTS = ("아니", "아뇨", "다시", "새로", "바꿔", "변경", "수정", "다른", "no")
+_CONFIRM_YES_HINTS = ("네", "예", "응", "그래", "좋아", "이대로", "진행", "맞아", "ㅇㅇ", "yes", "그걸로")
+_STAGE_CODE_TO_KO = {
+    "pregnant": "임신·출산",
+    "newborn": "영유아",
+    "infant": "영유아",
+    "child": "아동",
+    "teen": "청소년",
+}
+
+
+def _profile_value_label(key: str, value: Any) -> str:
+    if isinstance(value, list):
+        if not value:
+            return "해당 없음"
+        return ", ".join(_profile_value_label(key, item) for item in value)
+    text = str(value)
+    if key == "income" and text in _INCOME_BRACKET_TO_PROFILE_CODE:
+        text = _INCOME_BRACKET_TO_PROFILE_CODE[text]
+    return _PROFILE_OPTION_LABELS.get(key, {}).get(text, text)
+
+
+def _profile_summary_from_snapshot(
+    snap: dict[str, Any],
+    *,
+    income_bracket: str | None = None,
+    region_code: str | None = None,
+    household_type: str | None = None,
+    pregnancy_status: bool = False,
+) -> list[str] | None:
+    stage = snap.get("stage") or snap.get("life_stage")
+    child_age = snap.get("childAge") or snap.get("child_age")
+    income = snap.get("income") or snap.get("income_level")
+    region = snap.get("region") or snap.get("region_code")
+    special = snap.get("special")
+
+    if not stage and pregnancy_status:
+        stage = "pregnant"
+    if not income and income_bracket:
+        income = income_bracket
+    if not region and region_code:
+        region = region_code
+    if special is None and household_type:
+        special = [household_type]
+
+    parts: list[str] = []
+    rows = (
+        ("stage", stage),
+        ("child_age", child_age),
+        ("income", income),
+        ("region", region),
+        ("special", special),
+    )
+    for key, value in rows:
+        if value is None or value == "":
+            continue
+        parts.append(
+            f"{_PROFILE_LABELS[key]}: {_profile_value_label(key, value)}"
+        )
+
+    return parts or None
+
+
+def _interpret_confirm(text: str | None) -> str | None:
+    """확인 프롬프트에 대한 사용자 응답을 yes/no/None 으로 해석."""
+    t = (text or "").strip().lower()
+    if not t:
+        return None
+    if any(k in t for k in _CONFIRM_NO_HINTS):
+        return "no"
+    if any(k in t for k in _CONFIRM_YES_HINTS):
+        return "yes"
+    return None
+
+
+def _recommend_follow_up_already_asked(slot: ChatSlot | None) -> bool:
+    pending = (slot or {}).get("pending") or {}
+    return pending.get("intent") == "recommend" and pending.get("kind") == "slot"
+
+
+async def _load_db_profile_summary(user_id: int) -> list[str] | None:
+    """저장된 회원 프로필을 사람이 읽는 요약 리스트로. 의미있는 값이 없으면 None."""
+    try:
+        async with AsyncSessionLocal() as db:
+            profile = await FamilyProfileRepository.find_profile_by_user_id(db, user_id)
+    except Exception:
+        logger.exception("failed to load user profile for confirm prompt")
+        return None
+    if profile is None:
+        return None
+    snap = dict(profile.profile_json or {})
+    return _profile_summary_from_snapshot(
+        snap,
+        income_bracket=profile.income_bracket,
+        region_code=profile.region_code,
+        household_type=profile.household_type,
+        pregnancy_status=getattr(profile, "pregnancy_status", False),
+    )
 
 
 _COMMON_SAFETY_RULES = """[안전 안내 — 모든 답변에 적용]
@@ -80,6 +482,12 @@ _APPLICATION_PERIOD_CONTEXT_RULES = """[신청 기간 판단 규칙]
 
 
 _BASE_BRANCH_PROMPTS: dict[Intent, str] = {
+    "summary": """당신은 임신·출산·육아 정책 정보를 요약하는 챗봇입니다.
+요청 대상과 참고 자료를 바탕으로 한국어로 간결하게 요약하세요.
+- "내 상황 기준" 요청이면 사용자의 조건과 관련된 확인 포인트를 함께 정리하세요.
+- 지원 가능 여부를 확정하지 말고 "지원 가능성 사전 분석", "공식 신청 전 확인 필요" 톤을 유지하세요.
+- 근거가 있으면 핵심 근거를 함께 언급하세요.
+- 한국어 3~5문장.""",
     "policy_summary": """당신은 임신·출산·육아 정책을 안내하는 챗봇입니다.
 주어진 정책 문서 발췌(참고 자료)만 근거로 한국어 3~5문장으로 답변하세요.
 - 발췌에 없는 내용은 추측하지 마세요.""",
@@ -134,6 +542,7 @@ _INTENT_TO_API_ACTION: dict[Intent, str | None] = {
     "eligibility": "eligibility",
     "compare": "compare",
     "apply": "apply",
+    "summary": "summary",
     "policy_summary": "chat",
     "unclear": None,
 }
@@ -144,6 +553,7 @@ _INTENT_TO_ACTION_TYPE: dict[Intent, str | None] = {
     "compare": "COMPARED",
     "eligibility": "ELIGIBILITY_TARGET",
     "apply": "APPLY_TARGET",
+    "summary": None,
     "policy_summary": None,
     "unclear": None,
 }
@@ -161,9 +571,14 @@ _RECOMMEND_STATEMENT_TIMEOUT = "60s"
 _RECOMMEND_FALLBACK_FOLLOW_UP = (
     "맞춤 추천을 위해 정보가 더 필요해요. 맞춤 추천 화면에서 추가로 입력해 주세요."
 )
+_RECOMMEND_FOLLOW_UP_LIMIT_REACHED = (
+    "추가 확인은 여기서 멈추고, 지금 입력된 정보 기준으로 볼 수 있는 정책을 넓게 안내할게요. "
+    "일부 조건은 '잘 모르겠어요'로 반영되어 정확한 우선순위는 낮을 수 있어요."
+)
 _RECOMMEND_FALLBACK_ERROR = (
     "맞춤 추천을 만드는 중에 문제가 발생했어요. 잠시 후 다시 시도해 주세요."
 )
+_RECOMMEND_MAX_RETRIES = 1
 _ELIGIBILITY_SOURCE_TYPE = "CHAT"
 _ELIGIBILITY_LIFECYCLE_TIMEOUT_SECONDS = 60
 _ELIGIBILITY_LOCK_TIMEOUT = "5s"
@@ -190,6 +605,10 @@ _APPLY_LIFECYCLE_TIMEOUT_SECONDS = 12
 _APPLY_LOCK_TIMEOUT = "5s"
 _APPLY_STATEMENT_TIMEOUT = "10s"
 _APPLY_CHECKLIST_PREVIEW = 5
+_APPLY_MAX_RETRIES = 1
+_APPLY_TEMPORARY_FAILURE_FALLBACK = (
+    "신청 안내를 준비하는 중 문제가 발생했어요. 잠시 후 다시 시도해 주세요."
+)
 _EVIDENCE_ROLE_ENUM: frozenset[str] = frozenset(
     {"SUMMARY", "TARGET", "BENEFIT", "APPLICATION", "CAUTION"}
 )
@@ -202,11 +621,23 @@ def _normalize_evidence_role(value: Any) -> str | None:
     return upper if upper in _EVIDENCE_ROLE_ENUM else None
 
 
+class _ExtractedProfile(BaseModel):
+    stage: str | None = None
+    child_age: str | None = None
+    income: str | None = None
+    region: str | None = None
+    special: list[str] | None = None
+
+
 class _IntentDecision(BaseModel):
     intent: Intent = Field(description="사용자 메시지의 의도 분류")
     resolved_policy_slug: str | None = Field(
         default=None,
         description="사용자가 직전 거론 정책을 지시어로 가리키는 경우 그 정책의 slug. 그렇지 않으면 null.",
+    )
+    extracted_profile: _ExtractedProfile | None = Field(
+        default=None,
+        description="이번 메시지에서 새로 드러난 사용자 조건. 없으면 null.",
     )
 
 
@@ -438,6 +869,27 @@ def _pick_compare_targets(
     return candidates[0], candidates[1]
 
 
+def _attach_recommendation_context(
+    policies: list[dict[str, Any]],
+    *,
+    request_id: str,
+    selected_conditions: dict[str, Any],
+    merged_condition_json: dict[str, Any],
+) -> list[dict[str, Any]]:
+    if not policies:
+        return policies
+    return [
+        {
+            **policy,
+            "recommendation_request_id": request_id,
+            "source_ref_id": request_id,
+            "selected_conditions": selected_conditions,
+            "merged_condition_json": merged_condition_json,
+        }
+        for policy in policies
+    ]
+
+
 def _pick_apply_target(
     policies: list[dict[str, Any]],
     *,
@@ -495,6 +947,53 @@ def _is_context_dependent_compare_question(user_content: str) -> bool:
     return any(
         pattern.search(content) for pattern in _CONTEXT_DEPENDENT_COMPARE_PATTERNS
     )
+
+
+def _summary_mode(user_content: str | None) -> str:
+    content = user_content or ""
+    if any(token in content for token in ("내 상황", "나 기준", "맞춤", "개인")):
+        return "personalized"
+    if any(token in content for token in ("체크", "준비", "할 일")):
+        return "checklist"
+    if any(token in content for token in ("짧게", "간단", "한줄", "핵심만")):
+        return "short"
+    return "plain"
+
+
+def _summary_target_type(
+    user_content: str | None,
+    slot: ChatSlot | None,
+    resolved_slug: str | None = None,
+) -> str | None:
+    content = user_content or ""
+    if resolved_slug:
+        return "policy"
+    if any(token in content for token in ("추천", "방금 추천", "추천한")):
+        return "recommendation_result"
+    if any(token in content for token in ("지원가능성", "지원 가능성", "가능성 분석", "자격")):
+        return "eligibility_result"
+    if any(token in content for token in ("신청", "서류", "준비")):
+        return "application_guide"
+    if any(token in content for token in ("비교", "차이")):
+        return "comparison_result"
+    if any(token in content for token in ("이 정책", "그 정책", "정책 요약", "정책")):
+        return "policy"
+    recent = (slot or {}).get("recent_policies") or []
+    if len(recent) == 1:
+        return "policy"
+    return None
+
+
+def _summary_target_id(
+    slot: ChatSlot | None,
+    resolved_slug: str | None = None,
+) -> str | None:
+    if resolved_slug:
+        return resolved_slug
+    recent = (slot or {}).get("recent_policies") or []
+    if len(recent) == 1 and recent[0].get("slug"):
+        return str(recent[0]["slug"])
+    return None
 
 
 def _recent_assistant_policy_target(
@@ -625,13 +1124,19 @@ class ChatGraphNodes:
     async def supervisor(self, state: ChatGraphState) -> ChatGraphState:
         llm = _llm().with_structured_output(_IntentDecision)
         slot = state.get("slot")
+        profile: ProfileSlot = (slot or {}).get("profile") or {}
+        pending: PendingState | None = (slot or {}).get("pending") or None
         slot_context = _format_slot_context(slot)
-        system_prompt = SUPERVISOR_SYSTEM_TEMPLATE.format(slot_context=slot_context)
+        profile_context = _format_profile_context(profile)
+        system_prompt = SUPERVISOR_SYSTEM_TEMPLATE.format(
+            slot_context=slot_context, profile_context=profile_context
+        )
         messages: list[BaseMessage] = [SystemMessage(content=system_prompt)]
         messages.extend(_history_to_lc_messages(state["history"]))
         messages.append(HumanMessage(content=state["user_content"]))
 
         resolved_slug: str | None = None
+        extracted: dict[str, Any] | None = None
         try:
             decision = await llm.ainvoke(messages)
             intent: Intent = decision.intent
@@ -639,13 +1144,88 @@ class ChatGraphNodes:
             candidate = decision.resolved_policy_slug
             if candidate and _find_slot_policy_by_slug(slot, candidate):
                 resolved_slug = candidate
+            if decision.extracted_profile is not None:
+                extracted = decision.extracted_profile.model_dump(exclude_none=True)
         except Exception as exc:
             logger.exception("Intent classification failed; falling back to unclear")
             intent = "unclear"
             raw = f"error: {exc}"
 
+        # 1) 추출한 조건을 세션 프로필에 병합 (모든 intent 공유)
+        profile = _merge_profile(profile, extracted)
+
+        prev_kind = (pending or {}).get("kind", "slot") if pending else None
+        profile_confirm: dict[str, Any] | None = None
+        awaiting: list[str] = []
+
+        # 2-A) 직전 턴이 "회원 프로필 확인" 프롬프트였으면 yes/no 로 처리
+        if pending and prev_kind == "confirm" and intent in ("unclear", "recommend"):
+            intent = "recommend"
+            answer = _interpret_confirm(state["user_content"])
+            if answer == "yes":
+                awaiting = []  # 저장 프로필로 추천 (엔진이 profile_snapshot 사용)
+                profile = {**profile, "db_profile_confirmed": True}
+            elif answer == "no":
+                awaiting = list(REQUIRED_SLOTS.get("recommend", ()))  # 조건 칩 폼으로
+            else:
+                awaiting = _missing_required("recommend", profile)  # 애매하면 일반 게이트
+            logger.info("chat_profile_confirm_resume", extra={"answer": answer})
+        else:
+            # 2-B) 채우던 슬롯이 있으면 이어받기 판단
+            resumed = False
+            if pending and pending.get("intent") and prev_kind != "confirm":
+                pending_intent = pending["intent"]
+                pending_awaiting = pending.get("awaiting") or list(
+                    REQUIRED_SLOTS.get(pending_intent, ())
+                )
+                answered_slot = bool(extracted) and any(
+                    key in (extracted or {}) for key in pending_awaiting
+                )
+                # 같은 intent거나, 분류가 모호(unclear)하거나, 빠진 슬롯을 답한 경우 → 이어받기.
+                # 그 외 다른 구체 intent가 나오면 주제 전환으로 보고 새 intent 사용.
+                if intent in ("unclear", pending_intent) or answered_slot:
+                    intent = pending_intent
+                    resumed = True
+                    # 이미 한 번 물어봤으므로, 그래도 안 채워진 슬롯은 "건너뛴 것"으로 기록 →
+                    # 다음 턴에 다시 묻지 않는다. (게이트는 pending당 최대 1회)
+                    unfilled = _missing_required(intent, profile)
+                    if unfilled:
+                        asked = pending.get("awaiting") or unfilled
+                        skipped = set(profile.get("skipped") or [])
+                        skipped.update(s for s in unfilled if s in asked)
+                        profile = {**profile, "skipped": sorted(skipped)}
+                logger.info(
+                    "chat_pending_resume",
+                    extra={"pending_intent": pending_intent, "resumed": resumed},
+                )
+
+            # 3) 결정된 intent의 필수 슬롯 중 빠진 것 계산 (건너뛴 슬롯 제외)
+            awaiting = _missing_required(intent, profile)
+            if (
+                intent == "summary"
+                and _summary_target_type(
+                    state["user_content"],
+                    slot,
+                    resolved_slug,
+                )
+                is None
+            ):
+                awaiting = ["summary_target"]
+
+            # 3-A) 추천인데 세션 조건이 부족하면 → 저장된 회원 프로필이 있으면 먼저 "확인"
+            if intent == "recommend" and awaiting:
+                summary = await _load_db_profile_summary(state["user_id"])
+                if summary:
+                    profile_confirm = {"summary": summary, "options": _CONFIRM_OPTIONS}
+                    awaiting = []  # 이번 턴은 슬롯 대신 확인 프롬프트를 띄운다
+
+        pending_active = bool(awaiting or profile_confirm)
         return {
             **state,
+            "profile": profile,
+            "pending_intent": intent if pending_active else None,
+            "awaiting_slots": awaiting,
+            "profile_confirm": profile_confirm,
             "supervisor_decision": {
                 "intent": intent,
                 "raw": raw,
@@ -654,25 +1234,145 @@ class ChatGraphNodes:
         }
 
     async def branch_recommend(self, state: ChatGraphState) -> ChatGraphState:
-        snapshot = await self._run_recommendation_lifecycle(
+        selected_conditions = _profile_to_selected_conditions(state.get("profile"))
+        follow_up_already_asked = _recommend_follow_up_already_asked(
+            state.get("slot")
+        ) or bool((state.get("profile") or {}).get("db_profile_confirmed"))
+        snapshot, lifecycle_error = await self._run_recommendation_lifecycle(
             user_id=state["user_id"],
             user_content=state["user_content"],
+            selected_conditions=selected_conditions or None,
+            follow_up_resolved=follow_up_already_asked,
         )
+        if lifecycle_error == "temporary_failure":
+            return {
+                **state,
+                "recommend_flow_status": "retryable_error",
+                "recommend_error_message": _RECOMMEND_FALLBACK_ERROR,
+                "recommend_max_retries": _RECOMMEND_MAX_RETRIES,
+                "branch_content": _RECOMMEND_FALLBACK_ERROR,
+                "branch_policies": [],
+                "branch_evidences": [],
+                "branch_apply_card": None,
+            }
         if snapshot is None:
-            return await self._recommend_fallback(state, _RECOMMEND_FALLBACK_ERROR)
+            return {
+                **state,
+                "recommend_flow_status": "fallback_needed",
+                "recommend_error_message": _RECOMMEND_FALLBACK_ERROR,
+                "branch_content": _RECOMMEND_FALLBACK_ERROR,
+                "branch_policies": [],
+                "branch_evidences": [],
+                "branch_apply_card": None,
+            }
         if snapshot.status == RequestStatus.FOLLOW_UP_REQUIRED:
-            return await self._recommend_fallback(
-                state, _RECOMMEND_FALLBACK_FOLLOW_UP
-            )
+            if follow_up_already_asked:
+                return {
+                    **state,
+                    "recommend_flow_status": "fallback_needed",
+                    "recommend_error_message": _RECOMMEND_FOLLOW_UP_LIMIT_REACHED,
+                    "branch_content": _RECOMMEND_FOLLOW_UP_LIMIT_REACHED,
+                    "branch_policies": [],
+                    "branch_evidences": [],
+                    "branch_apply_card": None,
+                    "slot_request": None,
+                    "pending": None,
+                }
+            questions = snapshot.questions or []
+            if questions:
+                awaiting = [
+                    str(question.get("field_name") or f"follow_up_{index + 1}")
+                    for index, question in enumerate(questions)
+                ]
+                slot_request = {
+                    "flow_type": "recommend",
+                    "request_id": snapshot.request_id,
+                    "target_policy_id": None,
+                    "source_type": "CHAT",
+                    "source_ref_id": snapshot.request_id,
+                    "target_type": None,
+                    "summary_mode": None,
+                    "current": awaiting[0] if awaiting else None,
+                    "awaiting": awaiting,
+                    "multi": ["special"],
+                    "fields": [
+                        {
+                            "key": key,
+                            "label": (
+                                question.get("question_text")
+                                or _SLOT_LABELS.get(key, key)
+                            ),
+                            "options": _SLOT_OPTIONS.get(key, []),
+                        }
+                        for key, question in zip(awaiting, questions, strict=False)
+                    ],
+                }
+                pending: PendingState = {
+                    "intent": "recommend",
+                    "awaiting": awaiting,
+                    "asked": [awaiting[0]] if awaiting else [],
+                    "kind": "slot",
+                }
+                return {
+                    **state,
+                    "recommend_flow_status": "ok",
+                    "recommend_error_message": None,
+                    "branch_content": "맞춤 추천을 위해 정보가 조금 더 필요해요.",
+                    "branch_policies": [],
+                    "branch_evidences": [],
+                    "branch_apply_card": None,
+                    "slot_request": slot_request,
+                    "pending": pending,
+                }
+            return {
+                **state,
+                "recommend_flow_status": "fallback_needed",
+                "recommend_error_message": _RECOMMEND_FALLBACK_FOLLOW_UP,
+                "branch_content": _RECOMMEND_FALLBACK_FOLLOW_UP,
+                "branch_policies": [],
+                "branch_evidences": [],
+                "branch_apply_card": None,
+            }
         if snapshot.status != RequestStatus.COMPLETED:
-            return await self._recommend_fallback(state, _RECOMMEND_FALLBACK_ERROR)
+            return {
+                **state,
+                "recommend_flow_status": "fallback_needed",
+                "recommend_error_message": _RECOMMEND_FALLBACK_ERROR,
+                "branch_content": _RECOMMEND_FALLBACK_ERROR,
+                "branch_policies": [],
+                "branch_evidences": [],
+                "branch_apply_card": None,
+            }
         policies, evidences = _adapt_recommendation_result(snapshot.result_json)
+        policies = _attach_recommendation_context(
+            policies,
+            request_id=snapshot.request_id,
+            selected_conditions=selected_conditions,
+            merged_condition_json=snapshot.merged_condition_json or selected_conditions,
+        )
         content = await self._generate_branch_answer("recommend", state, evidences)
         return {
             **state,
+            "recommend_flow_status": "ok",
+            "recommend_error_message": None,
             "branch_content": content,
             "branch_policies": policies,
             "branch_evidences": evidences,
+        }
+
+    async def recommend_retry_increment(self, state: ChatGraphState) -> ChatGraphState:
+        retry_count = int(state.get("recommend_retry_count") or 0) + 1
+        return {**state, "recommend_retry_count": retry_count}
+
+    async def recommend_fallback_build(self, state: ChatGraphState) -> ChatGraphState:
+        fallback_message = state.get("recommend_error_message") or _RECOMMEND_FALLBACK_ERROR
+        return {
+            **state,
+            "recommend_flow_status": "ok",
+            "branch_content": fallback_message,
+            "branch_policies": [],
+            "branch_evidences": [],
+            "branch_apply_card": None,
         }
 
     async def branch_eligibility(self, state: ChatGraphState) -> ChatGraphState:
@@ -783,20 +1483,36 @@ class ChatGraphNodes:
         if slug is None:
             return {
                 **state,
+                "apply_flow_status": "fallback_needed",
+                "apply_error_message": _APPLY_CLARIFICATION_FALLBACK,
                 "branch_content": _APPLY_CLARIFICATION_FALLBACK,
                 "branch_policies": [],
                 "branch_evidences": [],
                 "branch_apply_card": None,
             }
 
-        apply_response = await self._run_apply_preparation(
+        apply_response, apply_error = await self._run_apply_preparation(
             user_id=state["user_id"],
             policy_slug=slug,
         )
+        if apply_error == "temporary_failure":
+            return {
+                **state,
+                "apply_flow_status": "retryable_error",
+                "apply_error_message": _APPLY_TEMPORARY_FAILURE_FALLBACK,
+                "apply_max_retries": _APPLY_MAX_RETRIES,
+                "branch_content": _APPLY_TEMPORARY_FAILURE_FALLBACK,
+                "branch_policies": [],
+                "branch_evidences": evidences,
+                "branch_apply_card": None,
+            }
+
         if apply_response is None:
             content = await self._generate_branch_answer("apply", state, evidences)
             return {
                 **state,
+                "apply_flow_status": "ok",
+                "apply_error_message": None,
                 "branch_content": content,
                 "branch_policies": [],
                 "branch_evidences": evidences,
@@ -823,14 +1539,69 @@ class ChatGraphNodes:
         )
         return {
             **state,
+            "apply_flow_status": "ok",
+            "apply_error_message": None,
             "branch_content": content,
             "branch_policies": apply_policies,
             "branch_evidences": evidences,
             "branch_apply_card": apply_card,
         }
 
+    async def apply_retry_increment(self, state: ChatGraphState) -> ChatGraphState:
+        retry_count = int(state.get("apply_retry_count") or 0) + 1
+        return {**state, "apply_retry_count": retry_count}
+
+    async def apply_fallback_build(self, state: ChatGraphState) -> ChatGraphState:
+        fallback_message = (
+            state.get("apply_error_message")
+            or "신청 안내를 준비하는 중 문제가 발생했어요. 잠시 후 다시 시도해 주세요."
+        )
+        return {
+            **state,
+            "apply_flow_status": "ok",
+            "branch_content": fallback_message,
+            "branch_policies": [],
+            "branch_evidences": [],
+            "branch_apply_card": None,
+        }
+
     async def branch_policy_summary(self, state: ChatGraphState) -> ChatGraphState:
         return await self._branch_with_rag("policy_summary", state)
+
+    async def branch_summary(self, state: ChatGraphState) -> ChatGraphState:
+        decision = state.get("supervisor_decision") or {}
+        resolved_slug = decision.get("resolved_policy_slug")
+        target_type = _summary_target_type(
+            state["user_content"],
+            state.get("slot"),
+            resolved_slug,
+        )
+        if target_type == "policy" and resolved_slug:
+            slot_policy = _find_slot_policy_by_slug(state.get("slot"), resolved_slug)
+            policy_name = (slot_policy or {}).get("policy_name") or ""
+            _, evidences = await self._rag_lookup(policy_name or state["user_content"])
+            logger.info(
+                "chat_slot_resolved",
+                extra={"intent": "summary", "slot_used": True, "rag_skipped": False},
+            )
+            policies = [
+                {
+                    "policy_id": None,
+                    "slug": resolved_slug,
+                    "policy_name": policy_name,
+                    "summary": None,
+                    "tag": None,
+                    "tagTone": None,
+                }
+            ]
+            content = await self._generate_branch_answer("summary", state, evidences)
+            return {
+                **state,
+                "branch_content": content,
+                "branch_policies": policies,
+                "branch_evidences": evidences,
+            }
+        return await self._branch_with_rag("summary", state)
 
     async def branch_unclear(self, state: ChatGraphState) -> ChatGraphState:
         content = await self._generate_branch_answer("unclear", state, evidences=[])
@@ -841,12 +1612,121 @@ class ChatGraphNodes:
             "branch_evidences": [],
         }
 
+    async def collect_slots(self, state: ChatGraphState) -> ChatGraphState:
+        """필수 슬롯이 부족하면 입력 위저드를 띄우고, intent를 pending으로 보류한다.
+
+        추천은 여러 스텝(자녀나이→소득→가구특성)을 순서대로 내려보낸다. 게이트는
+        필수(child_age)로 걸리지만, 폼에는 선택 슬롯까지 스텝으로 포함한다.
+        """
+        awaiting = state.get("awaiting_slots") or []
+        profile: ProfileSlot = state.get("profile") or {}
+        decision = state.get("supervisor_decision") or {}
+        intent: Intent = decision.get("intent", "recommend")
+
+        # 위저드 스텝: 추천이면 정해진 순서, 그 외 intent는 awaiting 그대로.
+        # 이미 채운 슬롯은 스텝에서 제외한다.
+        if intent == "recommend":
+            filled = _filled_slots(profile)
+            field_keys = [f for f in RECOMMEND_WIZARD_FIELDS if f not in filled]
+            if not field_keys:
+                field_keys = list(awaiting)
+        else:
+            field_keys = list(awaiting)
+
+        prompt_awaiting = field_keys if intent == "recommend" else awaiting
+        content = _build_slot_question(prompt_awaiting, profile)
+        current = prompt_awaiting[0] if prompt_awaiting else None
+        target_policy_id = decision.get("resolved_policy_slug")
+        source_type = None
+        source_ref_id = None
+        if intent == "summary":
+            source_type = _summary_target_type(
+                state["user_content"],
+                state.get("slot"),
+                target_policy_id,
+            )
+            source_ref_id = _summary_target_id(state.get("slot"), target_policy_id)
+        elif intent == "eligibility":
+            source_type = "RECOMMENDATION_RESULT" if target_policy_id else "CHAT"
+            source_ref_id = target_policy_id
+        elif intent == "recommend":
+            source_type = "CHAT"
+        slot_request = {
+            "flow_type": intent,
+            "request_id": None,
+            "target_policy_id": target_policy_id,
+            "source_type": source_type,
+            "source_ref_id": source_ref_id,
+            "target_type": source_type if intent == "summary" else None,
+            "summary_mode": (
+                _summary_mode(state["user_content"]) if intent == "summary" else None
+            ),
+            "current": current,
+            "awaiting": field_keys,
+            "multi": ["special"],  # 다중 선택 슬롯 힌트
+            "fields": [
+                {
+                    "key": slot,
+                    "label": _SLOT_LABELS.get(slot, slot),
+                    "options": _SLOT_OPTIONS.get(slot, []),
+                }
+                for slot in field_keys
+            ],
+        }
+        pending: PendingState = {
+            "intent": intent,
+            "awaiting": field_keys,
+            "asked": [current] if current else [],
+            "kind": "slot",
+        }
+        logger.info(
+            "chat_slot_request",
+            extra={"intent": intent, "awaiting": awaiting, "steps": field_keys},
+        )
+        return {
+            **state,
+            "branch_content": content,
+            "branch_policies": [],
+            "branch_evidences": [],
+            "slot_request": slot_request,
+            "pending": pending,
+        }
+
+    async def confirm_profile(self, state: ChatGraphState) -> ChatGraphState:
+        """저장된 회원 프로필로 추천할지 한 번 확인(yes/no)한다."""
+        pc = state.get("profile_confirm") or {}
+        summary = pc.get("summary") or []
+        lines = "\n".join(f"· {item}" for item in summary)
+        content = (
+            "저장된 정보로 맞춤 정책을 추천해드릴까요?\n"
+            f"{lines}\n\n다른 조건으로 받고 싶으시면 다시 입력하실 수 있어요."
+        )
+        pending: PendingState = {
+            "intent": "recommend",
+            "awaiting": [],
+            "asked": [],
+            "kind": "confirm",
+        }
+        logger.info("chat_profile_confirm", extra={"fields": len(summary)})
+        return {
+            **state,
+            "branch_content": content,
+            "branch_policies": [],
+            "branch_evidences": [],
+            "profile_confirm": pc,
+            "pending": pending,
+        }
+
     async def assistant_payload_build(self, state: ChatGraphState) -> ChatGraphState:
         decision = state.get("supervisor_decision") or {"intent": "unclear", "raw": "missing"}
         intent: Intent = decision["intent"]
-        api_action = _INTENT_TO_API_ACTION.get(intent)
+        slot_request = state.get("slot_request")
+        profile_confirm = state.get("profile_confirm")
+        is_prompt = bool(slot_request or profile_confirm)
+        is_slot_request = bool(slot_request)
+        api_action = None if is_prompt else _INTENT_TO_API_ACTION.get(intent)
         content = state.get("branch_content") or ""
-        if intent != "unclear":
+        if intent != "unclear" and not is_prompt:
             assertive = _detect_assertive_phrases(content)
             if assertive:
                 logger.warning(
@@ -861,7 +1741,10 @@ class ChatGraphNodes:
             "evidences": state.get("branch_evidences", []),
             "actions": [api_action] if api_action else [],
             "apply_card": state.get("branch_apply_card"),
-            "disclaimer": intent != "unclear",
+            # 슬롯/확인을 되묻는 중에는 면책 문구·확정 경고 불필요
+            "disclaimer": (intent != "unclear") and not is_prompt,
+            "slot_request": slot_request,
+            "profile_confirm": profile_confirm,
         }
         return {**state, "assistant_payload": payload}
 
@@ -895,7 +1778,9 @@ class ChatGraphNodes:
         self,
         user_id: int,
         user_content: str,
-    ) -> AiRequestSnapshot | None:
+        selected_conditions: dict[str, Any] | None = None,
+        follow_up_resolved: bool = False,
+    ) -> tuple[AiRequestSnapshot | None, str | None]:
         request_id: int | None = None
         try:
             async with AsyncSessionLocal() as db:
@@ -918,12 +1803,25 @@ class ChatGraphNodes:
                         request_type="recommendation",
                         source_type=_RECOMMEND_SOURCE_TYPE,
                         raw_query=user_content,
+                        selected_conditions=selected_conditions,
+                        follow_up_resolved=follow_up_resolved,
                     )
                     request_id = int(created.request_id)
                     await lifecycle.mark_processing(
                         db=db,
                         request_type="recommendation",
                         request_id=request_id,
+                    )
+                    await db.commit()
+
+                    await db.execute(
+                        text(f"SET LOCAL lock_timeout = '{_RECOMMEND_LOCK_TIMEOUT}'")
+                    )
+                    await db.execute(
+                        text(
+                            f"SET LOCAL statement_timeout = "
+                            f"'{_RECOMMEND_STATEMENT_TIMEOUT}'"
+                        )
                     )
                     snapshot = await asyncio.wait_for(
                         lifecycle.process_condition_request(
@@ -934,7 +1832,7 @@ class ChatGraphNodes:
                         timeout=_RECOMMEND_LIFECYCLE_TIMEOUT_SECONDS,
                     )
                     await db.commit()
-                    return snapshot
+                    return snapshot, None
                 except Exception:
                     await db.rollback()
                     raise
@@ -942,7 +1840,7 @@ class ChatGraphNodes:
             logger.exception("chat branch_recommend lifecycle failed")
             if request_id is not None:
                 await _mark_recommendation_failed(request_id, str(exc))
-            return None
+            return None, "temporary_failure"
 
     async def _recommend_fallback(
         self,
@@ -1087,7 +1985,7 @@ class ChatGraphNodes:
         self,
         user_id: int,
         policy_slug: str,
-    ) -> ApplyPreparationResponse | None:
+    ) -> tuple[ApplyPreparationResponse | None, str | None]:
         try:
             async with AsyncSessionLocal() as db:
                 try:
@@ -1109,7 +2007,7 @@ class ChatGraphNodes:
                         timeout=_APPLY_LIFECYCLE_TIMEOUT_SECONDS,
                     )
                     await db.commit()
-                    return response
+                    return response, None
                 except Exception:
                     await db.rollback()
                     raise
@@ -1119,10 +2017,10 @@ class ChatGraphNodes:
             logger.info(
                 "chat branch_apply preview skipped: %s", exc.message
             )
-            return None
+            return None, "policy_not_found"
         except Exception:
             logger.exception("chat branch_apply preview failed")
-            return None
+            return None, "temporary_failure"
 
     async def _load_application_period_context(
         self,
@@ -1217,36 +2115,6 @@ class ChatGraphNodes:
             "branch_content": content,
             "branch_policies": policies,
             "branch_evidences": evidences,
-        }
-
-    async def _branch_with_slot(
-        self,
-        intent: Intent,
-        state: ChatGraphState,
-        slug: str,
-    ) -> ChatGraphState:
-        slot_policy = _find_slot_policy_by_slug(state.get("slot"), slug)
-        policy_name = (slot_policy or {}).get("policy_name") or ""
-        policies = [
-            {
-                "policy_id": None,
-                "slug": slug,
-                "policy_name": policy_name,
-                "summary": None,
-                "tag": None,
-                "tagTone": None,
-            }
-        ]
-        content = await self._generate_branch_answer(intent, state, evidences=[])
-        logger.info(
-            "chat_slot_resolved",
-            extra={"intent": intent, "slot_used": True, "rag_skipped": True},
-        )
-        return {
-            **state,
-            "branch_content": content,
-            "branch_policies": policies,
-            "branch_evidences": [],
         }
 
     async def _rag_lookup(
