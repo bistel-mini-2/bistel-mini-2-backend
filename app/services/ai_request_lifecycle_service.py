@@ -52,6 +52,21 @@ from app.services.recommendation_service import RecommendationService
 RECOMMENDATION_RESULT_SOURCE_TYPE = "RECOMMENDATION_RESULT"
 logger = logging.getLogger(__name__)
 
+_CONDITION_LABELS = {
+    "median_income_percent": "기준중위소득",
+    "income": "가구 소득",
+    "income_level": "가구 소득",
+    "income_bracket": "가구 소득",
+    "age": "자녀 나이",
+    "household_member_age": "자녀 나이",
+    "childAge": "자녀 나이",
+    "child_age": "자녀 나이",
+    "stage": "생애단계",
+    "region": "거주 지역",
+    "region_code": "거주 지역",
+    "special": "가구 특성",
+}
+
 
 class AiRequestLifecycleService:
     def __init__(
@@ -110,6 +125,13 @@ class AiRequestLifecycleService:
         raw_query: str | None = None,
         selected_conditions: dict[str, Any] | None = None,
     ) -> AiRequestSnapshot:
+        selected_conditions = await self._inherit_recommendation_conditions(
+            db=db,
+            user_id=user_id,
+            source_type=source_type,
+            source_ref_id=source_ref_id,
+            selected_conditions=selected_conditions,
+        )
         return await self.create_request(
             db=db,
             user_id=user_id,
@@ -120,6 +142,41 @@ class AiRequestLifecycleService:
             selected_conditions=selected_conditions,
             policy_id=await self.resolve_policy_id(db, policy_identifier),
         )
+
+    async def _inherit_recommendation_conditions(
+        self,
+        *,
+        db: AsyncSession,
+        user_id: int,
+        source_type: str,
+        source_ref_id: str | None,
+        selected_conditions: dict[str, Any] | None,
+    ) -> dict[str, Any] | None:
+        if selected_conditions:
+            return selected_conditions
+        if source_type != RECOMMENDATION_RESULT_SOURCE_TYPE or not source_ref_id:
+            return selected_conditions
+        try:
+            recommendation_request_id = int(source_ref_id)
+        except (TypeError, ValueError):
+            return selected_conditions
+
+        source_request = await self.repository.find_by_id(
+            db,
+            "recommendation",
+            recommendation_request_id,
+        )
+        if source_request is None or source_request.user_id != user_id:
+            return selected_conditions
+
+        parsed_query_json = source_request.parsed_query_json or {}
+        inherited = parsed_query_json.get("selected_conditions")
+        if isinstance(inherited, dict) and inherited:
+            return dict(inherited)
+        merged = source_request.merged_condition_json or {}
+        if isinstance(merged, dict) and merged:
+            return dict(merged)
+        return selected_conditions
 
     async def mark_processing(
         self,
@@ -276,6 +333,63 @@ class AiRequestLifecycleService:
             assessment=assessment,
         )
 
+    async def answer_eligibility_follow_up(
+        self,
+        db: AsyncSession,
+        request_id: int,
+        user_id: int,
+        answers: dict[str, Any] | None = None,
+        raw_answer: str | None = None,
+    ) -> EligibilityResultResponse:
+        request = await self._get_request_or_raise(db, "eligibility", request_id)
+        if request.user_id != user_id:
+            raise self._not_found("eligibility", request_id)
+        if RequestStatus(request.request_status) != RequestStatus.FOLLOW_UP_REQUIRED:
+            raise AppException(
+                status_code=status.HTTP_409_CONFLICT,
+                code=ErrorCode.CONFLICT,
+                message="추가 정보가 필요한 요청에만 답변을 제출할 수 있어요.",
+            )
+
+        parsed_query_json = dict(request.parsed_query_json or {})
+        previous_selected = parsed_query_json.get("selected_conditions")
+        selected_conditions = (
+            dict(previous_selected) if isinstance(previous_selected, dict) else {}
+        )
+        normalized_answers = self._normalize_follow_up_answers(answers or {})
+        selected_conditions.update(normalized_answers)
+        parsed_query_json["selected_conditions"] = selected_conditions
+        parsed_query_json["answers"] = normalized_answers
+        if raw_answer:
+            parsed_query_json["raw_answer"] = raw_answer
+            request.raw_query = self._merge_raw_answer(request.raw_query, raw_answer)
+
+        merged_condition_json = dict(request.merged_condition_json or {})
+        merged_condition_json.update(normalized_answers)
+        await self.repository.update_payload(
+            db=db,
+            request=request,
+            parsed_query_json=parsed_query_json,
+            merged_condition_json=merged_condition_json,
+            profile_conflict_json=list(request.profile_conflict_json or []),
+        )
+        await self.repository.update_status(
+            db=db,
+            request=request,
+            status=RequestStatus.PROCESSING,
+            error_message=None,
+        )
+        await self.process_condition_request(
+            db=db,
+            request_type="eligibility",
+            request_id=request_id,
+        )
+        return await self.get_eligibility_result(
+            db=db,
+            request_id=request_id,
+            user_id=user_id,
+        )
+
     async def process_condition_request(
         self,
         db: AsyncSession,
@@ -306,8 +420,13 @@ class AiRequestLifecycleService:
             conflict.model_dump(mode="json")
             for conflict in condition_result.profile_conflicts
         ]
+        selected_conditions = (
+            condition_result.parsed_query_json.get("selected_conditions")
+            or parsed_query_json.get("selected_conditions")
+        )
         parsed_result = {
             **condition_result.parsed_query_json,
+            "selected_conditions": selected_conditions,
             "input_issues": input_issues_json,
             "questions": [
                 candidate.model_dump(mode="json")
@@ -733,6 +852,10 @@ class AiRequestLifecycleService:
         manual_check_points = self._string_list(
             assessment.get("manual_check_points_json")
         )
+        labeled_matched_conditions = self._label_conditions(matched_conditions)
+        labeled_missing_conditions = self._label_conditions(missing_conditions)
+        labeled_conflicting_conditions = self._label_conditions(conflicting_conditions)
+        labeled_manual_check_points = self._label_conditions(manual_check_points)
 
         return EligibilityResultResponse(
             request_id=str(request.request_id),
@@ -746,15 +869,15 @@ class AiRequestLifecycleService:
             criteria=self._eligibility_criteria(
                 assessment_status=assessment_status,
                 reason_summary=assessment.get("reason_summary"),
-                matched_conditions=matched_conditions,
-                missing_conditions=missing_conditions,
-                conflicting_conditions=conflicting_conditions,
-                manual_check_points=manual_check_points,
+                matched_conditions=labeled_matched_conditions,
+                missing_conditions=labeled_missing_conditions,
+                conflicting_conditions=labeled_conflicting_conditions,
+                manual_check_points=labeled_manual_check_points,
             ),
-            matched_conditions=matched_conditions,
-            missing_conditions=missing_conditions,
-            conflicting_conditions=conflicting_conditions,
-            manual_check_points=manual_check_points,
+            matched_conditions=labeled_matched_conditions,
+            missing_conditions=labeled_missing_conditions,
+            conflicting_conditions=labeled_conflicting_conditions,
+            manual_check_points=labeled_manual_check_points,
             evidences=[
                 self._eligibility_evidence_item(evidence, request.policy_id)
                 for evidence in assessment.get("evidences", [])
@@ -767,6 +890,12 @@ class AiRequestLifecycleService:
                 request.error_message if request_status == RequestStatus.FAILED else None
             ),
         )
+
+    def _label_conditions(self, conditions: list[str]) -> list[str]:
+        return [
+            _CONDITION_LABELS.get(str(condition), str(condition))
+            for condition in conditions
+        ]
 
     def _polling_status(
         self,
@@ -818,6 +947,16 @@ class AiRequestLifecycleService:
                     item.get("summary") or item.get("benefit_summary") or ""
                 ),
                 "match_score": self._to_float_or_none(item.get("match_score")),
+                "why_recommended": item.get("why_recommended")
+                or item.get("reason_summary")
+                or item.get("reason"),
+                "check_before_apply": item.get("check_before_apply"),
+                "user_status": item.get("user_status"),
+                "assessment_status": item.get("assessment_status"),
+                "reason_summary": item.get("reason_summary"),
+                "matched_conditions": list(item.get("matched_conditions") or []),
+                "missing_conditions": list(item.get("missing_conditions") or []),
+                "manual_check_points": list(item.get("manual_check_points") or []),
                 "evidence": evidences,
                 "evidences": evidences,
                 "raw_evidences": list(item.get("raw_evidences") or []),
@@ -825,6 +964,39 @@ class AiRequestLifecycleService:
             }
         )
         return RecommendationResultItem.model_validate(normalized_item)
+
+    def _normalize_follow_up_answers(
+        self,
+        answers: dict[str, Any],
+    ) -> dict[str, Any]:
+        normalized: dict[str, Any] = {}
+        for key, value in answers.items():
+            if value in (None, "", []):
+                continue
+            normalized[str(key)] = self._normalize_unknown_answer(value)
+        return normalized
+
+    def _normalize_unknown_answer(self, value: Any) -> Any:
+        if isinstance(value, str) and value.strip() in {
+            "잘 모르겠어요",
+            "잘 모르겠음",
+            "모르겠어요",
+            "모름",
+            "unknown",
+        }:
+            return "unknown"
+        return value
+
+    def _merge_raw_answer(
+        self,
+        current_raw_query: str | None,
+        raw_answer: str,
+    ) -> str:
+        if not current_raw_query:
+            return raw_answer
+        if raw_answer in current_raw_query:
+            return current_raw_query
+        return f"{current_raw_query}\n{raw_answer}"
 
     def _recommendation_evidence_item(
         self,
@@ -853,6 +1025,8 @@ class AiRequestLifecycleService:
                 field_name=str(question.get("field_name") or ""),
                 question_text=str(question.get("question_text") or ""),
                 reason=question.get("reason"),
+                issue_type=question.get("issue_type"),
+                message=question.get("message"),
                 priority=int(question.get("priority") or 0),
             )
             for question in questions
@@ -985,6 +1159,8 @@ class AiRequestLifecycleService:
                 field_name=str(question.get("field_name") or ""),
                 question_text=str(question.get("question_text") or ""),
                 reason=question.get("reason"),
+                issue_type=question.get("issue_type"),
+                message=question.get("message"),
                 priority=int(question.get("priority") or 0),
             )
             for index, question in enumerate(questions[:2])

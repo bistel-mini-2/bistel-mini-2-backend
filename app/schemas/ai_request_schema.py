@@ -44,6 +44,11 @@ class RecommendationAnswerSubmit(BaseModel):
     answers: list[RecommendationAnswer] = Field(default_factory=list)
 
 
+class EligibilityAnswersCreate(BaseModel):
+    answers: dict[str, Any] = Field(default_factory=dict)
+    raw_answer: str | None = None
+
+
 class AiRequestSnapshot(BaseModel):
     request_id: str
     request_type: Literal["recommendation", "eligibility"]
@@ -79,6 +84,8 @@ class FollowUpQuestionItem(BaseModel):
     field_name: str
     question_text: str
     reason: str | None = None
+    issue_type: str | None = None
+    message: str | None = None
     priority: int = 0
 
 
@@ -123,6 +130,12 @@ class RecommendationResultItem(BaseModel):
     missing_information: list[str] = Field(default_factory=list)
     why_recommended: str | None = None
     check_before_apply: str | None = None
+    user_status: str | None = None
+    assessment_status: str | None = None
+    reason_summary: str | None = None
+    matched_conditions: list[Any] = Field(default_factory=list)
+    missing_conditions: list[Any] = Field(default_factory=list)
+    manual_check_points: list[Any] = Field(default_factory=list)
     evidences: list[RecommendationEvidenceItem] = Field(default_factory=list)
     evidence: list[RecommendationEvidenceItem] = Field(default_factory=list)
     raw_evidences: list[Any] = Field(default_factory=list)

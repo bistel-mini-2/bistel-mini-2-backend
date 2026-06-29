@@ -10,6 +10,7 @@ from app.core.dependencies import CurrentUserDep, DbSessionDep
 from app.db.session import AsyncSessionLocal
 from app.schemas.ai_request_schema import (
     AiRequestSnapshot,
+    EligibilityAnswersCreate,
     EligibilityResultResponse,
     EligibilityRequestCreate,
     RecommendationAnswerSubmit,
@@ -261,4 +262,23 @@ async def get_eligibility_request(
         request_id=request_id,
         user_id=current_user.user_id,
     )
+    return success_response(data=response, meta=_eligibility_result_meta(response))
+
+
+@eligibility_router.post("/requests/{request_id}/answers")
+async def answer_eligibility_request(
+    request_id: int,
+    payload: EligibilityAnswersCreate,
+    db: DbSessionDep,
+    current_user: CurrentUserDep,
+) -> JSONResponse:
+    service = AiRequestLifecycleService()
+    response = await service.answer_eligibility_follow_up(
+        db=db,
+        request_id=request_id,
+        user_id=current_user.user_id,
+        answers=payload.answers,
+        raw_answer=payload.raw_answer,
+    )
+    await db.commit()
     return success_response(data=response, meta=_eligibility_result_meta(response))
