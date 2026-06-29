@@ -266,6 +266,60 @@ class PolicyRepository:
         )
         return [dict(row) for row in result.mappings().all()]
 
+    @classmethod
+    async def find_policies_by_ids(
+        cls,
+        db: AsyncSession,
+        policy_ids: list[int],
+    ) -> list[dict[str, Any]]:
+        """주어진 policy_id들의 목록용 표시 행을 로드한다(유사 정책 후보 로딩).
+
+        반환 행 모양은 find_related_policies와 동일해 PolicyService._to_response가
+        그대로 처리할 수 있다. 입력 순서는 보장하지 않으므로 호출부에서 재정렬한다.
+        """
+        if not policy_ids:
+            return []
+        result = await db.execute(
+            text(
+                """
+                SELECT
+                    p.policy_id,
+                    p.policy_code AS slug,
+                    p.policy_name AS name,
+                    p.main_category AS category,
+                    p.sub_category,
+                    COALESCE(
+                        (
+                            SELECT jsonb_agg(pt.tag_name ORDER BY pt.tag_name)
+                            FROM policy_tag pt
+                            WHERE pt.policy_id = p.policy_id
+                        ),
+                        '[]'::jsonb
+                    ) AS tags,
+                    pd.easy_summary AS summary,
+                    pd.benefit_description AS benefit_summary,
+                    p.provider_name AS agency,
+                    p.benefit_type,
+                    p.application_status,
+                    p.application_start_date,
+                    p.application_end_date,
+                    pd.application_period_text,
+                    p.region_scope,
+                    p.region_code,
+                    p.official_url,
+                    cp.condition_json AS condition_profile_json
+                FROM policy p
+                LEFT JOIN policy_detail pd ON pd.policy_id = p.policy_id
+                LEFT JOIN policy_condition_profile cp
+                    ON cp.policy_id = p.policy_id
+                WHERE p.is_active = TRUE
+                  AND p.policy_id IN :policy_ids
+                """,
+            ).bindparams(bindparam("policy_ids", expanding=True)),
+            {"policy_ids": policy_ids},
+        )
+        return [dict(row) for row in result.mappings().all()]
+
     @staticmethod
     async def ensure_search_indexes(conn) -> None:
         async with conn.cursor() as cur:

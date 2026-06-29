@@ -15,11 +15,13 @@ from app.schemas.policy_schema import (
     PolicySort,
 )
 from app.schemas.policy_summary_schema import PolicySummaryResponse
+from app.schemas.similar_policy_schema import SimilarPolicyListResponse
 from app.services.policy_service import PolicyServiceDep
 from app.services.policy_summary_service import (
     PolicySummaryService,
     PolicySummaryServiceDep,
 )
+from app.services.similar_policy_service import SimilarPolicyServiceDep
 
 
 router = APIRouter(prefix="/api/v1/policies", tags=["Policies"])
@@ -118,3 +120,22 @@ async def get_policy_detail(
         policy_slug=policy_slug,
     )
     return success_response(data=policy)
+
+
+@router.get(
+    "/{policy_slug}/similar",
+    response_model=ApiResponse[SimilarPolicyListResponse],
+    summary="유사 정책 조회",
+)
+async def get_similar_policies(
+    policy_slug: str,
+    db: DbSessionDep,
+    service: SimilarPolicyServiceDep,
+    limit: int = Query(default=4, ge=1, le=10),
+) -> JSONResponse:
+    result = await service.find_similar(
+        db,
+        policy_slug=policy_slug,
+        limit=limit,
+    )
+    return success_response(data=result)
