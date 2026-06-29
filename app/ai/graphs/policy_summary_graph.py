@@ -1,3 +1,4 @@
+import json
 from typing import Any
 
 from langgraph.graph import END, START, StateGraph
@@ -5,6 +6,7 @@ from langgraph.graph import END, START, StateGraph
 from app.ai.agents.policy_summary_agent import PolicySummaryAgent
 from app.ai.states.policy_summary_state import PolicySummaryGraphState
 from app.ai.tools.policy_chunk_search_tool import search_policy_chunks
+from app.ai.utils.policy_summary_utils import build_policy_summary_key_points
 from app.schemas.ai_contract import EvidenceChunk
 
 
@@ -24,9 +26,16 @@ class PolicySummaryGraphRunner:
 
     async def run(self, policy: dict[str, Any]) -> dict[str, Any]:
         final_state = await self.graph.ainvoke({"policy": policy})
+        summary = final_state.get("summary") or ""
         return {
-            "summary": final_state.get("summary") or "",
+            "summary": summary,
+            "easy_summary": summary,
+            "key_points": build_policy_summary_key_points(
+                policy,
+                content_limit=160,
+            ),
             "evidence": list(final_state.get("evidence") or []),
+            "evidence_chunks": list(final_state.get("evidence_chunks") or []),
         }
 
     async def summary_evidence_search(
@@ -34,18 +43,7 @@ class PolicySummaryGraphRunner:
         state: PolicySummaryGraphState,
     ) -> PolicySummaryGraphState:
         policy = state["policy"]
-        query = " ".join(
-            str(value)
-            for value in (
-                policy.get("condition_profile_source_text"),
-                policy.get("condition_profile_target_summary"),
-                policy.get("name"),
-                policy.get("target_description"),
-                policy.get("benefit_description"),
-                policy.get("application_method"),
-            )
-            if value
-        )
+        query = _build_evidence_query(policy)
         chunks: list[EvidenceChunk] = []
         if query:
             try:
@@ -71,3 +69,37 @@ class PolicySummaryGraphRunner:
             "summary": result.summary,
             "evidence": result.evidence,
         }
+
+def _build_evidence_query(policy: dict[str, Any]) -> str:
+    condition_json = _condition_json(policy)
+    condition_profile_text = " ".join(
+        str(value)
+        for value in (
+            policy.get("condition_profile_source_text"),
+            policy.get("condition_profile_target_summary"),
+            _json_text(condition_json),
+        )
+        if value
+    )
+    return " ".join(
+        str(value)
+        for value in (
+            condition_profile_text,
+            policy.get("name"),
+            None if condition_profile_text else policy.get("target_description"),
+            policy.get("benefit_description"),
+            policy.get("application_method"),
+        )
+        if value
+    )
+
+
+def _condition_json(policy: dict[str, Any]) -> dict[str, Any]:
+    value = policy.get("condition_profile_json")
+    return value if isinstance(value, dict) else {}
+
+
+def _json_text(value: Any) -> str:
+    if not value:
+        return ""
+    return json.dumps(value, ensure_ascii=False, default=str)

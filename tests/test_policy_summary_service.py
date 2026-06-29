@@ -5,6 +5,9 @@ from unittest.mock import AsyncMock
 import pytest
 
 from app.ai.agents.policy_summary_agent import LangChainPolicySummaryGenerator
+from app.ai.agents.policy_summary_agent import PolicySummaryGeneration
+from app.ai.graphs import policy_summary_graph as graph_module
+from app.ai.graphs.policy_summary_graph import PolicySummaryGraphRunner
 from app.common.exceptions import AppException
 from app.repositories.policy_repository import PolicyRepository
 from app.repositories.policy_summary_repository import PolicySummaryRepository
@@ -301,6 +304,97 @@ def test_summary_fallback_uses_condition_profile_source_text_as_evidence() -> No
     assert "policy_condition_profile" in prompt
     assert "condition_json" in prompt
     assert "원본 선정기준: 만 2세 미만 아동" in prompt
+
+
+def test_policy_summary_graph_uses_condition_profile_for_query_and_key_points(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    class FakeAgent:
+        async def summarize(self, policy, evidence_chunks):
+            return PolicySummaryGeneration(
+                summary="graph summary",
+                evidence=["graph evidence"],
+            )
+
+    async def fake_search_policy_chunks(*, query, policy_ids, top_k):
+        captured["query"] = query
+        captured["policy_ids"] = policy_ids
+        captured["top_k"] = top_k
+        return []
+
+    monkeypatch.setattr(
+        graph_module,
+        "search_policy_chunks",
+        fake_search_policy_chunks,
+    )
+
+    result = asyncio.run(
+        PolicySummaryGraphRunner(agent=FakeAgent()).run(
+            {
+                "policy_id": 100,
+                "name": "Birth Support",
+                "target_description": "Legacy detail target",
+                "condition_profile_target_summary": "Profile target summary",
+                "condition_profile_source_text": "Profile raw source text",
+                "condition_profile_json": {
+                    "condition_tree": {
+                        "field": "child_age",
+                        "operator": "LT",
+                        "value": 2,
+                        "source_text": "child under 2",
+                    }
+                },
+            }
+        )
+    )
+
+    assert "Profile raw source text" in str(captured["query"])
+    assert "child_age" in str(captured["query"])
+    assert "Legacy detail target" not in str(captured["query"])
+    assert result["key_points"][0] == {
+        "label": "target",
+        "content": "Profile target summary",
+    }
+
+
+def test_policy_summary_graph_keeps_target_description_without_condition_profile(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    class FakeAgent:
+        async def summarize(self, policy, evidence_chunks):
+            return PolicySummaryGeneration(
+                summary="graph summary",
+                evidence=["graph evidence"],
+            )
+
+    async def fake_search_policy_chunks(*, query, policy_ids, top_k):
+        captured["query"] = query
+        captured["policy_ids"] = policy_ids
+        captured["top_k"] = top_k
+        return []
+
+    monkeypatch.setattr(
+        graph_module,
+        "search_policy_chunks",
+        fake_search_policy_chunks,
+    )
+
+    asyncio.run(
+        PolicySummaryGraphRunner(agent=FakeAgent()).run(
+            {
+                "policy_id": 100,
+                "name": "Birth Support",
+                "target_description": "Legacy detail target",
+                "benefit_description": "Medical expense voucher",
+            }
+        )
+    )
+
+    assert "Legacy detail target" in str(captured["query"])
 
 
 def test_summary_normalization_pads_to_exactly_three_lines() -> None:
