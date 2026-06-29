@@ -1,14 +1,12 @@
 import asyncio
 import json
 from datetime import datetime
-from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi import status
 
-from app.ai.nodes.chat.chat_nodes import BRANCH_LLM_TAG
 from app.common.exceptions import AppException
 from app.db.models.chat_message import ChatMessage
 from app.db.models.chat_session import ChatSession
@@ -142,11 +140,11 @@ def test_send_message_persists_normalized_outputs(monkeypatch) -> None:
         "find_ids_by_codes",
         AsyncMock(return_value={"WLF1": 42}),
     )
-    run_graph = AsyncMock(return_value=_graph_result())
+    run_chat = AsyncMock(return_value=_graph_result())
     monkeypatch.setattr(
         chat_service_module,
-        "_run_supervisor_graph",
-        run_graph,
+        "_run_chat",
+        run_chat,
     )
 
     response = asyncio.run(
@@ -182,8 +180,8 @@ def test_send_message_persists_normalized_outputs(monkeypatch) -> None:
     assert assistant.policies[0].action_type == "RECOMMENDED"
     assert assistant.policies[0].policy_id == "42"
     assert assistant.evidences[0].chunk_id == "101"
-    run_graph.assert_awaited_once()
-    assert run_graph.await_args.kwargs["recent_assistant_policy"] == recent_policy
+    run_chat.assert_awaited_once()
+    assert run_chat.await_args.kwargs["recent_assistant_policy"] == recent_policy
 
     # structured_json에는 복원 시 카드 메타가 유지되도록 policies 원본 payload를 보관한다.
     assistant_msg_obj = mocks["_saved_messages"][1]
@@ -368,7 +366,7 @@ def test_send_message_raises_404_without_assistant_save_when_session_deleted_mid
     )
     monkeypatch.setattr(
         chat_service_module,
-        "_run_supervisor_graph",
+        "_run_chat",
         AsyncMock(return_value=_graph_result()),
     )
 
@@ -402,7 +400,7 @@ def test_send_message_skips_unknown_policy_slug(monkeypatch) -> None:
     )
     monkeypatch.setattr(
         chat_service_module,
-        "_run_supervisor_graph",
+        "_run_chat",
         AsyncMock(return_value=_graph_result(
             policy_links=[
                 {"policy_slug": "WLF_KNOWN", "action_type": "RECOMMENDED"},
@@ -433,7 +431,7 @@ def test_send_message_policy_summary_creates_no_policy_link(monkeypatch) -> None
     )
     monkeypatch.setattr(
         chat_service_module,
-        "_run_supervisor_graph",
+        "_run_chat",
         AsyncMock(return_value=_graph_result(
             intent="policy_summary",
             policy_links=[],  # policy_summary intent는 graph가 빈 배열을 반환
@@ -467,15 +465,15 @@ def test_send_message_fallback_when_graph_fails(monkeypatch) -> None:
     )
 
     async def boom(**kwargs: Any) -> dict:
-        # 실제 _run_supervisor_graph는 예외를 잡아 fallback dict를 반환하므로 그 동작을 흉내
+        # 실제 _run_chat는 예외를 잡아 fallback dict를 반환하므로 그 동작을 흉내
         return {
             "assistant_payload": chat_service_module._fallback_payload(),
-            "supervisor_decision": {"intent": "unclear", "raw": "graph_error"},
+            "supervisor_decision": {"intent": "unclear", "raw": "routing_error"},
             "evidences_to_save": [],
             "policy_links_to_save": [],
         }
 
-    monkeypatch.setattr(chat_service_module, "_run_supervisor_graph", boom)
+    monkeypatch.setattr(chat_service_module, "_run_chat", boom)
 
     response = asyncio.run(
         ChatService.send_message(
@@ -503,7 +501,7 @@ def test_send_message_schedules_title_generation_for_first_message(monkeypatch) 
     )
     monkeypatch.setattr(
         chat_service_module,
-        "_run_supervisor_graph",
+        "_run_chat",
         AsyncMock(return_value=_graph_result()),
     )
     schedule_mock = MagicMock()
@@ -532,7 +530,7 @@ def test_send_message_skips_title_generation_when_title_exists(monkeypatch) -> N
     )
     monkeypatch.setattr(
         chat_service_module,
-        "_run_supervisor_graph",
+        "_run_chat",
         AsyncMock(return_value=_graph_result()),
     )
     schedule_mock = MagicMock()
@@ -571,7 +569,7 @@ def test_send_message_skips_title_generation_when_history_not_empty(monkeypatch)
     )
     monkeypatch.setattr(
         chat_service_module,
-        "_run_supervisor_graph",
+        "_run_chat",
         AsyncMock(return_value=_graph_result()),
     )
     schedule_mock = MagicMock()
@@ -690,36 +688,33 @@ def test_list_messages_includes_normalized_data(monkeypatch) -> None:
 # --- streaming -------------------------------------------------------------
 
 
-class _FakeGraph:
-    def __init__(self, events: list[dict] | None = None, raise_after: int | None = None) -> None:
-        self._events = events or []
-        self._raise_after = raise_after
-        self.states: list[dict] = []
-
-    def astream_events(self, state: dict, version: str = "v2"):
-        self.states.append(state)
-        events = self._events
-        raise_after = self._raise_after
-
-        async def gen():
-            for index, event in enumerate(events):
-                yield event
-                if raise_after is not None and index + 1 >= raise_after:
-                    raise RuntimeError("boom")
-
-        return gen()
+def _intent_sse(intent: str) -> str:
+    return "recommendation" if intent == "recommend" else "general"
 
 
-def _token_event(text: str, *, tags: list[str] | None = None) -> dict:
-    return {
-        "event": "on_chat_model_stream",
-        "tags": tags if tags is not None else [BRANCH_LLM_TAG],
-        "data": {"chunk": SimpleNamespace(content=text)},
-    }
+def _patch_run_chat_for_stream(
+    monkeypatch,
+    result: dict,
+    *,
+    tokens: list[str] | None = None,
+    raise_error: bool = False,
+) -> list[dict]:
+    calls: list[dict] = []
 
+    async def fake_run_chat(**kwargs: Any) -> dict:
+        calls.append(kwargs)
+        if raise_error:
+            raise RuntimeError("boom")
+        if kwargs.get("emit_intent") and kwargs.get("on_intent") is not None:
+            intent = result.get("supervisor_decision", {}).get("intent", "unclear")
+            await kwargs["on_intent"](_intent_sse(intent))
+        if kwargs.get("on_token") is not None:
+            for token in tokens or []:
+                await kwargs["on_token"](token)
+        return {**(kwargs.get("preseed_result") or {}), **result}
 
-def _chain_end_event(output: dict) -> dict:
-    return {"event": "on_chain_end", "data": {"output": output}}
+    monkeypatch.setattr(chat_service_module, "_run_chat", fake_run_chat)
+    return calls
 
 
 def _parse_sse_chunks(chunks: list[str]) -> list[dict]:
@@ -754,15 +749,11 @@ def test_send_message_stream_emits_tokens_then_done(monkeypatch) -> None:
     )
 
     graph_result = _graph_result()
-    fake_events = [
-        _token_event("안녕"),
-        _token_event("하세요"),
-        # supervisor 등 다른 태그의 토큰은 무시되어야 함
-        _token_event("ignored", tags=["supervisor"]),
-        _chain_end_event(graph_result),
-    ]
-    fake_graph = _FakeGraph(events=fake_events)
-    monkeypatch.setattr(chat_service_module, "chat_supervisor_graph", fake_graph)
+    run_chat_calls = _patch_run_chat_for_stream(
+        monkeypatch,
+        graph_result,
+        tokens=["안녕", "하세요"],
+    )
 
     chunks = asyncio.run(_collect(
         ChatService.send_message_stream(db=db, session=session, content="추천해줘")
@@ -780,7 +771,7 @@ def test_send_message_stream_emits_tokens_then_done(monkeypatch) -> None:
     assert payload["chat_session_id"] == "10"
     assert payload["assistant_message"]["content"] == "테스트 답변"
     assert payload["assistant_message"]["policies"][0]["action_type"] == "RECOMMENDED"
-    assert fake_graph.states[0]["recent_assistant_policy"] == recent_policy
+    assert run_chat_calls[0]["recent_assistant_policy"] == recent_policy
 
     # 정규화 INSERT가 한 번만 호출되었는지
     mocks["bulk_save_message_policies"].assert_awaited_once()
@@ -799,12 +790,7 @@ def test_send_message_stream_error_event_when_graph_raises(monkeypatch) -> None:
         AsyncMock(return_value={}),
     )
 
-    # intent 확정 전 raise — 토큰은 버퍼에만 있고 flush 전에 실패 → error 이벤트만 종료
-    monkeypatch.setattr(
-        chat_service_module,
-        "chat_supervisor_graph",
-        _FakeGraph(events=[_token_event("부분")], raise_after=1),
-    )
+    _patch_run_chat_for_stream(monkeypatch, _graph_result(), raise_error=True)
 
     chunks = asyncio.run(_collect(
         ChatService.send_message_stream(db=db, session=session, content="x")
@@ -841,13 +827,10 @@ def test_send_message_stream_cancelled_before_persist_saves_nothing(monkeypatch)
         "unregister",
         unregister_mock,
     )
-    monkeypatch.setattr(
-        chat_service_module,
-        "chat_supervisor_graph",
-        _FakeGraph(events=[
-            _token_event("저장되면 안 됨"),
-            _chain_end_event(_graph_result()),
-        ]),
+    _patch_run_chat_for_stream(
+        monkeypatch,
+        _graph_result(),
+        tokens=["저장되면 안 됨"],
     )
 
     chunks = asyncio.run(_collect(
@@ -900,11 +883,7 @@ def test_follow_up_recommendation_clears_eligibility_slot(monkeypatch) -> None:
     )
 
     graph_result = _graph_result()
-    monkeypatch.setattr(
-        chat_service_module,
-        "chat_supervisor_graph",
-        _FakeGraph(events=[_chain_end_event(graph_result)]),
-    )
+    run_chat_calls = _patch_run_chat_for_stream(monkeypatch, graph_result)
 
     chunks = asyncio.run(_collect(
         ChatService.send_message_stream(db=db, session=session, content="다른 정책 추천해줘")
@@ -914,6 +893,7 @@ def test_follow_up_recommendation_clears_eligibility_slot(monkeypatch) -> None:
     assert events[0]["type"] == "intent"
     assert events[0]["intent"] == "recommendation"
     assert events[-1]["type"] == "done"
+    assert run_chat_calls[0]["emit_intent"] is False
 
     # 슬롯 저장 호출 확인 — eligibility_status가 None으로 클리어됨
     mocks["update_session_slot"].assert_awaited_once()
@@ -981,17 +961,10 @@ def test_intent_emitted_only_once_when_chain_end_fires_twice(monkeypatch) -> Non
     monkeypatch.setattr(PolicyRepository, "find_ids_by_codes", AsyncMock(return_value={"WLF1": 42}))
 
     graph_result = _graph_result()
-    # 두 번의 on_chain_end — 두 번째도 supervisor_decision 포함 (브랜치 노드가 **state로 spread하는 상황)
-    fake_events = [
-        _token_event("안녕"),
-        _chain_end_event(graph_result),                      # supervisor 노드 완료 → intent 발행
-        _token_event("하세요"),
-        _chain_end_event(graph_result),                      # 브랜치 노드 완료 → 무시
-    ]
-    monkeypatch.setattr(
-        chat_service_module,
-        "chat_supervisor_graph",
-        _FakeGraph(events=fake_events),
+    _patch_run_chat_for_stream(
+        monkeypatch,
+        graph_result,
+        tokens=["안녕", "하세요"],
     )
 
     chunks = asyncio.run(_collect(
@@ -1133,11 +1106,7 @@ def test_follow_up_other_intent_passes_to_supervisor(monkeypatch) -> None:
         policy_links=[{"policy_slug": "WLF2", "action_type": "COMPARE"}],
     )
     monkeypatch.setattr(PolicyRepository, "find_ids_by_codes", AsyncMock(return_value={"WLF2": 43}))
-    monkeypatch.setattr(
-        chat_service_module,
-        "chat_supervisor_graph",
-        _FakeGraph(events=[_chain_end_event(graph_result)]),
-    )
+    _patch_run_chat_for_stream(monkeypatch, graph_result)
 
     chunks = asyncio.run(_collect(
         ChatService.send_message_stream(db=db, session=session, content="이 정책이랑 다른 정책 비교해줘")
