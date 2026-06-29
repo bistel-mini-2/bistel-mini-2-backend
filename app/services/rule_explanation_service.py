@@ -58,20 +58,20 @@ class RuleExplanationService:
         if verdict == VERDICT_UNCERTAIN:
             manual_reason = self._clean(entry.get("manual_check_reason"))
             if manual_reason:
-                return self._shorten(manual_reason)
+                return manual_reason
 
         source = self._clean(entry.get("source_text"))
         if source and self._is_displayable(source):
-            return self._with_verdict(self._shorten(source), verdict)
+            return self._with_verdict(self._display_phrase(source, verdict), verdict)
 
         # note는 사람이 읽는 문구일 때만 사용한다(group_key/field_name 같은 내부 토큰 제외).
         note = self._clean(entry.get("note"))
         if note and self._is_human_text(note):
-            return self._with_verdict(self._shorten(note), verdict)
+            return self._with_verdict(self._display_phrase(note, verdict), verdict)
 
         reason = self._clean(entry.get("reason"))
         if reason and self._is_displayable(reason):
-            return self._shorten(reason)
+            return reason if verdict == VERDICT_UNCERTAIN else self._shorten(reason)
 
         label = self._field_label(entry.get("field") or entry.get("field_name"))
         return self._with_verdict(label, verdict)
@@ -86,7 +86,11 @@ class RuleExplanationService:
                 if note and self._is_human_text(note):
                     text = note
             if text:
-                phrases.append(self._shorten(text, _MAX_GROUP_ITEM_LEN))
+                phrases.append(
+                    text
+                    if verdict == VERDICT_UNCERTAIN
+                    else self._shorten(text, _MAX_GROUP_ITEM_LEN)
+                )
         phrases = list(dict.fromkeys(phrases))
         if not phrases:
             label = self._field_label(
@@ -117,6 +121,11 @@ class RuleExplanationService:
     def _with_verdict(self, phrase: str, verdict: str) -> str:
         suffix = _VERDICT_SUFFIX.get(verdict)
         return f"{phrase} {suffix}" if suffix else phrase
+
+    def _display_phrase(self, phrase: str, verdict: str) -> str:
+        if verdict == VERDICT_UNCERTAIN:
+            return phrase
+        return self._shorten(phrase)
 
     def _field_label(self, field: Any) -> str:
         # 라벨 맵에 없는 field는 원시 enum/snake_case 노출 대신 일반 표기로 폴백.

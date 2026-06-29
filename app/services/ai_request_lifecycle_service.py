@@ -5,6 +5,10 @@ from fastapi import status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ai.agents.eligibility_evidence_agent import (
+    EligibilityEvidenceAgent,
+    EligibilityEvidenceContext,
+)
 from app.ai.tools.policy_chunk_search_tool import search_policy_chunks
 from app.ai.graphs.recommendation_graph import RecommendationGraphRunner
 from app.ai.agents.condition_agent import ConditionAgent
@@ -50,6 +54,9 @@ from app.services.recommendation_service import RecommendationService
 
 
 RECOMMENDATION_RESULT_SOURCE_TYPE = "RECOMMENDATION_RESULT"
+AI_REQUEST_USER_ERROR_MESSAGE = (
+    "분석 처리 중 일시적인 문제가 발생했어요. 잠시 후 다시 시도해 주세요."
+)
 logger = logging.getLogger(__name__)
 
 
@@ -64,6 +71,7 @@ class AiRequestLifecycleService:
         recommendation_service: RecommendationService | None = None,
         rule_filter_service: PolicyRuleFilterService | None = None,
         policy_chunk_searcher: Any | None = None,
+        eligibility_evidence_agent: EligibilityEvidenceAgent | None = None,
     ) -> None:
         self.repository = repository or AiRequestRepository()
         self.assessment_repository = assessment_repository or PolicyAssessmentRepository()
@@ -73,6 +81,9 @@ class AiRequestLifecycleService:
         self.recommendation_service = recommendation_service
         self.rule_filter_service = rule_filter_service or PolicyRuleFilterService()
         self.policy_chunk_searcher = policy_chunk_searcher or search_policy_chunks
+        self.eligibility_evidence_agent = (
+            eligibility_evidence_agent or EligibilityEvidenceAgent()
+        )
 
     async def create_request(
         self,
@@ -228,7 +239,7 @@ class AiRequestLifecycleService:
             request_type,
             request_id,
             RequestStatus.FAILED,
-            error_message=error_message,
+            error_message=AI_REQUEST_USER_ERROR_MESSAGE if error_message else None,
         )
 
     async def get_request(
@@ -284,8 +295,12 @@ class AiRequestLifecycleService:
     ) -> AiRequestSnapshot:
         request = await self._get_request_or_raise(db, request_type, request_id)
         parsed_query_json = request.parsed_query_json or {}
+        selected_conditions = parsed_query_json.get("selected_conditions")
+        manual_confirmations = self._manual_confirmations(selected_conditions)
         # 추가질문 게이트를 이미 한 번 거쳤는지(답변 후 재실행인지). 재실행이면 게이트 스킵.
-        follow_up_resolved = bool(parsed_query_json.get("follow_up_resolved"))
+        follow_up_resolved = bool(parsed_query_json.get("follow_up_resolved")) or bool(
+            manual_confirmations
+        )
         profile_snapshot = await self._condition_profile_snapshot(
             db=db,
             request_type=request_type,
@@ -294,7 +309,7 @@ class AiRequestLifecycleService:
         condition_result = await self.condition_agent.analyze(
             ConditionInput(
                 raw_query=request.raw_query,
-                selected_conditions=parsed_query_json.get("selected_conditions"),
+                selected_conditions=selected_conditions,
                 profile_snapshot=profile_snapshot,
             )
         )
@@ -308,6 +323,10 @@ class AiRequestLifecycleService:
         ]
         parsed_result = {
             **condition_result.parsed_query_json,
+            "selected_conditions": (
+                condition_result.parsed_query_json.get("selected_conditions")
+                or selected_conditions
+            ),
             "input_issues": input_issues_json,
             "questions": [
                 candidate.model_dump(mode="json")
@@ -338,7 +357,7 @@ class AiRequestLifecycleService:
                 input_issues=input_issues_json,
                 profile_conflict_json=profile_conflict_json,
                 raw_query=request.raw_query,
-                selected_conditions=parsed_query_json.get("selected_conditions"),
+                selected_conditions=selected_conditions,
             )
             result_json = normalize_recommendation_result_json(result_json)
             # AI 판정 게이트: 아직 추가질문을 안 거쳤고, 최종 결과에 공통 부족정보가 있으면
@@ -399,6 +418,10 @@ class AiRequestLifecycleService:
             assessment_condition,
             rule_filter,
         )
+        assessment_condition = self._apply_manual_confirmations(
+            assessment_condition,
+            (request.parsed_query_json or {}).get("selected_conditions"),
+        )
         evidence_chunks = await self._find_eligibility_evidence_chunks(
             db=db,
             policy_id=policy_id,
@@ -413,6 +436,15 @@ class AiRequestLifecycleService:
             ),
             assessment_type=ASSESSMENT_TYPE_ELIGIBILITY,
         )[0]
+        eligibility_result_json = await self._eligibility_result_json(
+            request=request,
+            assessment_result=assessment_result,
+        )
+        await self.repository.update_result(
+            db=db,
+            request=request,
+            result_json=eligibility_result_json,
+        )
 
         async with psycopg_pool.connection() as conn:
             await PolicyAssessmentRepository.save_assessment(
@@ -586,6 +618,60 @@ class AiRequestLifecycleService:
             ),
         }
 
+    def _apply_manual_confirmations(
+        self,
+        condition: dict[str, Any],
+        selected_conditions: Any,
+    ) -> dict[str, Any]:
+        confirmations = self._manual_confirmations(selected_conditions)
+        if not confirmations:
+            return condition
+
+        manual_check_points = self._string_values(condition.get("manual_check_points"))
+        matched_conditions = self._string_values(condition.get("matched_conditions"))
+        rule_failures = self._string_values(condition.get("rule_failures"))
+
+        for confirmation in confirmations:
+            if not isinstance(confirmation, dict):
+                continue
+
+            question = self._clean_user_condition_text(confirmation.get("question"))
+            answer = str(confirmation.get("answer") or "").strip().lower()
+            if not question or self._is_internal_condition_text(question):
+                continue
+
+            manual_check_points = [
+                item for item in manual_check_points if item != question
+            ]
+            if answer == "yes":
+                matched_conditions.append(question)
+            elif answer == "no":
+                rule_failures.append(question)
+            else:
+                manual_check_points.append(question)
+
+        return {
+            **condition,
+            "matched_conditions": self._deduplicate_strings(matched_conditions),
+            "rule_failures": self._deduplicate_strings(rule_failures),
+            "manual_check_points": self._deduplicate_strings(manual_check_points),
+        }
+
+    def _manual_confirmations(self, selected_conditions: Any) -> list[dict[str, Any]]:
+        if not isinstance(selected_conditions, dict):
+            return []
+        confirmations = selected_conditions.get("manual_confirmations")
+        if not isinstance(confirmations, list):
+            return []
+        return [
+            confirmation
+            for confirmation in confirmations
+            if isinstance(confirmation, dict)
+            and self._clean_user_condition_text(confirmation.get("question"))
+            and str(confirmation.get("answer") or "").strip().lower()
+            in {"yes", "no", "unknown"}
+        ]
+
     @staticmethod
     def _merge_string_values(
         current_value: Any,
@@ -612,7 +698,11 @@ class AiRequestLifecycleService:
             db=db,
             request=request,
             status=request_status,
-            error_message=error_message,
+            error_message=(
+                AI_REQUEST_USER_ERROR_MESSAGE
+                if request_status == RequestStatus.FAILED and error_message
+                else error_message
+            ),
         )
         return self.to_snapshot(request_type, request)
 
@@ -661,7 +751,12 @@ class AiRequestLifecycleService:
             recommendations=recommendations,
             questions=list(parsed_query_json.get("questions") or []),
             input_issues=list(parsed_query_json.get("input_issues") or []),
-            error_message=request.error_message,
+            error_message=(
+                AI_REQUEST_USER_ERROR_MESSAGE
+                if RequestStatus(request.request_status) == RequestStatus.FAILED
+                and request.error_message
+                else None
+            ),
         )
 
     def to_recommendation_polling_response(
@@ -694,7 +789,9 @@ class AiRequestLifecycleService:
             recommendations=results,
             follow_up_questions=follow_up_questions,
             error_message=(
-                request.error_message if request_status == RequestStatus.FAILED else None
+                AI_REQUEST_USER_ERROR_MESSAGE
+                if request_status == RequestStatus.FAILED and request.error_message
+                else None
             ),
         )
 
@@ -705,7 +802,9 @@ class AiRequestLifecycleService:
         assessment: dict[str, Any] | None,
     ) -> EligibilityResultResponse:
         request_status = RequestStatus(request.request_status)
-        questions = self._eligibility_follow_up_questions(request.parsed_query_json or {})
+        parsed_questions = self._eligibility_follow_up_questions(
+            request.parsed_query_json or {}
+        )
         input_summary = self._eligibility_input_summary(request)
 
         if assessment is None:
@@ -715,24 +814,34 @@ class AiRequestLifecycleService:
                 policy_id=str(request.policy_id),
                 slug=str(policy["policy_code"]),
                 policy_name=str(policy["policy_name"]),
-                questions=questions,
-                follow_up_questions=questions,
+                questions=parsed_questions,
+                follow_up_questions=parsed_questions,
                 input_summary=input_summary,
-                error_message=(
-                    request.error_message if request_status == RequestStatus.FAILED else None
-                ),
+                error_message=self._safe_error_message(request, request_status),
             )
 
         assessment_status = AssessmentStatus(str(assessment["assessment_status"]))
         user_status = map_assessment_to_user_status(assessment_status)
-        matched_conditions = self._string_list(assessment.get("matched_conditions_json"))
-        missing_conditions = self._string_list(assessment.get("missing_conditions_json"))
+        matched_conditions = self._user_condition_list(
+            assessment.get("matched_conditions_json")
+        )
+        missing_conditions = self._user_condition_list(
+            assessment.get("missing_conditions_json")
+        )
         conflicting_conditions = self._string_list(
             assessment.get("conflicting_conditions_json")
         )
-        manual_check_points = self._string_list(
+        manual_check_points = self._user_condition_list(
             assessment.get("manual_check_points_json")
         )
+        manual_questions = self._manual_check_follow_up_questions(
+            manual_check_points,
+            start_index=len(parsed_questions),
+        )
+        questions = self._deduplicate_follow_up_questions(
+            [*parsed_questions, *manual_questions]
+        )
+        stored_evidences = self._stored_eligibility_evidences(request)
 
         return EligibilityResultResponse(
             request_id=str(request.request_id),
@@ -755,18 +864,69 @@ class AiRequestLifecycleService:
             missing_conditions=missing_conditions,
             conflicting_conditions=conflicting_conditions,
             manual_check_points=manual_check_points,
-            evidences=[
-                self._eligibility_evidence_item(evidence, request.policy_id)
-                for evidence in assessment.get("evidences", [])
-                if isinstance(evidence, dict)
-            ],
+            evidences=self._eligibility_evidence_items(
+                evidences=[
+                    evidence
+                    for evidence in assessment.get("evidences", [])
+                    if isinstance(evidence, dict)
+                ],
+                stored_evidences=stored_evidences,
+                fallback_policy_id=request.policy_id,
+                assessment_status=assessment_status,
+                matched_conditions=matched_conditions,
+                missing_conditions=missing_conditions,
+                conflicting_conditions=conflicting_conditions,
+                manual_check_points=manual_check_points,
+            ),
             questions=questions,
             follow_up_questions=questions,
             input_summary=input_summary,
-            error_message=(
-                request.error_message if request_status == RequestStatus.FAILED else None
-            ),
+            error_message=self._safe_error_message(request, request_status),
         )
+
+    async def _eligibility_result_json(
+        self,
+        request: AiRequestModel,
+        assessment_result: Any,
+    ) -> dict[str, Any]:
+        evidence_payloads = [
+            {
+                **evidence.model_dump(mode="json"),
+                "display_text": self._eligibility_evidence_display_text(
+                    item=evidence.model_dump(mode="json"),
+                    assessment_status=assessment_result.assessment_status,
+                    matched_conditions=assessment_result.matched_conditions,
+                    missing_conditions=assessment_result.missing_conditions,
+                    conflicting_conditions=assessment_result.conflicting_conditions,
+                    manual_check_points=assessment_result.manual_check_points,
+                ),
+            }
+            for evidence in assessment_result.evidences
+        ]
+        display_texts = await self.eligibility_evidence_agent.rewrite_display_texts(
+            evidences=evidence_payloads,
+            context=EligibilityEvidenceContext(
+                assessment_status=assessment_result.assessment_status,
+                matched_conditions=assessment_result.matched_conditions,
+                missing_conditions=assessment_result.missing_conditions,
+                conflicting_conditions=assessment_result.conflicting_conditions,
+                manual_check_points=assessment_result.manual_check_points,
+            ),
+            policy_name="정책",
+            user_conditions={
+                **self._selected_conditions_dict(request),
+                "summary": assessment_result.reason_summary,
+                "user_status": assessment_result.user_status.value,
+            },
+        )
+        for evidence, display_text in zip(evidence_payloads, display_texts):
+            evidence["display_text"] = display_text
+        return {
+            "assessment_status": assessment_result.assessment_status.value,
+            "user_status": assessment_result.user_status.value,
+            "reason_summary": assessment_result.reason_summary,
+            "evidences": evidence_payloads,
+        }
 
     def _polling_status(
         self,
@@ -854,6 +1014,7 @@ class AiRequestLifecycleService:
                 question_text=str(question.get("question_text") or ""),
                 reason=question.get("reason"),
                 priority=int(question.get("priority") or 0),
+                options=self._question_options(question),
             )
             for question in questions
             if isinstance(question, dict)
@@ -986,17 +1147,39 @@ class AiRequestLifecycleService:
                 question_text=str(question.get("question_text") or ""),
                 reason=question.get("reason"),
                 priority=int(question.get("priority") or 0),
+                options=self._question_options(question),
             )
             for index, question in enumerate(questions[:2])
             if isinstance(question, dict)
         ]
 
+    def _question_options(self, question: dict[str, Any]) -> list[dict[str, str]]:
+        options = question.get("options")
+        if not isinstance(options, list):
+            return []
+
+        normalized: list[dict[str, str]] = []
+        for option in options:
+            if isinstance(option, str):
+                normalized.append({"value": option, "label": option})
+            elif isinstance(option, dict):
+                value = option.get("value") or option.get("code") or option.get("label")
+                label = option.get("label") or option.get("name") or value
+                if value and label:
+                    normalized.append({"value": str(value), "label": str(label)})
+        return normalized
+
     def _eligibility_input_summary(self, request: AiRequestModel) -> dict[str, Any]:
+        return self._selected_conditions_dict(request) or (
+            request.merged_condition_json or {}
+        )
+
+    def _selected_conditions_dict(self, request: AiRequestModel) -> dict[str, Any]:
         parsed_query_json = request.parsed_query_json or {}
         selected_conditions = parsed_query_json.get("selected_conditions")
         if isinstance(selected_conditions, dict):
             return selected_conditions
-        return request.merged_condition_json or {}
+        return {}
 
     def _eligibility_criteria(
         self,
@@ -1009,22 +1192,30 @@ class AiRequestLifecycleService:
     ) -> list[EligibilityCriteriaItem]:
         criteria: list[EligibilityCriteriaItem] = []
         criteria.extend(
-            EligibilityCriteriaItem(label=condition, status="ok", note="조건이 충족되었습니다.")
+            EligibilityCriteriaItem(
+                label=self._condition_display_label(condition),
+                status="ok",
+                note="",
+            )
             for condition in matched_conditions
         )
         criteria.extend(
-            EligibilityCriteriaItem(label=condition, status="check", note="추가 확인이 필요합니다.")
+            EligibilityCriteriaItem(
+                label=self._condition_display_label(condition),
+                status="check",
+                note="추가 확인이 필요합니다.",
+            )
             for condition in missing_conditions
         )
         criteria.extend(
-            EligibilityCriteriaItem(label=condition, status="check", note="입력값이 서로 충돌합니다.")
+            EligibilityCriteriaItem(
+                label=self._condition_display_label(condition),
+                status="check",
+                note="입력값이 서로 충돌합니다.",
+            )
             for condition in conflicting_conditions
         )
-        criteria.extend(
-            EligibilityCriteriaItem(label=condition, status="check", note="수동 확인이 필요합니다.")
-            for condition in manual_check_points
-        )
-        if not criteria and reason_summary:
+        if not criteria and reason_summary and not manual_check_points:
             status_by_assessment = {
                 AssessmentStatus.LIKELY_MATCH: "ok",
                 AssessmentStatus.NOT_MATCH: "no",
@@ -1042,12 +1233,29 @@ class AiRequestLifecycleService:
         self,
         item: dict[str, Any],
         fallback_policy_id: Any,
+        assessment_status: AssessmentStatus | None = None,
+        matched_conditions: list[str] | None = None,
+        missing_conditions: list[str] | None = None,
+        conflicting_conditions: list[str] | None = None,
+        manual_check_points: list[str] | None = None,
     ) -> RecommendationEvidenceItem:
         evidence_role = item.get("evidence_role")
         return RecommendationEvidenceItem(
             chunk_id=item.get("chunk_id") or "",
             policy_id=item.get("evidence_policy_id") or fallback_policy_id or "",
             snippet=str(item.get("snippet") or ""),
+            display_text=(
+                str(item.get("display_text"))
+                if item.get("display_text") not in (None, "")
+                else self._eligibility_evidence_display_text(
+                    item=item,
+                    assessment_status=assessment_status,
+                    matched_conditions=matched_conditions or [],
+                    missing_conditions=missing_conditions or [],
+                    conflicting_conditions=conflicting_conditions or [],
+                    manual_check_points=manual_check_points or [],
+                )
+            ),
             source_title=str(item.get("source_title") or ""),
             source_url=str(item.get("source_url") or ""),
             score=self._to_float_or_none(item.get("similarity_score")),
@@ -1055,6 +1263,152 @@ class AiRequestLifecycleService:
                 str(evidence_role).lower() if evidence_role is not None else None
             ),
         )
+
+    def _eligibility_evidence_items(
+        self,
+        evidences: list[dict[str, Any]],
+        stored_evidences: dict[str, dict[str, Any]] | None,
+        fallback_policy_id: Any,
+        assessment_status: AssessmentStatus,
+        matched_conditions: list[str],
+        missing_conditions: list[str],
+        conflicting_conditions: list[str],
+        manual_check_points: list[str],
+    ) -> list[RecommendationEvidenceItem]:
+        result: list[RecommendationEvidenceItem] = []
+        seen: set[str] = set()
+        stored_evidences = stored_evidences or {}
+        for evidence in evidences:
+            stored = stored_evidences.get(str(evidence.get("chunk_id")))
+            item = self._eligibility_evidence_item(
+                {**evidence, **(stored or {})},
+                fallback_policy_id,
+                assessment_status=assessment_status,
+                matched_conditions=matched_conditions,
+                missing_conditions=missing_conditions,
+                conflicting_conditions=conflicting_conditions,
+                manual_check_points=manual_check_points,
+            )
+            key = "|".join(
+                (
+                    item.display_text or "",
+                    item.source_url or "",
+                    str(item.chunk_id or ""),
+                )
+            )
+            text_key = " ".join(str(item.display_text or item.snippet or "").split())
+            dedupe_key = text_key or key
+            if dedupe_key in seen:
+                continue
+            seen.add(dedupe_key)
+            result.append(item)
+        return result[:5]
+
+    def _stored_eligibility_evidences(
+        self,
+        request: AiRequestModel,
+    ) -> dict[str, dict[str, Any]]:
+        result_json = (
+            request.result_json
+            if hasattr(request, "result_json") and isinstance(request.result_json, dict)
+            else {}
+        )
+        evidences = result_json.get("evidences")
+        if not isinstance(evidences, list):
+            return {}
+        return {
+            str(evidence.get("chunk_id")): evidence
+            for evidence in evidences
+            if isinstance(evidence, dict) and evidence.get("chunk_id") not in (None, "")
+        }
+
+    def _safe_error_message(
+        self,
+        request: AiRequestModel,
+        request_status: RequestStatus,
+    ) -> str | None:
+        if request_status != RequestStatus.FAILED:
+            return None
+        return AI_REQUEST_USER_ERROR_MESSAGE
+
+    def _user_condition_list(self, value: Any) -> list[str]:
+        return [
+            text
+            for text in (self._clean_user_condition_text(item) for item in self._string_list(value))
+            if text and not self._is_internal_condition_text(text)
+        ]
+
+    def _manual_check_follow_up_questions(
+        self,
+        manual_check_points: list[str],
+        start_index: int = 0,
+    ) -> list[EligibilityFollowUpQuestionItem]:
+        questions: list[EligibilityFollowUpQuestionItem] = []
+        for index, point in enumerate(manual_check_points):
+            text = self._clean_user_condition_text(point)
+            if not text or self._is_internal_condition_text(text):
+                continue
+            questions.append(
+                EligibilityFollowUpQuestionItem(
+                    follow_up_id=f"manual-{start_index + index + 1}",
+                    field_name="manual_confirmation",
+                    question_text=text,
+                    reason="정확한 지원 가능성 판정을 위해 직접 확인이 필요해요.",
+                    priority=start_index + index + 1,
+                    options=[
+                        {"value": "yes", "label": "예, 해당돼요"},
+                        {"value": "no", "label": "아니요, 해당되지 않아요"},
+                        {"value": "unknown", "label": "잘 모르겠어요"},
+                    ],
+                )
+            )
+        return questions
+
+    def _deduplicate_follow_up_questions(
+        self,
+        questions: list[EligibilityFollowUpQuestionItem],
+    ) -> list[EligibilityFollowUpQuestionItem]:
+        seen: set[str] = set()
+        result: list[EligibilityFollowUpQuestionItem] = []
+        for question in questions:
+            key = question.question_text.strip()
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            result.append(question)
+        return result[:5]
+
+    def _eligibility_evidence_display_text(
+        self,
+        item: dict[str, Any],
+        assessment_status: AssessmentStatus | None = None,
+        matched_conditions: list[str] | None = None,
+        missing_conditions: list[str] | None = None,
+        conflicting_conditions: list[str] | None = None,
+        manual_check_points: list[str] | None = None,
+    ) -> str:
+        return self.eligibility_evidence_agent.display_text(
+            evidence=item,
+            context=EligibilityEvidenceContext(
+                assessment_status=assessment_status,
+                matched_conditions=matched_conditions or [],
+                missing_conditions=missing_conditions or [],
+                conflicting_conditions=conflicting_conditions or [],
+                manual_check_points=manual_check_points or [],
+            ),
+        )
+
+    def _clean_user_condition_text(self, value: Any) -> str:
+        return self.eligibility_evidence_agent.clean_user_text(value)
+
+    def _condition_display_label(self, value: Any) -> str:
+        return self.eligibility_evidence_agent.condition_label(value)
+
+    def _is_internal_condition_text(self, value: Any) -> bool:
+        return self.eligibility_evidence_agent.is_internal_text(value)
+
+    def _deduplicate_strings(self, values: list[str]) -> list[str]:
+        return self.eligibility_evidence_agent.deduplicate_strings(values)
 
     def _banner_level(self, user_status: UserStatus) -> str:
         level_by_status = {

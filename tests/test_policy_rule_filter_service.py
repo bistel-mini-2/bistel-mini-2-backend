@@ -114,6 +114,28 @@ def test_policy_rule_filter_preserves_manual_check_rule() -> None:
     assert result.manual_check_points == ["정확한 소득 기준 확인 필요"]
 
 
+def test_policy_rule_filter_does_not_truncate_manual_check_source_text() -> None:
+    source_text = (
+        "감당할 수 없는 빚으로 개인회생, 개인파산 및 면책 제도 이용을 원하는 사람"
+    )
+    result = PolicyRuleFilterService().filter(
+        condition={},
+        policy_rules=[
+            {
+                "field_name": "debt_status",
+                "operator": "IN",
+                "value_json": ["personal_bankruptcy_need"],
+                "is_hard_filter": True,
+                "manual_check_required": True,
+                "manual_check_reason": None,
+                "source_text": source_text,
+            }
+        ],
+    )
+
+    assert result.manual_check_points == [f"{source_text} 확인 필요"]
+
+
 def test_policy_rule_filter_merges_alternative_in_rules() -> None:
     result = PolicyRuleFilterService().filter(
         condition={"stage": "newborn"},

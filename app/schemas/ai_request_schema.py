@@ -18,6 +18,12 @@ class RecommendationRequestCreate(BaseModel):
         return self
 
 
+class ManualConfirmation(BaseModel):
+    question: str
+    answer: Literal["yes", "no", "unknown"]
+    note: str | None = None
+
+
 class EligibilityRequestCreate(BaseModel):
     policy_id: int | str
     source_type: str = "POLICY_DETAIL"
@@ -25,11 +31,25 @@ class EligibilityRequestCreate(BaseModel):
     raw_query: str | None = None
     selected_conditions: dict[str, Any] | None = None
     user_conditions: dict[str, Any] | None = None
+    manual_confirmations: list[ManualConfirmation] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def normalize_condition_input(self) -> "EligibilityRequestCreate":
         if self.selected_conditions is None and self.user_conditions is not None:
             self.selected_conditions = self.user_conditions
+        if self.manual_confirmations:
+            selected_conditions = dict(self.selected_conditions or {})
+            existing_confirmations = selected_conditions.get("manual_confirmations")
+            if not isinstance(existing_confirmations, list):
+                existing_confirmations = []
+            selected_conditions["manual_confirmations"] = [
+                *existing_confirmations,
+                *[
+                    confirmation.model_dump(mode="json")
+                    for confirmation in self.manual_confirmations
+                ],
+            ]
+            self.selected_conditions = selected_conditions
         return self
 
 
@@ -69,6 +89,7 @@ class RecommendationEvidenceItem(BaseModel):
     chunk_id: int | str
     policy_id: int | str
     snippet: str
+    display_text: str | None = None
     source_title: str
     source_url: str
     score: float | None = None
@@ -80,6 +101,7 @@ class FollowUpQuestionItem(BaseModel):
     question_text: str
     reason: str | None = None
     priority: int = 0
+    options: list[dict[str, str]] = Field(default_factory=list)
 
 
 class RecommendationReasons(BaseModel):
