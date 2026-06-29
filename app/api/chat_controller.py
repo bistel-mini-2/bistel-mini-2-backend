@@ -5,6 +5,7 @@ from app.common.response import success_response
 from app.core.dependencies import CurrentUserDep, DbSessionDep
 from app.schemas.chat_schema import (
     ChatMessageSendRequest,
+    ChatSessionBulkDeleteRequest,
     ChatSessionCreateRequest,
     ChatSessionTitleUpdateRequest,
 )
@@ -42,6 +43,20 @@ async def list_chat_sessions(
     return success_response(data=response)
 
 
+@router.post("/sessions/bulk-delete")
+async def bulk_delete_chat_sessions(
+    payload: ChatSessionBulkDeleteRequest,
+    db: DbSessionDep,
+    current_user: CurrentUserDep,
+) -> JSONResponse:
+    response = await ChatService.bulk_delete_sessions(
+        db,
+        user_id=current_user.user_id,
+        chat_session_ids=payload.chat_session_ids,
+    )
+    return success_response(data=response)
+
+
 @router.patch("/sessions/{chat_session_id}")
 async def update_chat_session_title(
     chat_session_id: int,
@@ -54,6 +69,20 @@ async def update_chat_session_title(
         user_id=current_user.user_id,
         chat_session_id=chat_session_id,
         title=payload.title,
+    )
+    return success_response(data=response)
+
+
+@router.delete("/sessions/{chat_session_id}")
+async def delete_chat_session(
+    chat_session_id: int,
+    db: DbSessionDep,
+    current_user: CurrentUserDep,
+) -> JSONResponse:
+    response = await ChatService.delete_session(
+        db,
+        user_id=current_user.user_id,
+        chat_session_id=chat_session_id,
     )
     return success_response(data=response)
 

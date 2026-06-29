@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import func, or_, select, text, update
+from sqlalchemy import delete, func, or_, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.chat_message import ChatMessage
@@ -25,6 +25,44 @@ class ChatRepository:
             select(ChatSession).where(ChatSession.chat_session_id == chat_session_id)
         )
         return result.scalar_one_or_none()
+
+    @staticmethod
+    async def session_exists(db: AsyncSession, chat_session_id: int) -> bool:
+        result = await db.execute(
+            select(ChatSession.chat_session_id)
+            .where(ChatSession.chat_session_id == chat_session_id)
+            .limit(1)
+        )
+        return result.scalar_one_or_none() is not None
+
+    @staticmethod
+    async def find_sessions_by_user_and_ids(
+        db: AsyncSession, user_id: int, chat_session_ids: list[int]
+    ) -> list[ChatSession]:
+        if not chat_session_ids:
+            return []
+        result = await db.execute(
+            select(ChatSession)
+            .where(ChatSession.user_id == user_id)
+            .where(ChatSession.chat_session_id.in_(chat_session_ids))
+        )
+        return list(result.scalars().all())
+
+    @staticmethod
+    async def delete_session(db: AsyncSession, session: ChatSession) -> None:
+        await db.delete(session)
+
+    @staticmethod
+    async def delete_sessions_by_ids(
+        db: AsyncSession, chat_session_ids: list[int]
+    ) -> int:
+        if not chat_session_ids:
+            return 0
+        result = await db.execute(
+            delete(ChatSession)
+            .where(ChatSession.chat_session_id.in_(chat_session_ids))
+        )
+        return int(result.rowcount or 0)
 
     @staticmethod
     async def find_sessions_by_user(
