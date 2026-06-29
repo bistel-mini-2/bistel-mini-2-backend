@@ -43,6 +43,12 @@ class PolicyRuleFilterService:
         policy_rules: list[dict[str, Any]],
     ) -> PolicyRuleFilterResult:
         result = PolicyRuleFilterResult()
+        # 데이터 검증 실패(source_text 환각 의심 등)로 운영 검토 대상(review_required)인 rule은
+        # 신뢰할 수 없으므로 판정/사용자 질문에서 제외한다. 내부 검증 사유(manual_check_reason)가
+        # 그대로 사용자에게 노출되는 것도 함께 막는다. 데이터가 정정되면 자동으로 다시 반영된다.
+        policy_rules = [
+            rule for rule in policy_rules if rule.get("review_required") is not True
+        ]
         # 서로 다른 field의 OR(대안) 그룹은 별도로 묶어 평가한다(같은 field IN 병합만으로는
         # "특수상황=multi OR 생애주기=teen"을 풀 수 없음).
         flat_rules, or_groups = partition_or_groups(policy_rules)

@@ -39,6 +39,21 @@ class EligibilityFollowUpQuestionAgent:
         "EXPLICIT_EXCLUSION": "정책의 제외 대상 조건에 해당하시나요?",
     }
 
+    # "해당하면 지원에서 빠지는" 제외형 조건. 이 코드들은 질문이 제외 여부를 묻기 때문에
+    # yes 답변이 충족이 아니라 미충족(제외)을 의미한다. 답변 효과를 뒤집는 데 쓴다.
+    _EXCLUSION_POINT_CODES = frozenset(
+        {
+            "OVERSEAS_STAY_90_DAYS_PAYMENT_SUSPENDED",
+            "REFUGEE_APPLICATION_PENDING_EXCLUDED",
+            "EXPLICIT_EXCLUSION",
+        }
+    )
+
+    def is_exclusion_point(self, value: Any) -> bool:
+        """원본 point가 제외형 조건 코드인지 판단한다(yes/no 효과 반전 대상)."""
+        text = self._clean(value)
+        return bool(text) and text.upper() in self._EXCLUSION_POINT_CODES
+
     def to_question(self, value: Any) -> str | None:
         text = self._clean(value)
         if not text:

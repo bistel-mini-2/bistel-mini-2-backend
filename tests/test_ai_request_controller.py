@@ -229,6 +229,7 @@ def test_create_eligibility_request_accepts_manual_confirmations(monkeypatch) ->
                 "question": "채무 상황 조건 확인이 필요해요.",
                 "answer": "yes",
                 "note": "챗봇 추가 답변",
+                "source": None,
             }
         ],
     }
@@ -547,10 +548,11 @@ def test_manual_confirmation_matches_rewritten_question_text() -> None:
         },
     )
 
-    assert condition["matched_conditions"] == [
+    # 제외형 조건(해당 시 지원에서 빠짐)이므로 yes는 충족이 아니라 미충족으로 반영된다.
+    assert condition["matched_conditions"] == []
+    assert condition["rule_failures"] == [
         "최근 90일 이상 해외에 체류하여 급여 지급이 정지된 상태인가요?"
     ]
-    assert condition["rule_failures"] == []
     assert condition["manual_check_points"] == []
 
 

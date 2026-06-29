@@ -640,9 +640,10 @@ class AiRequestLifecycleService:
         await self._save_follow_up_question_overrides(
             db=db,
             request=request,
-            manual_check_points=self._string_values(
-                assessment_result.manual_check_points
-            ),
+            manual_check_points=[
+                *self._string_values(assessment_result.manual_check_points),
+                *self._string_values(assessment_result.missing_conditions),
+            ],
         )
 
         async with psycopg_pool.connection() as conn:
@@ -850,6 +851,7 @@ class AiRequestLifecycleService:
         manual_check_points = self._string_values(condition.get("manual_check_points"))
         matched_conditions = self._string_values(condition.get("matched_conditions"))
         rule_failures = self._string_values(condition.get("rule_failures"))
+        missing_conditions = self._string_values(condition.get("missing_conditions"))
 
         for confirmation in confirmations:
             if not isinstance(confirmation, dict):
@@ -862,14 +864,38 @@ class AiRequestLifecycleService:
 
             # source(원본 point)가 오면 그 키로, 없으면 질문 텍스트로 매칭한다.
             source = confirmation.get("source")
-            manual_check_points = [
+            # 같은 확인 항목이 manual_check_points와 missing_conditions 양쪽에 들어올 수 있다
+            # (rule_filter가 hard_filter+미입력을 missing으로도 보고함). 답변을 받은 항목은
+            # 둘 다에서 제거해야 한다. missing에 남으면 status가 계속 NEEDS_MORE_INFO로 고착돼
+            # 같은 추가 확인 단계로 되돌아간다.
+            matched_points = [
                 item
                 for item in manual_check_points
-                if not self._matches_manual_point(item, source, question)
+                if self._matches_manual_point(item, source, question)
             ]
-            if answer == "yes":
+            matched_missing = [
+                item
+                for item in missing_conditions
+                if self._matches_manual_point(item, source, question)
+            ]
+            manual_check_points = [
+                item for item in manual_check_points if item not in matched_points
+            ]
+            missing_conditions = [
+                item for item in missing_conditions if item not in matched_missing
+            ]
+            # 제외형(해당하면 지원에서 빠지는) 조건은 질문이 제외 여부를 묻기 때문에
+            # yes가 충족이 아니라 미충족을 뜻한다. 매칭된 원본 point가 제외형이면 효과를 뒤집는다.
+            effective_answer = (
+                self._flip_answer(answer)
+                if self._is_exclusion_confirmation(
+                    matched_points + matched_missing, source
+                )
+                else answer
+            )
+            if effective_answer == "yes":
                 matched_conditions.append(question)
-            elif answer == "no":
+            elif effective_answer == "no":
                 rule_failures.append(question)
             else:
                 manual_check_points.append(question)
@@ -879,6 +905,7 @@ class AiRequestLifecycleService:
             "matched_conditions": self._deduplicate_strings(matched_conditions),
             "rule_failures": self._deduplicate_strings(rule_failures),
             "manual_check_points": self._deduplicate_strings(manual_check_points),
+            "missing_conditions": self._deduplicate_strings(missing_conditions),
         }
 
     def _manual_confirmations(self, selected_conditions: Any) -> list[dict[str, Any]]:
@@ -1058,6 +1085,9 @@ class AiRequestLifecycleService:
         raw_manual_check_points = self._string_list(
             assessment.get("manual_check_points_json")
         )
+        raw_missing_conditions = self._string_list(
+            assessment.get("missing_conditions_json")
+        )
         manual_check_points = self._user_condition_list(raw_manual_check_points)
         question_overrides = self._manual_question_overrides(request)
         manual_questions = self._manual_check_follow_up_questions(
@@ -1065,8 +1095,17 @@ class AiRequestLifecycleService:
             overrides=question_overrides,
             start_index=len(parsed_questions),
         )
+        # 사용자가 직접 답할 수 있는 누락 조건도 정식 질문으로 만들어 source_point를 부여한다.
+        # criteria(status=check)만으로는 프론트가 질문화해도 source_point가 없어 답변이
+        # 원본 항목과 매칭되지 않아 missing이 영구히 남는다(NEEDS_MORE_INFO 루프).
+        # 답변 불가한 내부 토큰은 to_question이 걸러내므로 질문에서 자동 제외된다.
+        missing_questions = self._manual_check_follow_up_questions(
+            raw_missing_conditions,
+            overrides=question_overrides,
+            start_index=len(parsed_questions) + len(manual_questions),
+        )
         questions = self._deduplicate_follow_up_questions(
-            [*parsed_questions, *manual_questions]
+            [*parsed_questions, *manual_questions, *missing_questions]
         )
         stored_evidences = self._stored_eligibility_evidences(request)
         # 추가 정보를 더 입력받아야 하는 단계(follow-up 질문 존재)에서는
@@ -1675,6 +1714,25 @@ class AiRequestLifecycleService:
             ):
                 return True
         return self._is_same_manual_confirmation(point, question)
+
+    def _is_exclusion_confirmation(
+        self,
+        matched_points: list[str],
+        source: Any,
+    ) -> bool:
+        """매칭된 원본 point(또는 source)가 제외형 조건인지 판단한다."""
+        agent = self.eligibility_follow_up_question_agent
+        if source is not None and agent.is_exclusion_point(source):
+            return True
+        return any(agent.is_exclusion_point(point) for point in matched_points)
+
+    @staticmethod
+    def _flip_answer(answer: str) -> str:
+        if answer == "yes":
+            return "no"
+        if answer == "no":
+            return "yes"
+        return answer
 
     def _is_same_manual_confirmation(self, point: Any, question: str) -> bool:
         point_text = self._clean_user_condition_text(point)
