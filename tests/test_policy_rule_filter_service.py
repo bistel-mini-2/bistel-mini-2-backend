@@ -39,6 +39,44 @@ def test_policy_rule_filter_excludes_hard_rule_mismatch() -> None:
     assert result.rule_failures == ["중위소득 100% 이하 미충족"]
 
 
+def test_policy_rule_filter_maps_income_to_median_income_percent() -> None:
+    result = PolicyRuleFilterService().filter(
+        condition={"income": "mid1"},
+        policy_rules=[
+            {
+                "field_name": "median_income_percent",
+                "operator": "LTE",
+                "value_json": {"value": 250},
+                "is_hard_filter": True,
+                "manual_check_required": False,
+                "note": "기준중위소득 250% 이하",
+            }
+        ],
+    )
+
+    assert result.matched_conditions == ["기준중위소득 250% 이하 충족"]
+    assert result.missing_conditions == []
+
+
+def test_policy_rule_filter_maps_child_age_to_age_rule() -> None:
+    result = PolicyRuleFilterService().filter(
+        condition={"childAge": "6-12"},
+        policy_rules=[
+            {
+                "field_name": "age",
+                "operator": "LTE",
+                "value_json": {"value": 12},
+                "is_hard_filter": True,
+                "manual_check_required": False,
+                "note": "12세 이하",
+            }
+        ],
+    )
+
+    assert result.matched_conditions == ["12세 이하 충족"]
+    assert result.missing_conditions == []
+
+
 def test_policy_rule_filter_marks_missing_hard_rule_field() -> None:
     result = PolicyRuleFilterService().filter(
         condition={},

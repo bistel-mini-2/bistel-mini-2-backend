@@ -163,11 +163,23 @@ class PolicyAssessmentService:
             "ambiguous_fields",
         )
         ambiguous.extend(
+            str(key)
+            for key, value in condition.items()
+            if self._is_unknown_value(value)
+        )
+        ambiguous.extend(
             issue["field_name"]
             for issue in self._dict_list(condition.get("input_issues"))
             if issue.get("issue_type") == "ambiguous" and issue.get("field_name")
         )
         return self._deduplicate(ambiguous)
+
+    def _is_unknown_value(self, value: Any) -> bool:
+        if isinstance(value, str):
+            return value.strip().lower() == "unknown"
+        if isinstance(value, Iterable) and not isinstance(value, (str, bytes, dict)):
+            return any(self._is_unknown_value(item) for item in value)
+        return False
 
     def _has_result_changing_conflict(
         self,
