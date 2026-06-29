@@ -1487,7 +1487,7 @@ class AiRequestLifecycleService:
             return selected_conditions
         if (
             request_type != "eligibility"
-            or request.source_type == RECOMMENDATION_RESULT_SOURCE_TYPE
+            or request.source_type != POLICY_DETAIL_SOURCE_TYPE
         ):
             return selected_conditions
         if not profile_snapshot:
