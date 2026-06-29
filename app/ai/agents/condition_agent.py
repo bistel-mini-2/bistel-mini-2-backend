@@ -230,7 +230,7 @@ class LangChainConditionExtractor:
             )
             return {}
         if isinstance(result, NaturalLanguageConditionExtraction):
-            return result.model_dump(exclude_none=True)
+            return result.model_dump(mode="json", exclude_none=True)
         if isinstance(result, dict):
             return result
         return {}
@@ -244,6 +244,7 @@ class ConditionAgent:
         raw_extracted: dict[str, Any] = {}
         if condition_input.raw_query:
             raw_extracted = await self.extractor.extract(condition_input.raw_query)
+        raw_extracted = self._plain_dict(raw_extracted)
 
         raw_normalized, raw_issues = self._normalize_conditions(raw_extracted)
         selected_normalized, selected_issues = self._normalize_conditions(
@@ -271,6 +272,20 @@ class ConditionAgent:
             profile_conflicts=profile_conflicts,
             follow_up_candidates=follow_up_candidates,
         )
+
+    def _plain_dict(self, value: Any) -> dict[str, Any]:
+        if isinstance(value, BaseModel):
+            return value.model_dump(mode="json", exclude_none=True)
+        if isinstance(value, dict):
+            return {
+                str(key): (
+                    item.model_dump(mode="json", exclude_none=True)
+                    if isinstance(item, BaseModel)
+                    else item
+                )
+                for key, item in value.items()
+            }
+        return {}
 
     def _normalize_conditions(
         self,
@@ -511,7 +526,9 @@ class ConditionAgent:
                     issue.field_name,
                     "추천에 필요한 정보를 조금 더 알려주세요.",
                 ),
-                reason="핵심 조건이 바뀌면 추천 후보가 달라질 수 있습니다.",
+                reason=issue.message,
+                issue_type=issue.issue_type,
+                message=issue.message,
                 priority=issue.priority,
             )
             for issue in sorted(
