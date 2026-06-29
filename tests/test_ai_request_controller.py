@@ -139,6 +139,104 @@ def test_create_eligibility_request_uses_common_lifecycle(monkeypatch) -> None:
     }
 
 
+def test_eligibility_request_inherits_recommendation_conditions(monkeypatch) -> None:
+    import asyncio
+
+    captured: dict[str, object] = {}
+    source_request = SimpleNamespace(
+        request_id=237,
+        request_status=RequestStatus.COMPLETED.value,
+        user_id=7,
+        source_type="CHAT",
+        source_ref_id=None,
+        raw_query="추천",
+        parsed_query_json={
+            "selected_conditions": {
+                "stage": "teen",
+                "childAge": "2-5",
+                "income": "mid1",
+                "region": "seoul",
+            }
+        },
+        merged_condition_json={"region": "seoul"},
+        profile_conflict_json=[],
+        result_json={},
+        error_message=None,
+    )
+
+    class FakeRepository:
+        async def create(
+            self,
+            db,
+            request_type,
+            user_id,
+            source_type,
+                source_ref_id=None,
+                raw_query=None,
+                selected_conditions=None,
+                follow_up_resolved=False,
+                policy_id=None,
+            ):
+                captured["selected_conditions"] = selected_conditions
+                return SimpleNamespace(
+                request_id=60,
+                request_status=RequestStatus.READY.value,
+                user_id=user_id,
+                policy_id=policy_id,
+                source_type=source_type,
+                source_ref_id=source_ref_id,
+                raw_query=raw_query,
+                parsed_query_json={"selected_conditions": selected_conditions},
+                merged_condition_json={},
+                profile_conflict_json=[],
+                result_json={},
+                error_message=None,
+            )
+
+        async def find_by_id(self, db, request_type, request_id):
+            captured["lookup"] = (request_type, request_id)
+            return source_request
+
+    async def fake_ensure_user_exists(self, db, user_id):
+        captured["user_id"] = user_id
+
+    async def fake_resolve_policy_id(self, db, policy_identifier):
+        captured["policy_identifier"] = policy_identifier
+        return int(policy_identifier)
+
+    monkeypatch.setattr(
+        AiRequestLifecycleService,
+        "_ensure_user_exists",
+        fake_ensure_user_exists,
+    )
+    monkeypatch.setattr(
+        AiRequestLifecycleService,
+        "resolve_policy_id",
+        fake_resolve_policy_id,
+    )
+
+    service = AiRequestLifecycleService(repository=FakeRepository())
+    snapshot = asyncio.run(
+        service.create_eligibility_request(
+            db=SimpleNamespace(),
+            user_id=7,
+            policy_identifier=308,
+            source_type="RECOMMENDATION_RESULT",
+            source_ref_id="237",
+            selected_conditions={},
+        )
+    )
+
+    assert captured["lookup"] == ("recommendation", 237)
+    assert captured["selected_conditions"] == {
+        "stage": "teen",
+        "childAge": "2-5",
+        "income": "mid1",
+        "region": "seoul",
+    }
+    assert snapshot.parsed_query_json["selected_conditions"] == captured["selected_conditions"]
+
+
 def test_get_eligibility_request_returns_result_response(monkeypatch) -> None:
     captured: dict[str, object] = {}
 
@@ -204,6 +302,97 @@ def test_get_eligibility_request_returns_result_response(monkeypatch) -> None:
     }
 
 
+def test_answer_eligibility_request_uses_same_lifecycle_request(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    async def fake_db() -> AsyncGenerator[object, None]:
+        db = SimpleNamespace(commit=lambda: None)
+
+        async def commit():
+            captured["committed"] = True
+
+        db.commit = commit
+        yield db
+
+    async def fake_current_user() -> object:
+        return SimpleNamespace(user_id=7)
+
+    async def fake_answer_eligibility_follow_up(
+        self,
+        db,
+        *,
+        request_id,
+        user_id,
+        answers,
+        raw_answer,
+    ):
+        captured["answer"] = {
+            "request_id": request_id,
+            "user_id": user_id,
+            "answers": answers,
+            "raw_answer": raw_answer,
+        }
+        return EligibilityResultResponse(
+            request_id=str(request_id),
+            status=RequestStatus.FOLLOW_UP_REQUIRED,
+            policy_id="24",
+            slug="WLF00000024",
+            policy_name="테스트 정책",
+            follow_up_questions=[
+                {
+                    "field_name": "income",
+                    "question_text": "소득 구간을 알려주세요.",
+                    "priority": 1,
+                    "follow_up_id": "1",
+                }
+            ],
+        )
+
+    monkeypatch.setattr(
+        AiRequestLifecycleService,
+        "answer_eligibility_follow_up",
+        fake_answer_eligibility_follow_up,
+    )
+
+    app = FastAPI()
+    app.include_router(eligibility_router)
+    app.dependency_overrides[get_db_session] = fake_db
+    app.dependency_overrides[get_current_user] = fake_current_user
+    register_exception_handlers(app)
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/eligibility/requests/123/answers",
+            json={
+                "answers": {
+                    "region": "seoul",
+                    "care_status": "home_care",
+                },
+                "raw_answer": "서울이고 가정양육 중이에요",
+            },
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["success"] is True
+    assert body["data"]["request_id"] == "123"
+    assert body["data"]["status"] == "FOLLOW_UP_REQUIRED"
+    assert body["meta"] == {
+        "request_id": "123",
+        "follow_up_required": True,
+    }
+    assert captured["answer"] == {
+        "request_id": 123,
+        "user_id": 7,
+        "answers": {
+            "region": "seoul",
+            "care_status": "home_care",
+        },
+        "raw_answer": "서울이고 가정양육 중이에요",
+    }
+    assert captured["committed"] is True
+
+
 def test_eligibility_result_response_maps_assessment_to_user_response() -> None:
     service = AiRequestLifecycleService()
     request = SimpleNamespace(
@@ -246,6 +435,161 @@ def test_eligibility_result_response_maps_assessment_to_user_response() -> None:
     assert response.criteria[0].status == "ok"
     assert response.evidences[0].evidence_role == "target"
     assert response.input_summary == {"region": "seoul"}
+
+
+def test_recommendation_polling_result_includes_card_eligibility_fields() -> None:
+    service = AiRequestLifecycleService()
+    request = SimpleNamespace(
+        request_id=321,
+        request_status=RequestStatus.COMPLETED.value,
+        result_json={
+            "results": [
+                {
+                    "policy_id": "24",
+                    "policy_name": "테스트 정책",
+                    "summary": "정책 요약",
+                    "why_recommended": "자녀 나이 조건과 맞습니다.",
+                    "check_before_apply": "소득 기준은 공식 신청 전 확인이 필요합니다.",
+                    "user_status": "NEEDS_CONFIRMATION",
+                    "assessment_status": "NEEDS_MORE_INFO",
+                    "reason_summary": "추가 확인이 필요합니다.",
+                    "matched_conditions": ["child_age"],
+                    "missing_conditions": ["income"],
+                    "manual_check_points": ["공식 신청 전 확인 필요"],
+                    "evidence": [],
+                }
+            ]
+        },
+        parsed_query_json={},
+        error_message=None,
+    )
+
+    response = service.to_recommendation_polling_response(request)
+    item = response.results[0]
+
+    assert item.policy_id == "24"
+    assert item.user_status == "NEEDS_CONFIRMATION"
+    assert item.assessment_status == "NEEDS_MORE_INFO"
+    assert item.reason_summary == "추가 확인이 필요합니다."
+    assert item.matched_conditions == ["child_age"]
+    assert item.missing_conditions == ["income"]
+    assert item.manual_check_points == ["공식 신청 전 확인 필요"]
+
+
+def test_answer_eligibility_follow_up_merges_answers_and_keeps_request_id(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+    request = SimpleNamespace(
+        request_id=123,
+        request_status=RequestStatus.FOLLOW_UP_REQUIRED.value,
+        user_id=7,
+        policy_id=24,
+        source_type="RECOMMENDATION_RESULT",
+        source_ref_id="recommendation-1",
+        raw_query="부모급여 가능해?",
+        parsed_query_json={
+            "selected_conditions": {"childAge": "0"},
+            "questions": [{"field_name": "region", "question_text": "지역은?"}],
+        },
+        merged_condition_json={"childAge": "0"},
+        profile_conflict_json=[],
+        error_message=None,
+    )
+
+    class FakeRepository:
+        async def find_by_id(self, db, request_type, request_id):
+            return request
+
+        async def update_payload(
+            self,
+            db,
+            request,
+            parsed_query_json=None,
+            merged_condition_json=None,
+            profile_conflict_json=None,
+        ):
+            captured["payload"] = {
+                "parsed_query_json": parsed_query_json,
+                "merged_condition_json": merged_condition_json,
+                "profile_conflict_json": profile_conflict_json,
+            }
+            request.parsed_query_json = parsed_query_json
+            request.merged_condition_json = merged_condition_json
+            request.profile_conflict_json = profile_conflict_json
+            return request
+
+        async def update_status(self, db, request, status, error_message=None):
+            captured.setdefault("statuses", []).append(status)
+            request.request_status = status.value
+            request.error_message = error_message
+            return request
+
+    async def fake_process(self, db, request_type, request_id):
+        captured["process"] = {
+            "request_type": request_type,
+            "request_id": request_id,
+            "selected_conditions": request.parsed_query_json["selected_conditions"],
+        }
+        request.request_status = RequestStatus.COMPLETED.value
+        return self.to_snapshot(request_type, request)
+
+    async def fake_get(self, db, request_id, user_id):
+        captured["get_result"] = {"request_id": request_id, "user_id": user_id}
+        return EligibilityResultResponse(
+            request_id=str(request_id),
+            status=RequestStatus.COMPLETED,
+            policy_id="24",
+            slug="WLF00000024",
+            policy_name="테스트 정책",
+            user_status="NEEDS_CONFIRMATION",
+        )
+
+    monkeypatch.setattr(
+        AiRequestLifecycleService,
+        "process_condition_request",
+        fake_process,
+    )
+    monkeypatch.setattr(
+        AiRequestLifecycleService,
+        "get_eligibility_result",
+        fake_get,
+    )
+
+    service = AiRequestLifecycleService(repository=FakeRepository())
+
+    import asyncio
+
+    response = asyncio.run(
+        service.answer_eligibility_follow_up(
+            db=SimpleNamespace(),
+            request_id=123,
+            user_id=7,
+            answers={"region": "seoul", "income": "잘 모르겠어요"},
+            raw_answer="서울이고 소득은 잘 모르겠어요",
+        )
+    )
+
+    assert response.request_id == "123"
+    assert captured["payload"]["parsed_query_json"]["selected_conditions"] == {
+        "childAge": "0",
+        "region": "seoul",
+        "income": "unknown",
+    }
+    assert captured["payload"]["merged_condition_json"] == {
+        "childAge": "0",
+        "region": "seoul",
+        "income": "unknown",
+    }
+    assert captured["statuses"] == [RequestStatus.PROCESSING]
+    assert captured["process"] == {
+        "request_type": "eligibility",
+        "request_id": 123,
+        "selected_conditions": {
+            "childAge": "0",
+            "region": "seoul",
+            "income": "unknown",
+        },
+    }
+    assert captured["get_result"] == {"request_id": 123, "user_id": 7}
 
 
 def test_process_eligibility_request_saves_policy_assessment(monkeypatch) -> None:

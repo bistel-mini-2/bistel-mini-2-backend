@@ -1,6 +1,7 @@
 from typing import Any
 
 from sqlalchemy import select, text
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.eligibility_request import EligibilityRequest
@@ -11,6 +12,8 @@ from app.schemas.ai_contract import RequestStatus
 
 AiRequestModel = RecommendationRequest | EligibilityRequest
 
+_LOCK_NOT_AVAILABLE = "55P03"
+
 
 class AiRequestRepository:
     REQUEST_MODELS = {
@@ -19,11 +22,22 @@ class AiRequestRepository:
     }
 
     @staticmethod
+    async def _execute_schema_statement(db: AsyncSession, statement: str) -> None:
+        try:
+            async with db.begin_nested():
+                await db.execute(text(statement))
+        except OperationalError as exc:
+            sqlstate = getattr(getattr(exc, "orig", None), "sqlstate", None)
+            if sqlstate == _LOCK_NOT_AVAILABLE:
+                return
+            raise
+
+    @staticmethod
     async def ensure_request_schema(db: AsyncSession) -> None:
         await UserRepository.ensure_user_schema(db)
-        await db.execute(
-            text(
-                """
+        await AiRequestRepository._execute_schema_statement(
+            db,
+            """
                 CREATE TABLE IF NOT EXISTS recommendation_request (
                     request_id bigserial PRIMARY KEY,
                     user_id bigint NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
@@ -39,12 +53,11 @@ class AiRequestRepository:
                     created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
                 )
-                """
-            )
+                """,
         )
-        await db.execute(
-            text(
-                """
+        await AiRequestRepository._execute_schema_statement(
+            db,
+            """
                 CREATE TABLE IF NOT EXISTS eligibility_request (
                     request_id bigserial PRIMARY KEY,
                     user_id bigint NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
@@ -60,13 +73,9 @@ class AiRequestRepository:
                     created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
                 )
-                """
-            )
+                """,
         )
         for statement in [
-            "CREATE INDEX IF NOT EXISTS recommendation_request_user_id_idx ON recommendation_request (user_id)",
-            "CREATE INDEX IF NOT EXISTS eligibility_request_user_id_idx ON eligibility_request (user_id)",
-            "CREATE INDEX IF NOT EXISTS eligibility_request_policy_id_idx ON eligibility_request (policy_id)",
             "ALTER TABLE recommendation_request ADD COLUMN IF NOT EXISTS error_message text",
             "ALTER TABLE recommendation_request ADD COLUMN IF NOT EXISTS result_json jsonb",
             "ALTER TABLE eligibility_request ADD COLUMN IF NOT EXISTS error_message text",
@@ -75,7 +84,13 @@ class AiRequestRepository:
             "ALTER TABLE recommendation_request ALTER COLUMN raw_query DROP NOT NULL",
             "ALTER TABLE eligibility_request ALTER COLUMN raw_query DROP NOT NULL",
         ]:
-            await db.execute(text(statement))
+            await AiRequestRepository._execute_schema_statement(db, statement)
+        for statement in [
+            "CREATE INDEX IF NOT EXISTS recommendation_request_user_id_idx ON recommendation_request (user_id)",
+            "CREATE INDEX IF NOT EXISTS eligibility_request_user_id_idx ON eligibility_request (user_id)",
+            "CREATE INDEX IF NOT EXISTS eligibility_request_policy_id_idx ON eligibility_request (policy_id)",
+        ]:
+            await AiRequestRepository._execute_schema_statement(db, statement)
 
     async def create(
         self,
