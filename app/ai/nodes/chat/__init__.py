@@ -1,6 +1,3 @@
-"""Chat supervisor graph nodes."""
+"""Chat handler internals."""
 
-from app.ai.nodes.chat.chat_nodes import ChatGraphNodes
-
-
-__all__ = ["ChatGraphNodes"]
+__all__: list[str] = []
