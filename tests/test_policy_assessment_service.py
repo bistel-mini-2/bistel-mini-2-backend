@@ -59,6 +59,19 @@ def test_needs_more_info_with_one_missing_condition(
     assert result.missing_conditions == ["income"]
 
 
+def test_unknown_answer_becomes_manual_check_not_error(
+    service: PolicyAssessmentService,
+):
+    result = service.assess_policy(
+        make_input({"income": "unknown", "matched_conditions": ["region"]}),
+        policy_id=1,
+    )
+
+    assert result.assessment_status == AssessmentStatus.NEEDS_MORE_INFO
+    assert result.user_status == UserStatus.NEEDS_CONFIRMATION
+    assert result.manual_check_points == ["income"]
+
+
 def test_not_match_with_failed_condition(service: PolicyAssessmentService):
     result = service.assess_policy(
         make_input({"failed_conditions": ["region"]}),
