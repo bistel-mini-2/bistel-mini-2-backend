@@ -22,6 +22,8 @@ class FollowUpCandidate(BaseModel):
     field_name: str
     question_text: str
     reason: str | None = None
+    issue_type: Literal["missing", "ambiguous", "invalid"] | None = None
+    message: str | None = None
     priority: int = 0
 
 

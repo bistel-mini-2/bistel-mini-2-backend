@@ -185,10 +185,10 @@ def test_send_message_persists_normalized_outputs(monkeypatch) -> None:
     run_graph.assert_awaited_once()
     assert run_graph.await_args.kwargs["recent_assistant_policy"] == recent_policy
 
-    # structured_json에 policies/evidences 빠지고 메타만 보관
+    # structured_json에는 복원 시 카드 메타가 유지되도록 policies 원본 payload를 보관한다.
     assistant_msg_obj = mocks["_saved_messages"][1]
     assert assistant_msg_obj.role == "assistant"
-    assert "policies" not in assistant_msg_obj.structured_json
+    assert assistant_msg_obj.structured_json["policies"] == _graph_result()["assistant_payload"]["policies"]
     assert "evidences" not in assistant_msg_obj.structured_json
     assert assistant_msg_obj.structured_json["_supervisor"]["intent"] == "recommend"
     assert assistant_msg_obj.structured_json["actions"] == ["recommend"]
@@ -272,9 +272,7 @@ def test_delete_session_cancels_running_work_and_deletes_owned_session(monkeypat
     monkeypatch.setattr(ChatRepository, "find_session_by_id", find_mock)
     monkeypatch.setattr(ChatRepository, "delete_session", delete_mock)
     monkeypatch.setattr(
-        chat_service_module.chat_cancel_registry,
-        "cancel",
-        cancel_mock,
+        chat_service_module.chat_cancel_registry, "cancel", cancel_mock,
     )
 
     response = asyncio.run(
@@ -303,9 +301,7 @@ def test_bulk_delete_sessions_is_all_or_nothing(monkeypatch) -> None:
     cancel_many_mock = MagicMock()
     monkeypatch.setattr(ChatRepository, "delete_sessions_by_ids", delete_mock)
     monkeypatch.setattr(
-        chat_service_module.chat_cancel_registry,
-        "cancel_many",
-        cancel_many_mock,
+        chat_service_module.chat_cancel_registry, "cancel_many", cancel_many_mock,
     )
 
     with pytest.raises(AppException) as exc_info:
@@ -341,9 +337,7 @@ def test_bulk_delete_sessions_cancels_and_deletes_all_owned_sessions(monkeypatch
     )
     cancel_many_mock = MagicMock()
     monkeypatch.setattr(
-        chat_service_module.chat_cancel_registry,
-        "cancel_many",
-        cancel_many_mock,
+        chat_service_module.chat_cancel_registry, "cancel_many", cancel_many_mock,
     )
 
     response = asyncio.run(
@@ -361,9 +355,7 @@ def test_bulk_delete_sessions_cancels_and_deletes_all_owned_sessions(monkeypatch
     db.commit.assert_awaited_once()
 
 
-def test_send_message_raises_404_without_assistant_save_when_session_deleted_midflight(
-    monkeypatch,
-) -> None:
+def test_send_message_raises_404_without_assistant_save_when_session_deleted_midflight(monkeypatch) -> None:
     session = _session()
     mocks = _patch_repo_for_send(monkeypatch, session=session)
     mocks["session_exists"].return_value = False
@@ -613,6 +605,20 @@ def test_list_messages_includes_normalized_data(monkeypatch) -> None:
         make_msg(201, "user", 1),
         make_msg(202, "assistant", 2),
     ]
+    messages[1].structured_json = {
+        "policies": [
+            {
+                "policy_id": "42",
+                "slug": "WLF1",
+                "policy_name": "정책1",
+                "recommendation_request_id": "237",
+                "source_ref_id": "237",
+                "selected_conditions": {"region": "seoul"},
+                "merged_condition_json": {"region": "seoul", "income": "mid1"},
+            }
+        ],
+        "actions": ["recommend"],
+    }
 
     monkeypatch.setattr(
         ChatRepository, "find_session_by_id", AsyncMock(return_value=session),
@@ -629,6 +635,7 @@ def test_list_messages_includes_normalized_data(monkeypatch) -> None:
                     "policy_id": "42",
                     "slug": "WLF1",
                     "policy_name": "정책1",
+                    "summary": "정책 설명",
                     "action_type": "RECOMMENDED",
                 },
             ],
@@ -666,6 +673,14 @@ def test_list_messages_includes_normalized_data(monkeypatch) -> None:
     assert assistant_item.role == "assistant"
     assert len(assistant_item.policies) == 1
     assert assistant_item.policies[0].action_type == "RECOMMENDED"
+    assert assistant_item.policies[0].summary == "정책 설명"
+    assert assistant_item.policies[0].recommendation_request_id == "237"
+    assert assistant_item.policies[0].source_ref_id == "237"
+    assert assistant_item.policies[0].selected_conditions == {"region": "seoul"}
+    assert assistant_item.policies[0].merged_condition_json == {
+        "region": "seoul",
+        "income": "mid1",
+    }
     assert len(assistant_item.evidences) == 1
     # evidence_role validator로 lowercase 변환
     assert assistant_item.evidences[0].evidence_role == "summary"

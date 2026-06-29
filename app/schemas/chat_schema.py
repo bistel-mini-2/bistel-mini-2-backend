@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -76,6 +77,10 @@ class AssistantMessagePolicy(BaseModel):
     tag: str | None = None
     tagTone: str | None = None
     action_type: str | None = None
+    recommendation_request_id: str | None = None
+    source_ref_id: str | None = None
+    selected_conditions: dict[str, Any] | None = None
+    merged_condition_json: dict[str, Any] | None = None
 
 
 class AssistantMessageEvidence(BaseModel):
@@ -118,6 +123,8 @@ class AssistantMessage(BaseModel):
     evidences: list[AssistantMessageEvidence] = Field(default_factory=list)
     apply_card: ApplyCard | None = None
     disclaimer: bool | None = None
+    slot_request: dict | None = None
+    profile_confirm: dict | None = None
 
 
 class ChatMessageSendRequest(BaseModel):
@@ -146,6 +153,8 @@ class ChatMessageItem(BaseModel):
     evidences: list[AssistantMessageEvidence] = Field(default_factory=list)
     apply_card: ApplyCard | None = None
     disclaimer: bool | None = None
+    slot_request: dict | None = None
+    profile_confirm: dict | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

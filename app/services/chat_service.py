@@ -168,7 +168,9 @@ class ChatService:
             recent_assistant_policy = await ChatRepository.find_recent_assistant_policy(
                 db, session.chat_session_id
             )
-            user_message = await _save_user_message(db, session.chat_session_id, content)
+            user_message = await _save_user_message(
+                db, session.chat_session_id, content
+            )
             await db.commit()
 
             graph_result = await _run_supervisor_graph(
@@ -487,6 +489,8 @@ async def _persist_assistant_outputs(
         policy_links=policy_links_to_save,
         branch_policies=payload.get("policies", []),
         slug_to_policy_id=slug_to_policy_id,
+        profile=graph_result.get("profile"),
+        pending=graph_result.get("pending"),
     )
     if next_slot is not None:
         await ChatRepository.update_session_slot(db, session_id, next_slot)
@@ -509,6 +513,8 @@ def _build_next_slot(
     policy_links: list[dict],
     branch_policies: list[dict],
     slug_to_policy_id: dict[str, int],
+    profile: dict | None = None,
+    pending: dict | None = None,
 ) -> dict | None:
     slug_to_action: dict[str, str] = {}
     for link in policy_links:
@@ -541,22 +547,36 @@ def _build_next_slot(
             "last_action": action,
         })
 
-    if not new_entries:
+    # 저장할 게 아무것도 없으면(새 정책·프로필·pending 모두 없음) 업데이트 생략.
+    if not new_entries and profile is None and pending is None:
         return None
 
-    existing = list(current_slot.get("recent_policies") or [])
-    merged: list[dict] = list(new_entries)
-    for entry in existing:
-        slug = entry.get("slug")
-        if not slug or slug in seen:
-            continue
-        seen.add(slug)
-        merged.append(entry)
-        if len(merged) >= _SLOT_MAX_POLICIES:
-            break
+    if new_entries:
+        existing = list(current_slot.get("recent_policies") or [])
+        merged: list[dict] = list(new_entries)
+        for entry in existing:
+            slug = entry.get("slug")
+            if not slug or slug in seen:
+                continue
+            seen.add(slug)
+            merged.append(entry)
+            if len(merged) >= _SLOT_MAX_POLICIES:
+                break
+        recent_policies = merged[:_SLOT_MAX_POLICIES]
+    else:
+        # 새 정책이 없으면 기존 목록 유지 (프로필/pending만 갱신).
+        recent_policies = list(current_slot.get("recent_policies") or [])
+
+    # profile/pending은 그래프가 값을 주면 그 값을, 안 주면 기존 값을 유지.
+    # (pending은 명시적으로 None을 주면 "이어받기 종료"로 해석되어 비워진다.)
+    next_profile = (
+        profile if profile is not None else current_slot.get("profile") or {}
+    )
 
     return {
-        "recent_policies": merged[:_SLOT_MAX_POLICIES],
+        "recent_policies": recent_policies,
+        "profile": next_profile,
+        "pending": pending,
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -581,9 +601,12 @@ def _build_structured_json(decision: dict, payload: dict) -> dict:
         "easy_summary": payload.get("easy_summary"),
         "key_points": payload.get("key_points", []),
         "sources": payload.get("sources", []),
+        "policies": payload.get("policies", []),
         "actions": payload.get("actions", []),
         "apply_card": payload.get("apply_card"),
         "disclaimer": payload.get("disclaimer"),
+        "slot_request": payload.get("slot_request"),
+        "profile_confirm": payload.get("profile_confirm"),
     }
 
 
@@ -643,6 +666,18 @@ def _build_assistant_response(
             tag=p.get("tag"),
             tagTone=p.get("tagTone"),
             action_type=slug_to_action.get(p.get("slug")),
+            recommendation_request_id=(
+                str(p.get("recommendation_request_id"))
+                if p.get("recommendation_request_id") is not None
+                else None
+            ),
+            source_ref_id=(
+                str(p.get("source_ref_id"))
+                if p.get("source_ref_id") is not None
+                else None
+            ),
+            selected_conditions=p.get("selected_conditions"),
+            merged_condition_json=p.get("merged_condition_json"),
         )
         for p in payload.get("policies", [])
     ]
@@ -670,6 +705,8 @@ def _build_assistant_response(
         evidences=evidences,
         apply_card=apply_card,
         disclaimer=payload.get("disclaimer"),
+        slot_request=payload.get("slot_request"),
+        profile_confirm=payload.get("profile_confirm"),
     )
 
 
@@ -698,6 +735,35 @@ def _to_message_item(
     evidences: list[dict],
 ) -> ChatMessageItem:
     meta = _unwrap_message_meta(message.structured_json)
+    # DB 정책이 없으면 structured_json에 캐시된 원본 payload 정책으로 fallback
+    meta_policies = meta.pop("policies", [])
+    if policies:
+        meta_by_slug = {
+            policy.get("slug"): policy
+            for policy in meta_policies
+            if policy.get("slug")
+        }
+        meta_by_id = {
+            str(policy.get("policy_id")): policy
+            for policy in meta_policies
+            if policy.get("policy_id") is not None
+        }
+        resolved_policies = []
+        for policy in policies:
+            cached = (
+                meta_by_slug.get(policy.get("slug"))
+                or meta_by_id.get(str(policy.get("policy_id")))
+                or {}
+            )
+            resolved_policies.append({
+                **cached,
+                **policy,
+                "summary": policy.get("summary") or cached.get("summary"),
+                "tag": policy.get("tag") or cached.get("tag"),
+                "tagTone": policy.get("tagTone") or cached.get("tagTone"),
+            })
+    else:
+        resolved_policies = meta_policies
     return ChatMessageItem(
         chat_message_id=str(message.chat_message_id),
         role=message.role,
@@ -705,7 +771,7 @@ def _to_message_item(
         content=message.content,
         sequence_no=message.sequence_no,
         created_at=message.created_at,
-        policies=[AssistantMessagePolicy(**p) for p in policies],
+        policies=[AssistantMessagePolicy(**p) for p in resolved_policies],
         evidences=[AssistantMessageEvidence(**e) for e in evidences],
         **meta,
     )
@@ -721,9 +787,12 @@ def _unwrap_message_meta(structured_json: dict | None) -> dict:
         "easy_summary": structured_json.get("easy_summary"),
         "key_points": structured_json.get("key_points", []),
         "sources": structured_json.get("sources", []),
+        "policies": structured_json.get("policies", []),
         "actions": structured_json.get("actions", []),
         "apply_card": apply_card,
         "disclaimer": structured_json.get("disclaimer"),
+        "slot_request": structured_json.get("slot_request"),
+        "profile_confirm": structured_json.get("profile_confirm"),
     }
 
 
@@ -739,4 +808,6 @@ def _fallback_payload() -> dict:
         "actions": [],
         "apply_card": None,
         "disclaimer": False,
+        "slot_request": None,
+        "profile_confirm": None,
     }
