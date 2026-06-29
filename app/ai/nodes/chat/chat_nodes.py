@@ -255,7 +255,7 @@ _PROFILE_OPTION_LABELS: dict[str, dict[str, str]] = {
         "multi": "다문화·탈북민 가정",
         "disabled": "장애인 가구",
         "many": "다자녀 가정(2명 이상)",
-        "dual": "저소득 가구",
+        "dual": "맞벌이 가구",
         "low_income": "저소득 가구",
         "single_parent": "한부모·조손 가정",
         "multi_child": "다자녀 가정(2명 이상)",
