@@ -556,6 +556,44 @@ def test_manual_confirmation_matches_rewritten_question_text() -> None:
     assert condition["manual_check_points"] == []
 
 
+def test_policy_detail_reanalysis_keeps_profile_condition_and_applies_confirmation() -> None:
+    service = AiRequestLifecycleService()
+
+    condition = service._apply_manual_confirmations(
+        {
+            "stage": "newborn",
+            "childAge": "0",
+            "income": "mid1",
+            "region": "seoul",
+            "manual_check_points": ["감당하기 어려운 채무가 있는 사람 확인 필요"],
+            "missing_conditions": ["감당하기 어려운 채무가 있는 사람 확인 필요"],
+            "matched_conditions": ["저장 프로필 기준"],
+            "rule_failures": [],
+        },
+        {
+            "manual_confirmations": [
+                {
+                    "question": "감당하기 어려운 채무가 있는 사람에 해당하시나요?",
+                    "answer": "yes",
+                    "source": "감당하기 어려운 채무가 있는 사람 확인 필요",
+                }
+            ]
+        },
+    )
+
+    assert condition["stage"] == "newborn"
+    assert condition["childAge"] == "0"
+    assert condition["income"] == "mid1"
+    assert condition["region"] == "seoul"
+    assert condition["manual_check_points"] == []
+    assert condition["missing_conditions"] == []
+    assert condition["matched_conditions"] == [
+        "저장 프로필 기준",
+        "감당하기 어려운 채무가 있는 사람에 해당하시나요?",
+    ]
+    assert condition["rule_failures"] == []
+
+
 def test_manual_confirmations_are_parsed_for_follow_up_resolution() -> None:
     service = AiRequestLifecycleService()
 
@@ -735,6 +773,309 @@ def test_process_eligibility_request_saves_policy_assessment(monkeypatch) -> Non
         "eligibility_request_id": 123,
         "matched_conditions": ["region"],
     }
+
+
+def test_policy_detail_eligibility_uses_saved_profile_without_selected_conditions(
+    monkeypatch,
+) -> None:
+    captured: dict[str, object] = {}
+    request = SimpleNamespace(
+        request_id=125,
+        request_status=RequestStatus.PROCESSING.value,
+        user_id=7,
+        policy_id=24,
+        source_type="POLICY_DETAIL",
+        source_ref_id="WLF00000024",
+        raw_query=None,
+        parsed_query_json=None,
+        merged_condition_json={},
+        profile_conflict_json=[],
+        result_json=None,
+        error_message=None,
+    )
+
+    class FakeRepository:
+        async def find_by_id(self, db, request_type, request_id):
+            return request
+
+        async def update_payload(
+            self,
+            db,
+            request,
+            parsed_query_json=None,
+            merged_condition_json=None,
+            profile_conflict_json=None,
+        ):
+            captured["payload"] = {
+                "parsed_query_json": parsed_query_json,
+                "merged_condition_json": merged_condition_json,
+                "profile_conflict_json": profile_conflict_json,
+            }
+            request.parsed_query_json = parsed_query_json
+            request.merged_condition_json = merged_condition_json
+            request.profile_conflict_json = profile_conflict_json
+            return request
+
+        async def update_status(self, db, request, status, error_message=None):
+            captured["status"] = status
+            request.request_status = status.value
+            request.error_message = error_message
+            return request
+
+        async def update_result(self, db, request, result_json):
+            request.result_json = result_json
+            return request
+
+    class FakeConditionAgent:
+        async def analyze(self, condition_input):
+            captured["selected_conditions"] = condition_input.selected_conditions
+            captured["profile_snapshot"] = condition_input.profile_snapshot
+            return ConditionResult(
+                parsed_query_json={
+                    "selected_conditions": condition_input.selected_conditions,
+                },
+                merged_condition_json={
+                    **condition_input.profile_snapshot,
+                    "matched_conditions": ["저장 프로필 기준"],
+                },
+                profile_conflicts=[],
+            )
+
+    class FakeAssessmentRepository:
+        async def find_policy_evidence_chunks(self, db, policy_id, limit=8):
+            return []
+
+    async def fake_chunk_searcher(**kwargs):
+        captured["rag_search"] = kwargs
+        return []
+
+    class FakeConnection:
+        async def __aenter__(self):
+            return "conn"
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    class FakePool:
+        def connection(self):
+            return FakeConnection()
+
+    async def fake_save_assessment(*args, **kwargs):
+        return 999
+
+    async def fake_profile_snapshot(self, db, user_id):
+        captured["profile_snapshot_called"] = True
+        return {
+            "stage": "newborn",
+            "childAge": "0",
+            "income": "mid1",
+            "region": "seoul",
+        }
+
+    monkeypatch.setattr(
+        "app.services.ai_request_lifecycle_service.psycopg_pool",
+        FakePool(),
+    )
+    monkeypatch.setattr(
+        "app.services.ai_request_lifecycle_service.PolicyAssessmentRepository.save_assessment",
+        fake_save_assessment,
+    )
+    monkeypatch.setattr(
+        AiRequestLifecycleService,
+        "_profile_snapshot",
+        fake_profile_snapshot,
+    )
+
+    service = AiRequestLifecycleService(
+        repository=FakeRepository(),
+        assessment_repository=FakeAssessmentRepository(),
+        condition_agent=FakeConditionAgent(),
+        policy_chunk_searcher=fake_chunk_searcher,
+    )
+
+    import asyncio
+
+    asyncio.run(
+        service.process_condition_request(
+            db=SimpleNamespace(),
+            request_type="eligibility",
+            request_id=125,
+        )
+    )
+
+    assert captured["profile_snapshot_called"] is True
+    assert captured["selected_conditions"] is None
+    assert captured["profile_snapshot"] == {
+        "stage": "newborn",
+        "childAge": "0",
+        "income": "mid1",
+        "region": "seoul",
+    }
+    assert captured["payload"]["merged_condition_json"]["stage"] == "newborn"
+    assert captured["payload"]["merged_condition_json"]["income"] == "mid1"
+    assert captured["status"] == RequestStatus.COMPLETED
+
+
+def test_policy_detail_eligibility_prefers_saved_profile_over_stale_selected_conditions(
+    monkeypatch,
+) -> None:
+    captured: dict[str, object] = {}
+    request = SimpleNamespace(
+        request_id=126,
+        request_status=RequestStatus.PROCESSING.value,
+        user_id=7,
+        policy_id=24,
+        source_type="POLICY_DETAIL",
+        source_ref_id="WLF00000024",
+        raw_query=None,
+        parsed_query_json={
+            "selected_conditions": {
+                "stage": "teen",
+                "childAge": "13+",
+                "income": "high",
+                "region": "busan",
+                "manual_confirmations": [
+                    {
+                        "question": "추가 확인 조건에 해당하시나요?",
+                        "answer": "yes",
+                        "source": "추가 확인 조건 확인 필요",
+                    }
+                ],
+            }
+        },
+        merged_condition_json={},
+        profile_conflict_json=[],
+        result_json=None,
+        error_message=None,
+    )
+
+    class FakeRepository:
+        async def find_by_id(self, db, request_type, request_id):
+            return request
+
+        async def update_payload(
+            self,
+            db,
+            request,
+            parsed_query_json=None,
+            merged_condition_json=None,
+            profile_conflict_json=None,
+        ):
+            captured["payload"] = {
+                "parsed_query_json": parsed_query_json,
+                "merged_condition_json": merged_condition_json,
+                "profile_conflict_json": profile_conflict_json,
+            }
+            request.parsed_query_json = parsed_query_json
+            request.merged_condition_json = merged_condition_json
+            request.profile_conflict_json = profile_conflict_json
+            return request
+
+        async def update_status(self, db, request, status, error_message=None):
+            captured["status"] = status
+            request.request_status = status.value
+            request.error_message = error_message
+            return request
+
+        async def update_result(self, db, request, result_json):
+            request.result_json = result_json
+            return request
+
+    class FakeConditionAgent:
+        async def analyze(self, condition_input):
+            captured["selected_conditions"] = condition_input.selected_conditions
+            captured["profile_snapshot"] = condition_input.profile_snapshot
+            return ConditionResult(
+                parsed_query_json={
+                    "selected_conditions": condition_input.selected_conditions,
+                },
+                merged_condition_json={
+                    **condition_input.profile_snapshot,
+                    "manual_check_points": ["추가 확인 조건 확인 필요"],
+                    "matched_conditions": ["저장 프로필 기준"],
+                },
+                profile_conflicts=[],
+            )
+
+    class FakeAssessmentRepository:
+        async def find_policy_evidence_chunks(self, db, policy_id, limit=8):
+            return []
+
+    async def fake_chunk_searcher(**kwargs):
+        return []
+
+    class FakeConnection:
+        async def __aenter__(self):
+            return "conn"
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    class FakePool:
+        def connection(self):
+            return FakeConnection()
+
+    async def fake_save_assessment(*args, **kwargs):
+        return 999
+
+    async def fake_profile_snapshot(self, db, user_id):
+        return {
+            "stage": "newborn",
+            "childAge": "0",
+            "income": "mid1",
+            "region": "seoul",
+        }
+
+    monkeypatch.setattr(
+        "app.services.ai_request_lifecycle_service.psycopg_pool",
+        FakePool(),
+    )
+    monkeypatch.setattr(
+        "app.services.ai_request_lifecycle_service.PolicyAssessmentRepository.save_assessment",
+        fake_save_assessment,
+    )
+    monkeypatch.setattr(
+        AiRequestLifecycleService,
+        "_profile_snapshot",
+        fake_profile_snapshot,
+    )
+
+    service = AiRequestLifecycleService(
+        repository=FakeRepository(),
+        assessment_repository=FakeAssessmentRepository(),
+        condition_agent=FakeConditionAgent(),
+        policy_chunk_searcher=fake_chunk_searcher,
+    )
+
+    import asyncio
+
+    asyncio.run(
+        service.process_condition_request(
+            db=SimpleNamespace(),
+            request_type="eligibility",
+            request_id=126,
+        )
+    )
+
+    assert captured["selected_conditions"] == {
+        "manual_confirmations": [
+            {
+                "question": "추가 확인 조건에 해당하시나요?",
+                "answer": "yes",
+                "source": "추가 확인 조건 확인 필요",
+            }
+        ]
+    }
+    assert captured["profile_snapshot"] == {
+        "stage": "newborn",
+        "childAge": "0",
+        "income": "mid1",
+        "region": "seoul",
+    }
+    assert captured["payload"]["merged_condition_json"]["stage"] == "newborn"
+    assert captured["payload"]["merged_condition_json"]["income"] == "mid1"
+    assert captured["payload"]["profile_conflict_json"] == []
+    assert captured["status"] == RequestStatus.COMPLETED
 
 
 def test_recommendation_result_eligibility_skips_saved_profile(monkeypatch) -> None:
