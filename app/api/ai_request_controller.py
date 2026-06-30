@@ -66,7 +66,7 @@ def _eligibility_result_meta(
 
 
 def _eligibility_source_ref(
-    chat_session_id: int | str | None,
+    chat_session_id: int | None,
     source_ref_id: str | None,
 ) -> str | None:
     if not chat_session_id:
@@ -264,7 +264,7 @@ async def create_eligibility_request(
         await ChatService.ensure_owned_session(
             db,
             user_id=current_user.user_id,
-            chat_session_id=int(payload.chat_session_id),
+            chat_session_id=payload.chat_session_id,
         )
     snapshot = await service.create_eligibility_request(
         db=db,

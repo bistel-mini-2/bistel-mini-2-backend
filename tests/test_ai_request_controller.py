@@ -331,6 +331,32 @@ def test_create_eligibility_request_preserves_chat_session_source(monkeypatch) -
     assert captured["source_ref_id"] == "chat_session:82;source:recommendation:123"
 
 
+def test_create_eligibility_request_rejects_non_numeric_chat_session_id() -> None:
+    async def fake_db() -> AsyncGenerator[object, None]:
+        yield SimpleNamespace()
+
+    async def fake_current_user() -> object:
+        return SimpleNamespace(user_id=7)
+
+    app = FastAPI()
+    app.include_router(eligibility_router)
+    app.dependency_overrides[get_db_session] = fake_db
+    app.dependency_overrides[get_current_user] = fake_current_user
+    register_exception_handlers(app)
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/eligibility/requests",
+            json={
+                "policy_id": "WLF00000024",
+                "chat_session_id": "abc",
+                "user_conditions": {"income": "low"},
+            },
+        )
+
+    assert response.status_code == 422
+
+
 def test_get_eligibility_request_returns_result_response(monkeypatch) -> None:
     captured: dict[str, object] = {}
 
