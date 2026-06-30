@@ -14,6 +14,7 @@ class CompareRepository:
                     compare_history_id bigserial PRIMARY KEY,
                     user_id bigint NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
                     title varchar(255),
+                    selection_guide text,
                     compared_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     deleted_at timestamp
                 )
@@ -30,6 +31,8 @@ class CompareRepository:
                         ON DELETE CASCADE,
                     policy_id bigint NOT NULL REFERENCES policy(policy_id)
                         ON DELETE CASCADE,
+                    policy_slug varchar(100),
+                    policy_name varchar(255),
                     added_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
                 )
                 """
@@ -37,6 +40,7 @@ class CompareRepository:
         )
         alter_statements = [
             "ALTER TABLE compare_history ADD COLUMN IF NOT EXISTS title varchar(255)",
+            "ALTER TABLE compare_history ADD COLUMN IF NOT EXISTS selection_guide text",
             (
                 "ALTER TABLE compare_history ADD COLUMN IF NOT EXISTS "
                 "compared_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP"
@@ -46,6 +50,8 @@ class CompareRepository:
                 "ALTER TABLE compare_history_item ADD COLUMN IF NOT EXISTS "
                 "added_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP"
             ),
+            "ALTER TABLE compare_history_item ADD COLUMN IF NOT EXISTS policy_slug varchar(100)",
+            "ALTER TABLE compare_history_item ADD COLUMN IF NOT EXISTS policy_name varchar(255)",
         ]
         for statement in alter_statements:
             await db.execute(text(statement))
@@ -75,6 +81,11 @@ class CompareRepository:
         user_id: int,
         policy_a_id: int,
         policy_b_id: int,
+        policy_a_slug: str | None = None,
+        policy_b_slug: str | None = None,
+        policy_a_name: str | None = None,
+        policy_b_name: str | None = None,
+        selection_guide: str | None = None,
     ) -> int:
         await cls.ensure_compare_history_schema(db)
         result = await db.execute(
@@ -82,13 +93,14 @@ class CompareRepository:
                 """
                 INSERT INTO compare_history (
                     user_id,
+                    selection_guide,
                     compared_at
                 )
-                VALUES (:user_id, CURRENT_TIMESTAMP)
+                VALUES (:user_id, :selection_guide, CURRENT_TIMESTAMP)
                 RETURNING compare_history_id
                 """
             ),
-            {"user_id": user_id},
+            {"user_id": user_id, "selection_guide": selection_guide},
         )
         compare_history_id = int(result.scalar_one())
         await db.execute(
@@ -97,11 +109,25 @@ class CompareRepository:
                 INSERT INTO compare_history_item (
                     compare_history_id,
                     policy_id,
+                    policy_slug,
+                    policy_name,
                     added_at
                 )
                 VALUES
-                    (:compare_history_id, :policy_a_id, CURRENT_TIMESTAMP),
-                    (:compare_history_id, :policy_b_id, CURRENT_TIMESTAMP)
+                    (
+                        :compare_history_id,
+                        :policy_a_id,
+                        :policy_a_slug,
+                        :policy_a_name,
+                        CURRENT_TIMESTAMP
+                    ),
+                    (
+                        :compare_history_id,
+                        :policy_b_id,
+                        :policy_b_slug,
+                        :policy_b_name,
+                        CURRENT_TIMESTAMP
+                    )
                 ON CONFLICT (compare_history_id, policy_id) DO NOTHING
                 """
             ),
@@ -109,6 +135,10 @@ class CompareRepository:
                 "compare_history_id": compare_history_id,
                 "policy_a_id": policy_a_id,
                 "policy_b_id": policy_b_id,
+                "policy_a_slug": policy_a_slug,
+                "policy_b_slug": policy_b_slug,
+                "policy_a_name": policy_a_name,
+                "policy_b_name": policy_b_name,
             },
         )
         return compare_history_id
@@ -132,10 +162,13 @@ class CompareRepository:
                     FROM compare_history ch
                     JOIN compare_history_item chi
                       ON chi.compare_history_id = ch.compare_history_id
+                    LEFT JOIN policy p ON p.policy_id = chi.policy_id
                     WHERE ch.user_id = :user_id
                       AND ch.deleted_at IS NULL
                     GROUP BY ch.compare_history_id
                     HAVING COUNT(*) = 2
+                       AND COUNT(COALESCE(chi.policy_slug, p.policy_code)) = 2
+                       AND COUNT(COALESCE(chi.policy_name, p.policy_name)) = 2
                 ) counted
                 """
             ),
@@ -149,17 +182,26 @@ class CompareRepository:
                 WITH ordered_history AS (
                     SELECT
                         ch.compare_history_id,
+                        ch.selection_guide,
                         ch.compared_at,
-                        array_agg(p.policy_name ORDER BY chi.added_at, chi.compare_history_item_id) AS policy_names,
-                        array_agg(p.policy_code ORDER BY chi.added_at, chi.compare_history_item_id) AS policy_slugs
+                        array_agg(
+                            COALESCE(chi.policy_name, p.policy_name)
+                            ORDER BY chi.added_at, chi.compare_history_item_id
+                        ) AS policy_names,
+                        array_agg(
+                            COALESCE(chi.policy_slug, p.policy_code)
+                            ORDER BY chi.added_at, chi.compare_history_item_id
+                        ) AS policy_slugs
                     FROM compare_history ch
                     JOIN compare_history_item chi
                       ON chi.compare_history_id = ch.compare_history_id
-                    JOIN policy p ON p.policy_id = chi.policy_id
+                    LEFT JOIN policy p ON p.policy_id = chi.policy_id
                     WHERE ch.user_id = :user_id
                       AND ch.deleted_at IS NULL
-                    GROUP BY ch.compare_history_id, ch.compared_at
+                    GROUP BY ch.compare_history_id, ch.selection_guide, ch.compared_at
                     HAVING COUNT(*) = 2
+                       AND COUNT(COALESCE(chi.policy_slug, p.policy_code)) = 2
+                       AND COUNT(COALESCE(chi.policy_name, p.policy_name)) = 2
                 )
                 SELECT
                     compare_history_id AS id,
@@ -167,6 +209,7 @@ class CompareRepository:
                     policy_names[2] AS policy_b_name,
                     policy_slugs[1] AS policy_a_slug,
                     policy_slugs[2] AS policy_b_slug,
+                    selection_guide,
                     compared_at
                 FROM ordered_history
                 ORDER BY compared_at DESC, compare_history_id DESC
@@ -277,7 +320,15 @@ class CompareRepository:
                         SELECT jsonb_agg(rd.document_name ORDER BY rd.document_name)
                         FROM required_document rd
                         WHERE rd.policy_id = p.policy_id
-                          AND COALESCE(rd.source_type, 'REQUIRED') <> 'POLICY_REFERENCE'
+                          AND COALESCE(rd.required_type, 'REQUIRED') = 'REQUIRED'
+                          AND (
+                            rd.document_name LIKE '%신청%서%'
+                            OR rd.document_name LIKE '%동의서%'
+                            OR rd.document_name LIKE '%확인서%'
+                            OR rd.document_name LIKE '%위임장%'
+                            OR rd.document_name LIKE '%진단서%'
+                            OR rd.document_name LIKE '%증명서%'
+                          )
                     ),
                     '[]'::jsonb
                 ) AS required_documents
