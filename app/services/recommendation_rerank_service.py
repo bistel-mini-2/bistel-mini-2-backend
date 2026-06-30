@@ -56,6 +56,7 @@ class RecommendationRerankService:
         candidates: list[PolicyCandidate],
         assessments: list[RecommendationPolicyAssessment],
         result_limit: int,
+        follow_up_denials: list[dict[str, Any]] | None = None,
     ) -> list[PolicyCandidate]:
         assessment_by_policy = self._assessment_by_policy(assessments)
         # 최종 노출 수의 2배를 풀로 둬 고를 여지를 확보하되(예: 4 → 8),
@@ -70,6 +71,7 @@ class RecommendationRerankService:
             key=lambda candidate: self._candidate_sort_key(
                 candidate,
                 assessment_by_policy.get(str(candidate.policy.policy_id)),
+                follow_up_denials or [],
             )
         )
         return eligible[:max_candidates]
@@ -83,27 +85,37 @@ class RecommendationRerankService:
         result_limit: int,
         raw_query: str | None = None,
         selected_conditions: dict[str, Any] | None = None,
+        follow_up_answers: list[dict[str, Any]] | None = None,
+        follow_up_denials: list[dict[str, Any]] | None = None,
         input_issues: list[dict[str, Any]] | None = None,
         profile_conflict_json: list[dict[str, Any]] | None = None,
     ) -> RecommendationRerankOutput:
+        user_context = self._user_context(
+            merged_condition_json=merged_condition_json,
+            raw_query=raw_query,
+            selected_conditions=selected_conditions or {},
+            follow_up_answers=follow_up_answers or [],
+            follow_up_denials=follow_up_denials or [],
+            input_issues=input_issues or [],
+            profile_conflict_json=profile_conflict_json or [],
+        )
+        base_result_json = self._with_follow_up_denial_conflicts(
+            base_result_json,
+            user_context.get("follow_up_denials") or [],
+        )
         # candidate_items는 candidates/assessments로 만들어진 base_result_json에서
         # 추출한다(둘의 정보가 result item에 이미 반영돼 있음).
         _ = candidates, assessments
-        candidate_items = self._candidate_items(base_result_json)
+        candidate_items = self._candidate_items(
+            base_result_json,
+            follow_up_denials=user_context.get("follow_up_denials") or [],
+        )
         if not candidate_items:
             return self._fallback(
                 base_result_json,
                 result_limit,
                 "LLM rerank candidate pool is empty",
             )
-
-        user_context = self._user_context(
-            merged_condition_json=merged_condition_json,
-            raw_query=raw_query,
-            selected_conditions=selected_conditions or {},
-            input_issues=input_issues or [],
-            profile_conflict_json=profile_conflict_json or [],
-        )
         try:
             llm_result = await self._call_llm(
                 merged_condition_json=merged_condition_json,
@@ -180,6 +192,14 @@ class RecommendationRerankService:
                   · 사용자가 의료비/치료/검진을 말하지 않았다면 → 의료성 정책은 후순위.
                 - 사용자가 명시한 목적이 없으면, 가구 상황(자녀 나이 등)에서 가장 보편적으로
                   체감되는 혜택(양육 부담 경감 등)을 우선한다.
+                - user_context.follow_up_answers는 시스템이 물어본 추가질문과 사용자의 답변 쌍이다.
+                  질문 문장 자체를 사용자의 관심사나 필요로 보지 말고, 반드시 answer를 우선한다.
+                - user_context.follow_up_denials / 후보의 follow_up_denial_conflicts는 사용자가
+                  "아니요/없어요/필요없어요"라고 부정한 주제다. 해당 주제를 추천 이유로 삼지 말고,
+                  그 주제에 의존하는 후보는 다른 대안보다 아래로 둔다.
+                  예: 수급 자격을 아니라고 답했으면 기초생활·차상위 수급이 핵심인 정책은 후순위,
+                  법률 상담이 필요 없다고 답했으면 무료법률상담은 후순위다.
+                  다만 후보를 완전히 버리기보다, 대안이 부족할 때만 낮은 우선순위/확인 필요로 포함한다.
 
                 === 그다음 종합 순위 기준(의도 직접성 다음으로 고려) ===
                 의도 직접성이 비슷한 후보들 사이의 순서는 아래를 종합해 정한다.
@@ -247,8 +267,8 @@ class RecommendationRerankService:
                 14. 입력 후보가 충분하면 recommendations는 가능하면 result_limit개를 반환한다.
                    단, 추천할 수 없는 후보를 억지로 포함하지는 않는다.
                 15. user_context(raw_query, selected_conditions, merged_condition_json,
-                   input_issues, profile_conflicts)를 참고해 사용자가 방금 입력한 조건을
-                   우선 반영한다.
+                   follow_up_answers, follow_up_denials, input_issues, profile_conflicts)를 참고해
+                   사용자가 방금 입력한 조건과 추가질문 답변을 우선 반영한다.
                 16. why_recommended는 benefit_description(혜택)과 사용자 목적의 연결을
                    중심으로 쓴다. matched_rules/check_rules/conflicting_conditions는
                    "추천 이유"가 아니라 check_before_apply(신청 전 확인사항)와
@@ -489,6 +509,7 @@ class RecommendationRerankService:
             final_results.append(backfilled_item)
             selected_policy_ids.add(policy_id)
         llm_backfilled_count = len(final_results) - llm_selected_count
+        final_results = self._demote_follow_up_denial_conflicts(final_results)
         self._apply_priority_presentation(final_results)
 
         summary = dict(result_json.get("summary") or {})
@@ -516,6 +537,21 @@ class RecommendationRerankService:
             fallback_used=False,
             error=None,
         )
+
+    def _demote_follow_up_denial_conflicts(
+        self,
+        results: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        return [
+            item
+            for _, item in sorted(
+                enumerate(results),
+                key=lambda pair: (
+                    1 if pair[1].get("follow_up_denial_conflicts") else 0,
+                    pair[0],
+                ),
+            )
+        ]
 
     def _llm_card_evidences(
         self,
@@ -727,7 +763,9 @@ class RecommendationRerankService:
         error: str,
     ) -> RecommendationRerankOutput:
         result_json = copy.deepcopy(base_result_json)
-        fallback_results = self._base_results(result_json)[:result_limit]
+        fallback_results = self._demote_follow_up_denial_conflicts(
+            self._base_results(result_json)
+        )[:result_limit]
         base_results = self._base_results(result_json)
         self._apply_priority_presentation(fallback_results)
         summary = dict(result_json.get("summary") or {})
@@ -758,6 +796,7 @@ class RecommendationRerankService:
     def _candidate_items(
         self,
         base_result_json: dict[str, Any],
+        follow_up_denials: list[dict[str, Any]] | None = None,
     ) -> list[dict[str, Any]]:
         items: list[dict[str, Any]] = []
         for item in self._base_results(base_result_json):
@@ -795,6 +834,10 @@ class RecommendationRerankService:
                     "conflicting_conditions": self._compact_rules(
                         item.get("conflicting_conditions")
                     ),
+                    "follow_up_denial_conflicts": self._follow_up_denial_conflicts(
+                        item,
+                        follow_up_denials or [],
+                    ),
                     "evidence": self._compact_evidences(
                         item.get("raw_evidences")
                         or item.get("evidence")
@@ -804,6 +847,99 @@ class RecommendationRerankService:
                 }
             )
         return items
+
+    def _with_follow_up_denial_conflicts(
+        self,
+        result_json: dict[str, Any],
+        follow_up_denials: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        if not follow_up_denials:
+            return result_json
+        copied = copy.deepcopy(result_json)
+        results = copied.get("results") or copied.get("recommendations") or []
+        if not isinstance(results, list):
+            return copied
+        for item in results:
+            if not isinstance(item, dict):
+                continue
+            conflicts = self._follow_up_denial_conflicts(item, follow_up_denials)
+            if conflicts:
+                item["follow_up_denial_conflicts"] = conflicts
+        copied["results"] = results
+        copied["recommendations"] = results
+        return copied
+
+    def _follow_up_denial_conflicts(
+        self,
+        item: dict[str, Any],
+        follow_up_denials: list[dict[str, Any]],
+    ) -> list[str]:
+        if not follow_up_denials:
+            return []
+        text = self._candidate_text_for_denial_match(item)
+        conflicts: list[str] = []
+        for denial in follow_up_denials:
+            if not isinstance(denial, dict):
+                continue
+            topic = str(denial.get("topic") or "").strip()
+            category = str(denial.get("category") or "").strip()
+            if not topic or not self._candidate_matches_denied_topic(text, category, topic):
+                continue
+            conflicts.append(f"사용자가 {topic}에 해당하지 않는다고 답함")
+            if len(conflicts) >= 3:
+                break
+        return conflicts
+
+    def _candidate_text_for_denial_match(self, item: dict[str, Any]) -> str:
+        parts: list[str] = []
+        for key in (
+            "policy_name",
+            "summary",
+            "target_description",
+            "benefit_description",
+            "reason_summary",
+            "check_before_apply",
+            "manual_check_summary",
+        ):
+            parts.append(str(item.get(key) or ""))
+        filter_match_json = item.get("filter_match_json") or {}
+        if isinstance(filter_match_json, dict):
+            for key in ("matched_rules", "uncertain_rules", "excluded_rules"):
+                for rule in filter_match_json.get(key) or []:
+                    if isinstance(rule, dict):
+                        parts.append(str(rule.get("field") or ""))
+                        parts.append(str(rule.get("reason") or ""))
+                        parts.append(str(rule.get("policy_value") or ""))
+        return " ".join(parts)
+
+    def _candidate_matches_denied_topic(
+        self,
+        text: str,
+        category: str,
+        topic: str,
+    ) -> bool:
+        if category == "income_status":
+            return self._contains_any(
+                text,
+                (
+                    "수급",
+                    "기초생활",
+                    "차상위",
+                    "의료급여",
+                    "주거급여",
+                    "생계급여",
+                    "한부모가족 수급",
+                ),
+            )
+        if category == "legal_need":
+            return self._contains_any(text, ("법률", "법률상담", "소송", "계약", "손해배상"))
+        if category == "birth_registration":
+            return self._contains_any(text, ("출생신고", "주민등록", "출생"))
+        return bool(topic and topic in text)
+
+    @staticmethod
+    def _contains_any(text: str, keywords: tuple[str, ...]) -> bool:
+        return any(keyword in text for keyword in keywords)
 
     def _short(self, value: Any, limit: int) -> str:
         return normalize_card_text(value, limit=limit)
@@ -840,6 +976,8 @@ class RecommendationRerankService:
         merged_condition_json: dict[str, Any],
         raw_query: str | None,
         selected_conditions: dict[str, Any],
+        follow_up_answers: list[dict[str, Any]],
+        follow_up_denials: list[dict[str, Any]],
         input_issues: list[dict[str, Any]],
         profile_conflict_json: list[dict[str, Any]],
     ) -> dict[str, Any]:
@@ -847,6 +985,8 @@ class RecommendationRerankService:
             "raw_query": raw_query or "",
             "selected_conditions": selected_conditions or {},
             "merged_condition_json": merged_condition_json or {},
+            "follow_up_answers": follow_up_answers or [],
+            "follow_up_denials": follow_up_denials or [],
             "input_issues": input_issues or [],
             "profile_conflicts": profile_conflict_json or [],
         }
@@ -911,17 +1051,57 @@ class RecommendationRerankService:
         self,
         candidate: PolicyCandidate,
         assessment: RecommendationPolicyAssessment | None,
-    ) -> tuple[int, float]:
+        follow_up_denials: list[dict[str, Any]] | None = None,
+    ) -> tuple[int, int, float]:
         priority_by_user_status = {
             "RECOMMENDABLE": 0,
             "NEEDS_CONFIRMATION": 1,
             "DIFFICULT_TO_RECOMMEND": 2,
         }
         user_status = assessment.user_status.value if assessment else ""
+        denial_penalty = 1 if self._candidate_denial_conflicts(
+            candidate,
+            follow_up_denials or [],
+        ) else 0
         return (
+            denial_penalty,
             priority_by_user_status.get(user_status, 1),
             -candidate.retrieval_score,
         )
+
+    def _candidate_denial_conflicts(
+        self,
+        candidate: PolicyCandidate,
+        follow_up_denials: list[dict[str, Any]],
+    ) -> list[str]:
+        if not follow_up_denials:
+            return []
+        detail = candidate.detail
+        parts = [
+            str(candidate.policy.policy_name or ""),
+            str(candidate.policy.benefit_type or ""),
+            str(getattr(detail, "target_description", "") or ""),
+            str(getattr(detail, "benefit_description", "") or ""),
+            str(getattr(detail, "easy_summary", "") or ""),
+        ]
+        filter_match_json = candidate.filter_match_json or {}
+        if isinstance(filter_match_json, dict):
+            for key in ("matched_rules", "uncertain_rules", "excluded_rules"):
+                for rule in filter_match_json.get(key) or []:
+                    if isinstance(rule, dict):
+                        parts.append(str(rule.get("field") or ""))
+                        parts.append(str(rule.get("reason") or ""))
+                        parts.append(str(rule.get("policy_value") or ""))
+        text = " ".join(parts)
+        conflicts: list[str] = []
+        for denial in follow_up_denials:
+            if not isinstance(denial, dict):
+                continue
+            topic = str(denial.get("topic") or "").strip()
+            category = str(denial.get("category") or "").strip()
+            if topic and self._candidate_matches_denied_topic(text, category, topic):
+                conflicts.append(f"사용자가 {topic}에 해당하지 않는다고 답함")
+        return conflicts
 
     def _assessment_by_policy(
         self,

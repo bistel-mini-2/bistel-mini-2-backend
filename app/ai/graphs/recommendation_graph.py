@@ -62,6 +62,8 @@ class RecommendationGraphRunner:
         profile_conflict_json: list[dict[str, Any]] | None = None,
         raw_query: str | None = None,
         selected_conditions: dict[str, Any] | None = None,
+        follow_up_answers: list[dict[str, Any]] | None = None,
+        follow_up_denials: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         final_state = await self.graph.ainvoke(
             {
@@ -72,6 +74,8 @@ class RecommendationGraphRunner:
                 "profile_conflict_json": profile_conflict_json or [],
                 "raw_query": raw_query,
                 "selected_conditions": selected_conditions or {},
+                "follow_up_answers": follow_up_answers or [],
+                "follow_up_denials": follow_up_denials or [],
             }
         )
         return final_state.get(
