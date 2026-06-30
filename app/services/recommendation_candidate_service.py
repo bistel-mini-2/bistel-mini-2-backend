@@ -22,6 +22,7 @@ from app.services.policy_rule_grouping import (
     OUTCOME_MATCH,
     VERDICT_MATCH,
     evaluate_or_group,
+    is_denied_income_mismatch,
     partition_or_groups,
     rule_matches,
     rule_values,
@@ -915,6 +916,21 @@ class RecommendationCandidateService:
             condition_value = self._condition_value(condition, field_name)
             rule_value = rule.get("value_json")
             operator = str(rule.get("operator") or "").upper()
+            # 사용자가 수급 자격이 "없다"고 명시(income_status="none")했는데 정책이 특정
+            # 수급 자격을 요구하면, manual_check/uncertain을 거치지 않고 곧장 확정 미충족(제외).
+            # ("기초생활보장 수급 여부 확인" 같은 모순 안내도 막는다.)
+            if is_denied_income_mismatch(field_name, condition_value, rule_value):
+                excluded_rules.append(
+                    {
+                        "field": field_name,
+                        "condition_value": condition_value,
+                        "policy_value": rule_value,
+                        "result": "income_status_denied",
+                        "reason": "기초생활·차상위 등 수급 자격이 없다고 하셔서 이 정책의 지원 대상이 아닙니다.",
+                        **self._rule_meta(rule),
+                    }
+                )
+                continue
             if rule.get("manual_check_required") is True:
                 uncertain_rules.append(
                     {

@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS compare_history (
     user_id BIGINT NOT NULL
         REFERENCES users(user_id) ON DELETE CASCADE,
     title VARCHAR(255),
+    selection_guide TEXT,
     compared_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     deleted_at TIMESTAMP
 );
@@ -24,15 +25,23 @@ CREATE TABLE IF NOT EXISTS compare_history_item (
         REFERENCES compare_history(compare_history_id) ON DELETE CASCADE,
     policy_id BIGINT NOT NULL
         REFERENCES policy(policy_id) ON DELETE CASCADE,
+    policy_slug VARCHAR(100),
+    policy_name VARCHAR(255),
     added_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 ALTER TABLE compare_history
     ADD COLUMN IF NOT EXISTS title VARCHAR(255);
 ALTER TABLE compare_history
+    ADD COLUMN IF NOT EXISTS selection_guide TEXT;
+ALTER TABLE compare_history
     ADD COLUMN IF NOT EXISTS compared_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;
 ALTER TABLE compare_history
     ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
+ALTER TABLE compare_history_item
+    ADD COLUMN IF NOT EXISTS policy_slug VARCHAR(100);
+ALTER TABLE compare_history_item
+    ADD COLUMN IF NOT EXISTS policy_name VARCHAR(255);
 ALTER TABLE compare_history_item
     ADD COLUMN IF NOT EXISTS added_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;
 

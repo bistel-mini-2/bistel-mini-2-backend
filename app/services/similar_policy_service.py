@@ -91,7 +91,14 @@ class SimilarPolicyService:
             self._target_payload(target),
             [self._candidate_payload(row) for row in ordered],
         )
-        return self._build_response(ordered, judgements, sources, limit)
+        return self._build_response(
+            ordered,
+            judgements,
+            sources,
+            limit,
+            target_id=target_id,
+            target_slug=target.get("slug"),
+        )
 
     async def _vector_candidate_ids(
         self,
@@ -173,9 +180,21 @@ class SimilarPolicyService:
         judgements: list[LlmSimilarPolicyItem],
         sources: dict[int, str],
         limit: int,
+        target_id: int | None = None,
+        target_slug: str | None = None,
     ) -> SimilarPolicyListResponse:
+        # 기준 정책 자기 자신은 어떤 경로로 들어왔든 최종 결과에서 제외(방어적).
+        target_id_key = str(target_id) if target_id is not None else None
+        target_slug_key = str(target_slug) if target_slug else None
+
+        def _is_target(row: dict[str, Any]) -> bool:
+            return (
+                str(int(row["policy_id"])) == target_id_key
+                or (target_slug_key is not None and str(row.get("slug")) == target_slug_key)
+            )
+
+        ordered = [row for row in ordered if not _is_target(row)]
         rows_by_key = {str(int(row["policy_id"])): row for row in ordered}
-        judged_by_key = {str(item.policy_id): item for item in judgements}
 
         # 에이전트가 매긴 순서를 우선하고, 판정에서 빠진 후보는 벡터/규칙 순서로 뒤에 붙인다.
         final: list[tuple[dict[str, Any], LlmSimilarPolicyItem | None]] = []

@@ -91,6 +91,8 @@ ALLOWED_INCOME_STATUS = {
     "housing_benefit_recipient",
     "education_benefit_recipient",
     "near_poverty_class",
+    # 기초생활/차상위 등 수급 자격이 "없다"고 명시한 경우(부정). null과 구분한다.
+    "none",
 }
 INCOME_STATUS_ALIASES = {
     "기초생활수급자": "basic_livelihood_recipient",
@@ -107,6 +109,13 @@ INCOME_STATUS_ALIASES = {
     "교육급여수급자": "education_benefit_recipient",
     "차상위": "near_poverty_class",
     "차상위계층": "near_poverty_class",
+    # 수급 자격 없음(부정) alias
+    "없음": "none",
+    "해당없음": "none",
+    "해당없어요": "none",
+    "비수급": "none",
+    "수급아님": "none",
+    "일반가구": "none",
 }
 
 
@@ -199,13 +208,21 @@ class LangChainConditionExtractor:
                     - housing_benefit_recipient: 주거급여 수급
                     - education_benefit_recipient: 교육급여 수급
                     - near_poverty_class: 차상위계층
+                    - none: 기초생활/차상위 등 수급 자격이 "없다"고 명시한 경우
+                      (예: "수급 자격 없어요", "기초생활·차상위 아니에요", "해당 안 돼요").
                     급여 종류를 명확히 말하면 해당 세부값을, 단순히 "기초생활수급자"면
-                    basic_livelihood_recipient를 쓴다. 여러 개면 배열로, 없으면 null로 둔다.
+                    basic_livelihood_recipient를 쓴다. 수급 자격이 없다고 명시하면 "none"을 쓴다.
+                    여러 개면 배열로, 수급 관련 언급이 전혀 없으면 null로 둔다.
+                    ("없다"는 명시적 부정이므로 null이 아니라 "none"으로 구분한다.)
 
                     age: 신청자 본인 나이(정수). 예: "저는 70세" → 70. 없으면 null.
 
                     household_member_age: 가구원의 나이(정수) 또는 나이 목록(정수 배열).
                     예: "65세 부모님과 5살 아이가 있어요" → [65, 5]. 본인 나이는 age에 둔다. 없으면 null.
+
+                    raw_query에 "추가 확인 답변:"이 있으면, 그 앞의 질문 문장은 시스템이 물어본 확인 질문입니다.
+                    질문 문장 자체를 사용자의 관심사나 needs로 해석하지 말고, 반드시 뒤의 답변을 우선합니다.
+                    특히 "필요없다/아니다/해당하지 않는다"고 답한 주제는 사용자가 원하지 않거나 해당하지 않는 조건입니다.
 
                     사용자가 명확히 말하지 않은 스칼라 필드는 null로, 리스트 필드(special, needs)는 빈 배열로 둔다.
                     사용자의 관심사나 원하는 지원 내용은 needs에 한국어 키워드로 담는다.

@@ -33,6 +33,22 @@ def test_collect_slots_recommend_uses_wizard_order() -> None:
     assert field_keys == wizard_order
 
 
+def test_collect_slots_recommend_asks_conditions_not_policy_name() -> None:
+    result = asyncio.run(
+        handle_collect_slots(
+            {
+                **_state(intent="recommend"),
+                "user_content": "추천해줘",
+            }
+        )
+    )
+
+    field_keys = [f["key"] for f in result["slot_request"]["fields"]]
+    assert "child_age" in field_keys
+    assert "summary_target" not in field_keys
+    assert "정책명" not in result["branch_content"]
+
+
 def test_collect_slots_recommend_skips_filled_slots() -> None:
     profile = {"child_age": "0", "income": "low"}
     result = asyncio.run(

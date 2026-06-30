@@ -1,3 +1,4 @@
+import re
 from typing import Any
 
 from app.ai.utils.condition_profile_utils import (
@@ -5,21 +6,26 @@ from app.ai.utils.condition_profile_utils import (
     summarize_condition_tree,
 )
 
+# 기관목록/연락처목록 레이블 앞에 줄바꿈 삽입 (신청 방법 텍스트 포매팅용)
+_APPLICATION_SPLIT_RE = re.compile(r"(?<=[^\s])\s+(?=[가-힣]+(?:연락처)?목록:)")
+
 
 def build_policy_summary_key_points(
     policy: dict[str, Any],
     *,
-    content_limit: int,
+    content_limit: int = 0,
 ) -> list[dict[str, str]]:
     candidates = _policy_summary_key_point_candidates(policy)
     key_points: list[dict[str, str]] = []
     for label, value in candidates:
         text = " ".join(str(value or "").split())
         if text:
+            if label == "application":
+                text = _APPLICATION_SPLIT_RE.sub("\n", text)
             key_points.append(
                 {
                     "label": label,
-                    "content": _short(text, content_limit),
+                    "content": _short(text, content_limit) if content_limit else text,
                 }
             )
     return key_points[:3]

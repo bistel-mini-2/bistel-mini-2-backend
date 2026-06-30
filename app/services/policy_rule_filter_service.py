@@ -3,6 +3,7 @@ from typing import Any
 
 from app.services.policy_rule_condition_value import condition_value
 from app.services.policy_rule_grouping import (
+    is_denied_income_mismatch,
     INCOME_LEVEL_TO_PERCENT,
     OUTCOME_FAIL,
     OUTCOME_MANUAL,
@@ -61,6 +62,15 @@ class PolicyRuleFilterService:
             condition_value = self._condition_value(condition, field_name)
             rule_value = rule.get("value_json")
             operator = str(rule.get("operator") or "").upper()
+
+            # 수급 자격을 "없다"고 명시(income_status="none")한 사용자에게는, 특정 수급
+            # 자격을 요구하는 정책을 manual_check/hard filter 여부와 무관하게 확정 미충족으로
+            # 처리한다(모순된 "수급 여부 확인" 안내 방지). 공유 술어로 OR 그룹과 동일 판정.
+            if is_denied_income_mismatch(field_name, condition_value, rule_value):
+                result.rule_failures.append(
+                    self.explanation.explain(rule, VERDICT_EXCLUDED)
+                )
+                continue
 
             if rule.get("manual_check_required") is True:
                 result.manual_check_points.append(

@@ -29,7 +29,7 @@ SLOT_LABELS: dict[str, str] = {
     "income": "소득",
     "region": "지역",
     "special": "가구 특성",
-    "summary_target": "요약 대상",
+    "summary_target": "요약할 정책",
 }
 
 SLOT_QUESTIONS: dict[str, str] = {
@@ -38,7 +38,7 @@ SLOT_QUESTIONS: dict[str, str] = {
     "child_age": "자녀 나이가 어떻게 되나요?",
     "income": "소득 구간을 알려주실 수 있을까요?",
     "special": "해당하는 가구 특성이 있나요? (없으면 건너뛰기)",
-    "summary_target": "무엇을 요약할까요?",
+    "summary_target": "어떤 정책을 요약할까요? 정책명을 알려주세요.",
 }
 
 # 칩 옵션은 {label(표시), value(엔진 코드)} 쌍이다. value는 반드시
@@ -94,11 +94,7 @@ SLOT_OPTIONS: dict[str, list[dict[str, str]]] = {
         {"label": "저소득", "value": "low_income"},
         {"label": "국가유공", "value": "veteran"},
     ],
-    "summary_target": [
-        {"label": "이 정책", "value": "policy"},
-        {"label": "방금 추천 결과", "value": "recommendation_result"},
-        {"label": "지원가능성 분석 결과", "value": "eligibility_result"},
-    ],
+    "summary_target": [],
 }
 
 PROFILE_LABELS = {
