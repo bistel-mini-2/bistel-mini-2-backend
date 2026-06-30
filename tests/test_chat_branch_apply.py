@@ -8,7 +8,6 @@ from fastapi import status
 
 from app.ai.nodes.chat import chat_nodes
 from app.ai.nodes.chat.chat_nodes import (
-    ChatGraphNodes,
     _build_apply_card,
     _format_application_period_context,
     _format_apply_card_context,
@@ -18,6 +17,12 @@ from app.ai.nodes.chat.chat_nodes import (
 )
 from app.common.exceptions import AppException, ErrorCode
 from app.schemas.apply_schema import ApplyPreparationResponse, ChecklistItem
+from app.services import chat_handlers
+from app.services.chat_handlers import (
+    handle_apply,
+    build_assistant_payload,
+    extract_policy_links,
+)
 
 
 def _apply_response() -> ApplyPreparationResponse:
@@ -223,10 +228,9 @@ def test_branch_apply_invokes_service_and_adapts_payload(
     monkeypatch.setattr(
         chat_nodes.ApplyPreparationService, "get", apply_get
     )
+    monkeypatch.setattr(chat_handlers, "_RAG_SERVICE", rag)
 
-    nodes = ChatGraphNodes(rag_service=rag)
-
-    result = asyncio.run(nodes.branch_apply(_state()))
+    result = asyncio.run(handle_apply(_state()))
 
     apply_get.assert_awaited_once()
     call_kwargs = apply_get.await_args.kwargs
@@ -255,10 +259,9 @@ def test_branch_apply_falls_back_when_rag_has_no_slug(
     monkeypatch.setattr(
         chat_nodes.ApplyPreparationService, "get", apply_get
     )
+    monkeypatch.setattr(chat_handlers, "_RAG_SERVICE", rag)
 
-    nodes = ChatGraphNodes(rag_service=rag)
-
-    result = asyncio.run(nodes.branch_apply(_state()))
+    result = asyncio.run(handle_apply(_state()))
 
     apply_get.assert_not_awaited()
     assert result["branch_apply_card"] is None
@@ -279,10 +282,9 @@ def test_branch_apply_clarifies_when_rag_policy_name_not_mentioned(
     monkeypatch.setattr(
         chat_nodes.ApplyPreparationService, "get", apply_get
     )
+    monkeypatch.setattr(chat_handlers, "_RAG_SERVICE", rag)
 
-    nodes = ChatGraphNodes(rag_service=rag)
-
-    result = asyncio.run(nodes.branch_apply(_state()))
+    result = asyncio.run(handle_apply(_state()))
 
     apply_get.assert_not_awaited()
     assert result["branch_apply_card"] is None
@@ -303,10 +305,9 @@ def test_branch_apply_uses_recent_assistant_policy_for_contextual_follow_up(
     monkeypatch.setattr(
         chat_nodes.ApplyPreparationService, "get", apply_get
     )
+    monkeypatch.setattr(chat_handlers, "_RAG_SERVICE", rag)
 
-    nodes = ChatGraphNodes(rag_service=rag)
-
-    result = asyncio.run(nodes.branch_apply({
+    result = asyncio.run(handle_apply({
         **_state(),
         "user_content": "이거 어떻게 신청해?",
         "recent_assistant_policy": {
@@ -336,10 +337,9 @@ def test_branch_apply_prefers_explicit_rag_policy_over_recent_assistant_policy(
     monkeypatch.setattr(
         chat_nodes.ApplyPreparationService, "get", apply_get
     )
+    monkeypatch.setattr(chat_handlers, "_RAG_SERVICE", rag)
 
-    nodes = ChatGraphNodes(rag_service=rag)
-
-    result = asyncio.run(nodes.branch_apply({
+    result = asyncio.run(handle_apply({
         **_state(),
         "user_content": "산모신생아 건강관리 신청 방법 알려줘",
         "recent_assistant_policy": {
@@ -368,10 +368,9 @@ def test_branch_apply_does_not_use_recent_policy_for_non_contextual_message(
     monkeypatch.setattr(
         chat_nodes.ApplyPreparationService, "get", apply_get
     )
+    monkeypatch.setattr(chat_handlers, "_RAG_SERVICE", rag)
 
-    nodes = ChatGraphNodes(rag_service=rag)
-
-    result = asyncio.run(nodes.branch_apply({
+    result = asyncio.run(handle_apply({
         **_state(),
         "user_content": "새로운 정책 찾아줘",
         "recent_assistant_policy": {
@@ -407,10 +406,9 @@ def test_branch_apply_falls_back_when_policy_not_found(
     monkeypatch.setattr(
         chat_nodes.ApplyPreparationService, "get", AsyncMock(side_effect=_raise_not_found)
     )
+    monkeypatch.setattr(chat_handlers, "_RAG_SERVICE", rag)
 
-    nodes = ChatGraphNodes(rag_service=rag)
-
-    result = asyncio.run(nodes.branch_apply(_state()))
+    result = asyncio.run(handle_apply(_state()))
 
     assert result["branch_apply_card"] is None
     assert result["branch_policies"] == []
@@ -438,10 +436,10 @@ def test_branch_apply_reraises_non_policy_not_found_app_exception(
         "get",
         AsyncMock(side_effect=_raise_unauthorized),
     )
+    monkeypatch.setattr(chat_handlers, "_RAG_SERVICE", rag)
 
-    nodes = ChatGraphNodes(rag_service=rag)
     with pytest.raises(AppException):
-        asyncio.run(nodes.branch_apply(_state()))
+        asyncio.run(handle_apply(_state()))
 
 
 def test_branch_apply_policy_link_extract_emits_apply_target(
@@ -457,18 +455,18 @@ def test_branch_apply_policy_link_extract_emits_apply_target(
         "get",
         AsyncMock(return_value=_apply_response()),
     )
+    monkeypatch.setattr(chat_handlers, "_RAG_SERVICE", rag)
 
-    nodes = ChatGraphNodes(rag_service=rag)
-    after_branch = asyncio.run(nodes.branch_apply(_state()))
+    after_branch = asyncio.run(handle_apply(_state()))
 
     state_with_decision = {
         **after_branch,
         "supervisor_decision": {"intent": "apply", "raw": "{}"},
     }
-    payload_state = asyncio.run(nodes.assistant_payload_build(state_with_decision))
-    link_state = asyncio.run(nodes.policy_link_extract(payload_state))
+    payload_state = asyncio.run(build_assistant_payload(state_with_decision))
+    link_result = asyncio.run(extract_policy_links(state_with_decision))
 
     assert payload_state["assistant_payload"]["apply_card"]["policy_id"] == "WLF1"
-    assert link_state["policy_links_to_save"] == [
+    assert link_result == [
         {"policy_slug": "WLF1", "action_type": "APPLY_TARGET"}
     ]

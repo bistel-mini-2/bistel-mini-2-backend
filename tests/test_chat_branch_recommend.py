@@ -5,14 +5,14 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.ai.nodes.chat import chat_nodes
 from app.ai.nodes.chat.chat_nodes import (
-    ChatGraphNodes,
     _adapt_recommendation_result,
 )
 from app.common.ai_status import RequestStatus
 from app.schemas.ai_contract import ConditionResult, FollowUpCandidate
+from app.services import chat_handlers
 from app.services.ai_request_lifecycle_service import AiRequestLifecycleService
+from app.services.chat_handlers import handle_recommend
 
 
 def _result_json() -> dict[str, Any]:
@@ -167,11 +167,12 @@ class _FakeSession:
 
 @pytest.fixture
 def patched_session(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(chat_nodes, "AsyncSessionLocal", lambda: _FakeSession())
+    monkeypatch.setattr(chat_handlers, "AsyncSessionLocal", lambda: _FakeSession())
 
 
 @pytest.fixture
 def patched_llm(monkeypatch: pytest.MonkeyPatch) -> AsyncMock:
+    from app.ai.nodes.chat import chat_nodes
     llm = AsyncMock()
     llm.ainvoke = AsyncMock(
         return_value=SimpleNamespace(content="추천 정책을 안내해 드릴게요.")
@@ -264,13 +265,14 @@ def test_branch_recommend_invokes_graph_and_adapts_payload(
     patched_session: None,
     patched_llm: AsyncMock,
     patched_profile: None,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     runner = MagicMock()
     runner.run = AsyncMock(return_value=_result_json())
     lifecycle, _, condition_agent = _build_lifecycle(runner=runner)
-    nodes = ChatGraphNodes(rag_service=object(), lifecycle_service=lifecycle)
+    monkeypatch.setattr(chat_handlers, "_LIFECYCLE_SERVICE", lifecycle)
 
-    result = asyncio.run(nodes.branch_recommend(_state()))
+    result = asyncio.run(handle_recommend(_state()))
 
     runner.run.assert_awaited_once()
     condition_agent.analyze.assert_awaited_once()
@@ -286,13 +288,14 @@ def test_branch_recommend_follow_up_returns_fallback(
     patched_session: None,
     patched_llm: AsyncMock,
     patched_profile: None,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     runner = MagicMock()
     runner.run = AsyncMock(return_value=_result_json())
     lifecycle, _, _ = _build_lifecycle(runner=runner, follow_up=True)
-    nodes = ChatGraphNodes(rag_service=object(), lifecycle_service=lifecycle)
+    monkeypatch.setattr(chat_handlers, "_LIFECYCLE_SERVICE", lifecycle)
 
-    result = asyncio.run(nodes.branch_recommend(_state()))
+    result = asyncio.run(handle_recommend(_state()))
 
     runner.run.assert_not_awaited()
     assert result["branch_content"] == "맞춤 추천을 위해 정보가 조금 더 필요해요."
@@ -312,7 +315,7 @@ def test_branch_recommend_graph_failure_returns_fallback(
     runner = MagicMock()
     runner.run = AsyncMock(side_effect=RuntimeError("graph blew up"))
     lifecycle, _, _ = _build_lifecycle(runner=runner)
-    nodes = ChatGraphNodes(rag_service=object(), lifecycle_service=lifecycle)
+    monkeypatch.setattr(chat_handlers, "_LIFECYCLE_SERVICE", lifecycle)
 
     mark_failed_calls: list[tuple[int, str]] = []
 
@@ -320,12 +323,12 @@ def test_branch_recommend_graph_failure_returns_fallback(
         mark_failed_calls.append((request_id, error_message))
 
     monkeypatch.setattr(
-        chat_nodes, "_mark_recommendation_failed", _capture_mark_failed
+        chat_handlers, "_mark_recommendation_failed", _capture_mark_failed
     )
 
-    result = asyncio.run(nodes.branch_recommend(_state()))
+    result = asyncio.run(handle_recommend(_state()))
 
-    runner.run.assert_awaited_once()
+    assert runner.run.await_count == 2  # initial attempt + 1 retry
     assert mark_failed_calls and mark_failed_calls[0][0] == 1
     assert "잠시 후 다시" in result["branch_content"]
     assert result["branch_policies"] == []

@@ -5,8 +5,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.ai.nodes.chat import chat_nodes
-from app.ai.nodes.chat.chat_nodes import ChatGraphNodes
+from app.services import chat_handlers
+from app.services.chat_handlers import handle_eligibility
 from app.common.ai_status import RequestStatus
 
 
@@ -92,7 +92,7 @@ def _state(*, resolved_slug: str | None = None) -> dict[str, Any]:
 
 @pytest.fixture
 def patched_session(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(chat_nodes, "AsyncSessionLocal", lambda: _FakeSession())
+    monkeypatch.setattr(chat_handlers, "AsyncSessionLocal", lambda: _FakeSession())
 
 
 def _make_eligibility_graph(result: dict | None) -> MagicMock:
@@ -106,12 +106,14 @@ def _make_eligibility_graph(result: dict | None) -> MagicMock:
 
 def test_branch_eligibility_resolved_slug_skips_rag(
     patched_session: None,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     rag = _FakeRagService([])
     graph = _make_eligibility_graph(_eligibility_result())
-    nodes = ChatGraphNodes(rag_service=rag, eligibility_graph=graph)
+    monkeypatch.setattr(chat_handlers, "_RAG_SERVICE", rag)
+    monkeypatch.setattr(chat_handlers, "_ELIGIBILITY_GRAPH", graph)
 
-    result = asyncio.run(nodes.branch_eligibility(_state(resolved_slug="WLF1")))
+    result = asyncio.run(handle_eligibility(_state(resolved_slug="WLF1")))
 
     rag.search.assert_not_awaited()
     graph.run.assert_awaited_once()
@@ -121,12 +123,14 @@ def test_branch_eligibility_resolved_slug_skips_rag(
 
 def test_branch_eligibility_rag_finds_policy_runs_lifecycle(
     patched_session: None,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     rag = _FakeRagService(
         [_rag_chunk(chunk_id=1, policy_code="WLF1", policy_name="임신·출산 진료비")]
     )
     graph = _make_eligibility_graph(_eligibility_result())
-    nodes = ChatGraphNodes(rag_service=rag, eligibility_graph=graph)
+    monkeypatch.setattr(chat_handlers, "_RAG_SERVICE", rag)
+    monkeypatch.setattr(chat_handlers, "_ELIGIBILITY_GRAPH", graph)
 
     state = {
         "user_id": 7,
@@ -134,7 +138,7 @@ def test_branch_eligibility_rag_finds_policy_runs_lifecycle(
         "history": [],
         "supervisor_decision": {"intent": "eligibility", "raw": "{}"},
     }
-    result = asyncio.run(nodes.branch_eligibility(state))
+    result = asyncio.run(handle_eligibility(state))
 
     rag.search.assert_awaited_once()
     graph.run.assert_awaited_once()
@@ -143,10 +147,12 @@ def test_branch_eligibility_rag_finds_policy_runs_lifecycle(
 
 def test_branch_eligibility_no_policy_found_returns_clarification(
     patched_session: None,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     rag = _FakeRagService([])
     graph = _make_eligibility_graph(_eligibility_result())
-    nodes = ChatGraphNodes(rag_service=rag, eligibility_graph=graph)
+    monkeypatch.setattr(chat_handlers, "_RAG_SERVICE", rag)
+    monkeypatch.setattr(chat_handlers, "_ELIGIBILITY_GRAPH", graph)
 
     state = {
         "user_id": 7,
@@ -154,7 +160,7 @@ def test_branch_eligibility_no_policy_found_returns_clarification(
         "history": [],
         "supervisor_decision": {"intent": "eligibility", "raw": "{}"},
     }
-    result = asyncio.run(nodes.branch_eligibility(state))
+    result = asyncio.run(handle_eligibility(state))
 
     graph.run.assert_not_awaited()
     assert result["branch_policies"] == []
@@ -163,18 +169,17 @@ def test_branch_eligibility_no_policy_found_returns_clarification(
 
 def test_branch_eligibility_follow_up_required_saves_slot(
     patched_session: None,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     follow_up_result = {
         **_eligibility_result(status=RequestStatus.FOLLOW_UP_REQUIRED.value),
         "follow_up_questions": [{"field_name": "region", "question_text": "어디 사세요?"}],
     }
     graph = _make_eligibility_graph(follow_up_result)
-    nodes = ChatGraphNodes(
-        rag_service=_FakeRagService([]),
-        eligibility_graph=graph,
-    )
+    monkeypatch.setattr(chat_handlers, "_RAG_SERVICE", _FakeRagService([]))
+    monkeypatch.setattr(chat_handlers, "_ELIGIBILITY_GRAPH", graph)
 
-    result = asyncio.run(nodes.branch_eligibility(_state(resolved_slug="WLF1")))
+    result = asyncio.run(handle_eligibility(_state(resolved_slug="WLF1")))
 
     slot_update = result.get("eligibility_slot_update") or {}
     assert slot_update["eligibility_status"] == RequestStatus.FOLLOW_UP_REQUIRED.value
@@ -185,14 +190,13 @@ def test_branch_eligibility_follow_up_required_saves_slot(
 
 def test_branch_eligibility_lifecycle_failure_returns_fallback(
     patched_session: None,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     graph = _make_eligibility_graph(None)
-    nodes = ChatGraphNodes(
-        rag_service=_FakeRagService([]),
-        eligibility_graph=graph,
-    )
+    monkeypatch.setattr(chat_handlers, "_RAG_SERVICE", _FakeRagService([]))
+    monkeypatch.setattr(chat_handlers, "_ELIGIBILITY_GRAPH", graph)
 
-    result = asyncio.run(nodes.branch_eligibility(_state(resolved_slug="WLF1")))
+    result = asyncio.run(handle_eligibility(_state(resolved_slug="WLF1")))
 
     assert result["branch_policies"] == []
     assert "문제" in result["branch_content"] or "오류" in result["branch_content"] or result["branch_content"]
