@@ -153,7 +153,7 @@ class RecommendationService:
         evidences: list[EvidenceChunk] = []
         errors: list[str] = []
         for result in results:
-            if isinstance(result, Exception):
+            if isinstance(result, BaseException):
                 errors.append(str(result))
                 continue
             evidences.extend(result)

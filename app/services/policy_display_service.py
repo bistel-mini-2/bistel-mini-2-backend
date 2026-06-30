@@ -68,7 +68,12 @@ class PolicyDisplayAgent:
         return None
 
     @classmethod
-    def summarize_benefit(cls, row: dict[str, Any]) -> str | None:
+    def summarize_benefit(
+        cls,
+        row: dict[str, Any],
+        *,
+        allow_fallback: bool = False,
+    ) -> str | None:
         for value in (
             row.get("benefit_description"),
             row.get("benefit_summary"),
@@ -77,7 +82,11 @@ class PolicyDisplayAgent:
             summary = cls._benefit_summary_from_text(value, row)
             if summary:
                 return summary
-        return cls._benefit_fallback(row)
+
+        if allow_fallback:
+            return cls._benefit_fallback(row)
+
+        return None
 
     @classmethod
     def build_application_guide(

@@ -326,6 +326,7 @@ class PolicyRepository:
                         '[]'::jsonb
                     ) AS tags,
                     pd.easy_summary AS summary,
+                    pd.target_description,
                     pd.benefit_description AS benefit_summary,
                     p.provider_name AS agency,
                     p.benefit_type,
@@ -336,7 +337,9 @@ class PolicyRepository:
                     p.region_scope,
                     p.region_code,
                     p.official_url,
-                    cp.condition_json AS condition_profile_json
+                    cp.condition_json AS condition_profile_json,
+                    cp.target_summary AS condition_profile_target_summary,
+                    cp.source_text AS condition_profile_source_text
                 FROM policy p
                 LEFT JOIN policy_detail pd ON pd.policy_id = p.policy_id
                 LEFT JOIN policy_condition_profile cp
