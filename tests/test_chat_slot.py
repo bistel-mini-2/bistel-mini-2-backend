@@ -14,7 +14,9 @@ from app.ai.nodes.chat.chat_nodes import (
 from app.repositories.chat_repository import ChatRepository
 from app.repositories.policy_repository import PolicyRepository
 from app.services import chat_service as chat_service_module
+from app.services import chat_handlers as chat_handlers_module
 from app.services.chat_service import ChatService, _build_next_slot
+from app.services.chat_handlers import classify_intent
 from app.db.models.chat_session import ChatSession
 
 
@@ -318,7 +320,7 @@ def _session_with_slot(slot: dict) -> ChatSession:
     return s
 
 
-def test_send_message_passes_slot_to_graph_and_updates_slot(monkeypatch) -> None:
+def test_send_message_passes_slot_to_run_chat_and_updates_slot(monkeypatch) -> None:
     initial_slot = {
         "recent_policies": [
             {
@@ -354,7 +356,7 @@ def test_send_message_passes_slot_to_graph_and_updates_slot(monkeypatch) -> None
         AsyncMock(return_value={"WLF1": 42}),
     )
 
-    run_graph_mock = AsyncMock(
+    run_chat_mock = AsyncMock(
         return_value={
             "assistant_payload": {
                 "content": "답변",
@@ -386,7 +388,7 @@ def test_send_message_passes_slot_to_graph_and_updates_slot(monkeypatch) -> None
             ],
         }
     )
-    monkeypatch.setattr(chat_service_module, "_run_supervisor_graph", run_graph_mock)
+    monkeypatch.setattr(chat_service_module, "_run_chat", run_chat_mock)
 
     asyncio.run(
         ChatService.send_message(
@@ -394,9 +396,9 @@ def test_send_message_passes_slot_to_graph_and_updates_slot(monkeypatch) -> None
         )
     )
 
-    # graph 호출 시 slot이 전달됐는지
-    run_graph_mock.assert_awaited_once()
-    kwargs = run_graph_mock.await_args.kwargs
+    # direct routing 호출 시 slot이 전달됐는지
+    run_chat_mock.assert_awaited_once()
+    kwargs = run_chat_mock.await_args.kwargs
     assert kwargs["slot"] == initial_slot
 
     # 슬롯 갱신 호출됐는지
@@ -424,17 +426,16 @@ def test_supervisor_resolves_subject_omitted_question(monkeypatch) -> None:
 
     base_llm = MagicMock()
     base_llm.with_structured_output = MagicMock(return_value=structured_llm)
-    monkeypatch.setattr(chat_nodes, "_llm", lambda: base_llm)
+    monkeypatch.setattr(chat_handlers_module, "_llm", lambda: base_llm)
 
-    nodes = ChatGraphNodes(rag_service=_FakeRagService())
-    state = {
-        "user_id": 7,
-        "user_content": "신청 기간은?",
-        "history": [
+    out = asyncio.run(classify_intent(
+        user_id=7,
+        user_content="신청 기간은?",
+        history=[
             {"role": "user", "content": "아이돌봄서비스 어떻게 신청해?"},
             {"role": "assistant", "content": "복지로에서 온라인 신청..."},
         ],
-        "slot": {
+        slot={
             "recent_policies": [
                 {
                     "policy_id": 42,
@@ -444,8 +445,8 @@ def test_supervisor_resolves_subject_omitted_question(monkeypatch) -> None:
                 }
             ]
         },
-    }
-    out = asyncio.run(nodes.supervisor(state))
+        recent_assistant_policy=None,
+    ))
     assert out["supervisor_decision"]["intent"] == "apply"
     assert out["supervisor_decision"]["resolved_policy_slug"] == "WLF1"
 
@@ -461,14 +462,13 @@ def test_supervisor_rejects_hallucinated_slug_not_in_slot(monkeypatch) -> None:
 
     base_llm = MagicMock()
     base_llm.with_structured_output = MagicMock(return_value=structured_llm)
-    monkeypatch.setattr(chat_nodes, "_llm", lambda: base_llm)
+    monkeypatch.setattr(chat_handlers_module, "_llm", lambda: base_llm)
 
-    nodes = ChatGraphNodes(rag_service=_FakeRagService())
-    state = {
-        "user_id": 7,
-        "user_content": "그거 신청 기간은?",
-        "history": [],
-        "slot": {
+    out = asyncio.run(classify_intent(
+        user_id=7,
+        user_content="그거 신청 기간은?",
+        history=[],
+        slot={
             "recent_policies": [
                 {
                     "policy_id": 42,
@@ -478,8 +478,8 @@ def test_supervisor_rejects_hallucinated_slug_not_in_slot(monkeypatch) -> None:
                 }
             ]
         },
-    }
-    out = asyncio.run(nodes.supervisor(state))
+        recent_assistant_policy=None,
+    ))
     assert out["supervisor_decision"]["resolved_policy_slug"] is None
 
 

@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+from collections.abc import Awaitable, Callable
+from contextvars import ContextVar
 from typing import TYPE_CHECKING, Any
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
@@ -19,6 +21,60 @@ from app.ai.states.chat_state import (
     ProfileSlot,
     RecentAssistantPolicy,
     SlotPolicy,
+)
+from app.ai.nodes.chat.slots import (
+    CHILD_AGE_TO_STAGE as _CHILD_AGE_TO_STAGE,
+    CONFIRM_NO_HINTS as _CONFIRM_NO_HINTS,
+    CONFIRM_OPTIONS as _CONFIRM_OPTIONS,
+    CONFIRM_YES_HINTS as _CONFIRM_YES_HINTS,
+    INCOME_BRACKET_TO_PROFILE_CODE as _INCOME_BRACKET_TO_PROFILE_CODE,
+    PROFILE_LABELS as _PROFILE_LABELS,
+    PROFILE_OPTION_LABELS as _PROFILE_OPTION_LABELS,
+    RECOMMEND_WIZARD_FIELDS,
+    REQUIRED_SLOTS,
+    SLOT_LABELS as _SLOT_LABELS,
+    SLOT_OPTIONS as _SLOT_OPTIONS,
+    SLOT_QUESTIONS as _SLOT_QUESTIONS,
+)
+from app.ai.nodes.chat.prompts import (
+    APPLICATION_PERIOD_CONTEXT_RULES as _APPLICATION_PERIOD_CONTEXT_RULES,
+    ASSERTIVE_PHRASES as _ASSERTIVE_PHRASES,
+    COMMON_SAFETY_RULES as _COMMON_SAFETY_RULES,
+    BRANCH_SYSTEM_PROMPTS as _BRANCH_SYSTEM_PROMPTS,
+)
+from app.ai.nodes.chat.constants import (
+    APPLY_CHECKLIST_PREVIEW as _APPLY_CHECKLIST_PREVIEW,
+    APPLY_CLARIFICATION_FALLBACK as _APPLY_CLARIFICATION_FALLBACK,
+    APPLY_LIFECYCLE_TIMEOUT_SECONDS as _APPLY_LIFECYCLE_TIMEOUT_SECONDS,
+    APPLY_LOCK_TIMEOUT as _APPLY_LOCK_TIMEOUT,
+    APPLY_MAX_RETRIES as _APPLY_MAX_RETRIES,
+    APPLY_STATEMENT_TIMEOUT as _APPLY_STATEMENT_TIMEOUT,
+    APPLY_TEMPORARY_FAILURE_FALLBACK as _APPLY_TEMPORARY_FAILURE_FALLBACK,
+    COMPARE_CLARIFICATION_FALLBACK as _COMPARE_CLARIFICATION_FALLBACK,
+    COMPARE_FALLBACK_ERROR as _COMPARE_FALLBACK_ERROR,
+    ELIGIBILITY_CLARIFICATION_FALLBACK as _ELIGIBILITY_CLARIFICATION_FALLBACK,
+    ELIGIBILITY_FALLBACK_ERROR as _ELIGIBILITY_FALLBACK_ERROR,
+    ELIGIBILITY_FALLBACK_FOLLOW_UP as _ELIGIBILITY_FALLBACK_FOLLOW_UP,
+    ELIGIBILITY_LIFECYCLE_TIMEOUT_SECONDS as _ELIGIBILITY_LIFECYCLE_TIMEOUT_SECONDS,
+    ELIGIBILITY_LOCK_TIMEOUT as _ELIGIBILITY_LOCK_TIMEOUT,
+    ELIGIBILITY_SOURCE_TYPE as _ELIGIBILITY_SOURCE_TYPE,
+    ELIGIBILITY_STATEMENT_TIMEOUT as _ELIGIBILITY_STATEMENT_TIMEOUT,
+    EVIDENCES_MAX as _EVIDENCES_MAX,
+    EVIDENCE_ROLE_ENUM as _EVIDENCE_ROLE_ENUM,
+    INTENT_TO_ACTION_TYPE as _INTENT_TO_ACTION_TYPE,
+    INTENT_TO_API_ACTION as _INTENT_TO_API_ACTION,
+    LLM_MODEL as _LLM_MODEL,
+    POLICIES_MAX as _POLICIES_MAX,
+    RAG_TOP_K as _RAG_TOP_K,
+    RECOMMEND_FALLBACK_ERROR as _RECOMMEND_FALLBACK_ERROR,
+    RECOMMEND_FALLBACK_FOLLOW_UP as _RECOMMEND_FALLBACK_FOLLOW_UP,
+    RECOMMEND_FOLLOW_UP_LIMIT_REACHED as _RECOMMEND_FOLLOW_UP_LIMIT_REACHED,
+    RECOMMEND_LIFECYCLE_TIMEOUT_SECONDS as _RECOMMEND_LIFECYCLE_TIMEOUT_SECONDS,
+    RECOMMEND_LOCK_TIMEOUT as _RECOMMEND_LOCK_TIMEOUT,
+    RECOMMEND_MAX_RETRIES as _RECOMMEND_MAX_RETRIES,
+    RECOMMEND_SOURCE_TYPE as _RECOMMEND_SOURCE_TYPE,
+    RECOMMEND_STATEMENT_TIMEOUT as _RECOMMEND_STATEMENT_TIMEOUT,
+    SNIPPET_LIMIT as _SNIPPET_LIMIT,
 )
 from app.ai.utils.policy_summary_utils import build_policy_summary_key_points
 from app.common.ai_status import RequestStatus
@@ -47,232 +103,6 @@ def _lifecycle_service_class() -> type["AiRequestLifecycleService"]:
 
 
 logger = logging.getLogger(__name__)
-
-
-SUPERVISOR_SYSTEM_TEMPLATE = """당신은 임신·출산·육아 정책 챗봇의 Supervisor입니다.
-사용자 메시지를 다음 7개 intent 중 하나로 분류하세요.
-
-- recommend: 특정 정책을 지목하지 않고 "나에게 맞는 정책 목록"을 원하는 요청
-  예: "맞는 정책 알려줘", "임신 중인데 받을 수 있는 지원이 뭐야?", "어떤 혜택이 있어?"
-- eligibility: **특정 정책 1개**를 지목하고 본인이 그 정책의 지원 대상인지 묻는 요청
-  예: "부모급여 나도 받을 수 있어?", "첫만남이용권 조건이 어떻게 돼?", "이 정책 대상이 돼?"
-  ※ 정책 이름이 없어도 직전 맥락(슬롯)에 정책 1개가 있으면 eligibility로 분류.
-- compare: 정책 2개 이상을 명시적으로 비교 (예: "A랑 B 중 뭐가 나아?")
-- apply: 신청 방법·필요 서류·기한 (예: "어떻게 신청해?", "서류 뭐 필요해?")
-- summary: 정책, 추천 결과, 지원가능성 분석 결과, 신청 안내, 비교 결과를 요약해 달라는 요청
-  예: "요약해줘", "이 정책 요약", "방금 추천한 거 요약", "내 상황 기준으로 요약"
-- policy_summary: 일반 정책 정보 질의 (예: "부모급여가 뭐야?")
-- unclear: 위에 명확히 속하지 않거나 정책과 무관
-
-[recommend vs eligibility 구분 핵심]
-- recommend: "어떤 정책들이 있어?" (목록 요청, 정책 미지목)
-- eligibility: "이 정책 나도 돼?" (자격 확인, 정책 1개 지목)
-
-직전 대화 맥락도 함께 고려해서 결정합니다.
-
-[직전 거론 정책]
-{slot_context}
-
-[이미 알고 있는 사용자 조건]
-{profile_context}
-
-다음 중 하나에 해당하면 resolved_policy_slug 필드에 위 정책의 slug를 정확히 그대로 반환하세요:
-1. 사용자가 지시어로 직전 정책을 가리킴: "그 정책", "거기", "방금 그거", "이거" 등
-2. 주어가 생략된 후속 질문이 직전 정책 맥락의 연속으로 자연스럽게 해석됨: "신청 기간은?", "필요한 서류는?", "언제까지야?", "어디서 받아?"
-
-새 정책을 명시했거나 슬롯 정보가 비어있거나 정책과 무관한 메시지면 resolved_policy_slug는 null입니다.
-슬롯에 정책이 여러 개고 어느 것을 가리키는지 모호하면 첫 번째 정책의 slug를 선택하지 말고 null로 두세요.
-
-[사용자 조건 추출 — extracted_profile]
-이번 메시지에서 아래 조건이 새로 드러나면 extracted_profile에 **코드값**으로 채우세요(없으면 null).
-한글로 말하면 알맞은 코드로 변환합니다. 추정하지 말고 명시된 것만 추출하세요.
-- stage(생애단계): pregnant(임신·출산) | newborn | infant(영유아) | child(아동) | teen(청소년)
-- child_age(자녀 나이): preborn(태아) | 0 | 1 | 2-5 | 6-12 | 13+
-- income(소득): low(중위50%↓) | mid1(중위100%↓) | mid2(중위150%↓) | high | unknown(모름)
-- region(지역): seoul | busan | daegu | incheon | gwangju | daejeon | ulsan | sejong | gyeonggi | gangwon | chungbuk | chungnam | jeonbuk | jeonnam | gyeongbuk | gyeongnam | jeju | national
-- special(특이사항, 배열): single(한부모) | multi(다문화) | disabled(장애) | many(다자녀) | dual(맞벌이) | low_income(저소득) | veteran
-이미 알고 있는 조건과 같으면 다시 넣지 않아도 됩니다.
-"""
-
-
-# 슬롯 필링: intent별 필수 조건. 비어 있으면 그 intent로 가기 전에 되묻는다.
-# (추천만 게이팅 — 너무 많은 intent를 막으면 오히려 흐름이 딱딱해진다.)
-# 1차 입력은 "자녀 나이(child_age)" — 육아 서비스에서 더 구체적이고, 엔진의
-# core 필드 stage_or_childAge 를 충족한다. child_age 는 stage 로 파생해 lifeArray 직접
-# 필터를 유지한다(_CHILD_AGE_TO_STAGE). region 은 정책 데이터에 없어 게이트 제외.
-REQUIRED_SLOTS: dict[Intent, tuple[str, ...]] = {
-    "recommend": ("child_age",),
-}
-
-# 추천 입력 위저드의 스텝 순서. 필수(child_age) + 선택(income, special).
-RECOMMEND_WIZARD_FIELDS: tuple[str, ...] = ("child_age", "income", "region", "special")
-
-# 자녀 나이 → 생애단계(stage) 파생. child_age 는 직접 필터가 아니라서 stage 로 변환해
-# policy_raw_import.lifeArray 필터를 살린다.
-_CHILD_AGE_TO_STAGE: dict[str, str] = {
-    "preborn": "pregnant",
-    "0": "infant",
-    "1": "infant",
-    "2-5": "infant",
-    "6-12": "child",
-    "13+": "teen",
-}
-
-_SLOT_LABELS: dict[str, str] = {
-    "stage": "생애단계",
-    "child_age": "자녀 나이",
-    "income": "소득",
-    "region": "지역",
-    "special": "가구 특성",
-    "summary_target": "요약 대상",
-}
-
-_SLOT_QUESTIONS: dict[str, str] = {
-    "stage": "지금 생애단계가 어떻게 되세요?",
-    "region": "어느 지역에 사세요?",
-    "child_age": "자녀 나이가 어떻게 되나요?",
-    "income": "소득 구간을 알려주실 수 있을까요?",
-    "special": "해당하는 가구 특성이 있나요? (없으면 건너뛰기)",
-    "summary_target": "무엇을 요약할까요?",
-}
-
-# 칩 옵션은 {label(표시), value(엔진 코드)} 쌍이다. value 는 반드시
-# app/common/policy_types.py 의 enum 코드와 일치해야 한다(= 단일 소스).
-# 칩 전송 시 value 가 그대로 selected_conditions 로 들어가므로 한글 라벨을
-# 다시 파싱할 필요가 없다.
-#
-# stage 는 육아 도메인 범위(FamilyStage)로 한정: pregnant/newborn/infant/child/teen.
-# (newborn·infant 는 라벨이 모두 "영유아"라 infant 하나로 통합)
-_SLOT_OPTIONS: dict[str, list[dict[str, str]]] = {
-    "stage": [
-        {"label": "임신·출산", "value": "pregnant"},
-        {"label": "영유아", "value": "infant"},
-        {"label": "아동", "value": "child"},
-        {"label": "청소년", "value": "teen"},
-    ],
-    # 아래 3개는 엔진 코드에는 맞췄으나 노출 범위/라벨은 확정 전(검토 필요).
-    "child_age": [
-        {"label": "태아", "value": "preborn"},
-        {"label": "0세", "value": "0"},
-        {"label": "1세", "value": "1"},
-        {"label": "2~5세", "value": "2-5"},
-        {"label": "6~12세", "value": "6-12"},
-        {"label": "13세 이상", "value": "13+"},
-    ],
-    "income": [
-        {"label": "중위 50% 이하", "value": "low"},
-        {"label": "중위 100% 이하", "value": "mid1"},
-        {"label": "중위 150% 이하", "value": "mid2"},
-        {"label": "중위 150% 초과", "value": "high"},
-        {"label": "모름", "value": "unknown"},
-    ],
-    "region": [
-        {"label": "전국", "value": "national"},
-        {"label": "서울", "value": "seoul"},
-        {"label": "경기", "value": "gyeonggi"},
-        {"label": "인천", "value": "incheon"},
-        {"label": "부산", "value": "busan"},
-        {"label": "대구", "value": "daegu"},
-        {"label": "대전", "value": "daejeon"},
-        {"label": "광주", "value": "gwangju"},
-        {"label": "울산", "value": "ulsan"},
-        {"label": "세종", "value": "sejong"},
-        {"label": "강원", "value": "gangwon"},
-        {"label": "충북", "value": "chungbuk"},
-        {"label": "충남", "value": "chungnam"},
-        {"label": "전북", "value": "jeonbuk"},
-        {"label": "전남", "value": "jeonnam"},
-        {"label": "경북", "value": "gyeongbuk"},
-        {"label": "경남", "value": "gyeongnam"},
-        {"label": "제주", "value": "jeju"},
-    ],
-    # special 은 다중 선택(가구 특성). 정책 DB(trgterIndvdlArray) 직접 필터.
-    "special": [
-        {"label": "한부모", "value": "single"},
-        {"label": "다문화", "value": "multi"},
-        {"label": "장애", "value": "disabled"},
-        {"label": "다자녀", "value": "many"},
-        {"label": "맞벌이", "value": "dual"},
-        {"label": "저소득", "value": "low_income"},
-        {"label": "국가유공", "value": "veteran"},
-    ],
-    "summary_target": [
-        {"label": "이 정책", "value": "policy"},
-        {"label": "방금 추천 결과", "value": "recommendation_result"},
-        {"label": "지원가능성 분석 결과", "value": "eligibility_result"},
-    ],
-}
-
-_PROFILE_LABELS = {
-    "stage": "가족 구성",
-    "child_age": "자녀 연령대",
-    "income": "가구 소득",
-    "region": "거주 지역",
-    "special": "특수 상황",
-}
-
-_PROFILE_OPTION_LABELS: dict[str, dict[str, str]] = {
-    "stage": {
-        "pregnant": "임신 준비·임신 중",
-        "newborn": "출산 직후·신생아",
-        "infant": "영유아",
-        "child": "아동",
-        "teen": "청소년",
-    },
-    "child_age": {
-        "preborn": "출생 전",
-        "0": "0세 (12개월 미만)",
-        "1": "1세",
-        "2-5": "2~5세",
-        "6-12": "6~12세",
-        "13+": "13세 이상",
-    },
-    "income": {
-        "low": "중위소득 50% 이하",
-        "mid1": "중위소득 51~100%",
-        "mid2": "중위소득 101~150%",
-        "high": "중위소득 150% 초과",
-        "unknown": "잘 모르겠어요",
-    },
-    "region": {
-        "national": "전국",
-        "seoul": "서울",
-        "busan": "부산",
-        "daegu": "대구",
-        "incheon": "인천",
-        "gwangju": "광주",
-        "daejeon": "대전",
-        "ulsan": "울산",
-        "sejong": "세종",
-        "gyeonggi": "경기",
-        "gangwon": "강원",
-        "chungbuk": "충북",
-        "chungnam": "충남",
-        "jeonbuk": "전북",
-        "jeonnam": "전남",
-        "gyeongbuk": "경북",
-        "gyeongnam": "경남",
-        "jeju": "제주",
-    },
-    "special": {
-        "single": "한부모·조손 가정",
-        "multi": "다문화·탈북민 가정",
-        "disabled": "장애인 가구",
-        "many": "다자녀 가정(2명 이상)",
-        "dual": "맞벌이 가구",
-        "low_income": "저소득 가구",
-        "single_parent": "한부모·조손 가정",
-        "multi_child": "다자녀 가정(2명 이상)",
-        "veteran": "국가유공",
-    },
-}
-
-_INCOME_BRACKET_TO_PROFILE_CODE = {
-    "50": "low",
-    "100": "mid1",
-    "150": "mid2",
-    "999": "high",
-}
 
 
 def _filled_slots(profile: ProfileSlot | None) -> set[str]:
@@ -367,22 +197,6 @@ def _profile_to_selected_conditions(profile: ProfileSlot | None) -> dict[str, An
     return out
 
 
-# 회원 프로필 확인(yes/no) 프롬프트
-_CONFIRM_OPTIONS = [
-    {"label": "네, 이대로", "value": "yes"},
-    {"label": "아니요, 다시 입력", "value": "no"},
-]
-_CONFIRM_NO_HINTS = ("아니", "아뇨", "다시", "새로", "바꿔", "변경", "수정", "다른", "no")
-_CONFIRM_YES_HINTS = ("네", "예", "응", "그래", "좋아", "이대로", "진행", "맞아", "ㅇㅇ", "yes", "그걸로")
-_STAGE_CODE_TO_KO = {
-    "pregnant": "임신·출산",
-    "newborn": "영유아",
-    "infant": "영유아",
-    "child": "아동",
-    "teen": "청소년",
-}
-
-
 def _profile_value_label(key: str, value: Any) -> str:
     if isinstance(value, list):
         if not value:
@@ -472,150 +286,8 @@ async def _load_db_profile_summary(user_id: int) -> list[str] | None:
     )
 
 
-_COMMON_SAFETY_RULES = """[안전 안내 — 모든 답변에 적용]
-- 정책 수급 가능 여부를 단정짓지 마세요. "받을 수 있습니다", "신청 가능합니다" 같은 확정 표현 대신 "조건에 맞으면", "해당될 수 있어요" 같은 추정 표현을 사용하세요.
-- 답변 본문에 면책 문구를 직접 넣지 마세요 (별도 disclaimer 필드로 노출됩니다).
-- 정확한 판단·신청 가능 여부는 공식기관(주민센터·복지로 등) 확인이 필요함을 자연스럽게 안내하세요."""
-
-_APPLICATION_PERIOD_CONTEXT_RULES = """[신청 기간 판단 규칙]
-- 신청기간 정보가 명확하고 신뢰 가능할 때만 안내하세요.
-- 신청기간 정보가 없거나 불명확하면 "공식 안내에서 확인해 주세요."라고 답하세요.
-- 날짜 파싱이 애매하면 현재 신청 가능 여부를 단정하지 마세요.
-- source_text에 신청기간 관련 문구가 있으면 그 문구를 우선 근거로 삼으세요.
-- application_status와 신청기간 정보가 충돌하면 단정하지 말고 공식 안내 확인을 유도하세요."""
-
-
-_BASE_BRANCH_PROMPTS: dict[Intent, str] = {
-    "summary": """당신은 임신·출산·육아 정책 정보를 요약하는 챗봇입니다.
-요청 대상과 참고 자료를 바탕으로 한국어로 간결하게 요약하세요.
-- "내 상황 기준" 요청이면 사용자의 조건과 관련된 확인 포인트를 함께 정리하세요.
-- 지원 가능 여부를 확정하지 말고 "지원 가능성 사전 분석", "공식 신청 전 확인 필요" 톤을 유지하세요.
-- 근거가 있으면 핵심 근거를 함께 언급하세요.
-- 한국어 3~5문장.""",
-    "policy_summary": """당신은 임신·출산·육아 정책을 안내하는 챗봇입니다.
-주어진 정책 문서 발췌(참고 자료)만 근거로 한국어 3~5문장으로 답변하세요.
-- 발췌에 없는 내용은 추측하지 마세요.""",
-    "recommend": """사용자의 상황에 맞는 정책을 추천하는 챗봇입니다.
-참고 자료의 정책 중 사용자 질문과 관련 있어 보이는 정책을 짧게 소개하세요.
-- 정확한 추천은 '맞춤 추천' 화면에서 받을 수 있음을 자연스럽게 안내하세요.
-- 한국어 3~5문장.""",
-    "eligibility": """사용자가 특정 정책의 지원 가능 여부를 묻고 있습니다.
-참고 자료의 정책 조건을 근거로 일반적인 답변을 하되, 정확한 판단은 '지원 가능성 분석' 화면을 안내하세요.
-- 한국어 3~5문장.""",
-    "compare": """사용자가 정책 비교를 묻고 있습니다.
-참고 자료의 정책 중 관련된 정책의 차이점을 간단히 설명하고, 자세한 비교는 '정책 비교' 화면을 안내하세요.
-- 한국어 3~5문장.""",
-    "apply": """사용자가 신청 방법 또는 필요 서류를 묻고 있습니다.
-참고 자료의 정책 신청 정보를 근거로 답하고, 단계별 안내는 '신청 준비' 화면을 안내하세요.
-- 한국어 3~5문장.""",
-    "unclear": """사용자 질문을 정확히 이해하기 어렵습니다.
-- 챗봇이 도울 수 있는 주제(정책 추천 / 지원가능성 / 비교 / 신청 / 정책 정보)를 짧게 안내하세요.
-- 예시 질문 1~2개를 제안하세요.
-- 한국어 2~3문장.
-- 정책 자료는 사용하지 마세요.""",
-}
-
-
-_BRANCH_SYSTEM_PROMPTS: dict[Intent, str] = {
-    intent: (
-        f"{_COMMON_SAFETY_RULES}\n\n{prompt}" if intent != "unclear" else prompt
-    )
-    for intent, prompt in _BASE_BRANCH_PROMPTS.items()
-}
-
-
-_ASSERTIVE_PHRASES: tuple[str, ...] = (
-    "받을 수 있습니다",
-    "받을 수 있어요",
-    "받으실 수 있습니다",
-    "신청 가능합니다",
-    "신청하실 수 있습니다",
-    "지원받을 수 있습니다",
-    "지원받으실 수 있습니다",
-    "대상입니다",
-    "해당됩니다",
-)
-
-
 def _detect_assertive_phrases(content: str) -> list[str]:
     return [phrase for phrase in _ASSERTIVE_PHRASES if phrase in content]
-
-
-_INTENT_TO_API_ACTION: dict[Intent, str | None] = {
-    "recommend": "recommend",
-    "eligibility": "eligibility",
-    "compare": "compare",
-    "apply": "apply",
-    "summary": "summary",
-    "policy_summary": "chat",
-    "unclear": None,
-}
-
-
-_INTENT_TO_ACTION_TYPE: dict[Intent, str | None] = {
-    "recommend": "RECOMMENDED",
-    "compare": "COMPARED",
-    "eligibility": "ELIGIBILITY_TARGET",
-    "apply": "APPLY_TARGET",
-    "summary": None,
-    "policy_summary": None,
-    "unclear": None,
-}
-
-
-_LLM_MODEL = "gpt-4o-mini"
-_RAG_TOP_K = 5
-_POLICIES_MAX = 3
-_EVIDENCES_MAX = 5
-_SNIPPET_LIMIT = 300
-_RECOMMEND_SOURCE_TYPE = "CHAT"
-_RECOMMEND_LIFECYCLE_TIMEOUT_SECONDS = 60
-_RECOMMEND_LOCK_TIMEOUT = "5s"
-_RECOMMEND_STATEMENT_TIMEOUT = "60s"
-_RECOMMEND_FALLBACK_FOLLOW_UP = (
-    "맞춤 추천을 위해 정보가 더 필요해요. 맞춤 추천 화면에서 추가로 입력해 주세요."
-)
-_RECOMMEND_FOLLOW_UP_LIMIT_REACHED = (
-    "추가 확인은 여기서 멈추고, 지금 입력된 정보 기준으로 볼 수 있는 정책을 넓게 안내할게요. "
-    "일부 조건은 '잘 모르겠어요'로 반영되어 정확한 우선순위는 낮을 수 있어요."
-)
-_RECOMMEND_FALLBACK_ERROR = (
-    "맞춤 추천을 만드는 중에 문제가 발생했어요. 잠시 후 다시 시도해 주세요."
-)
-_RECOMMEND_MAX_RETRIES = 1
-_ELIGIBILITY_SOURCE_TYPE = "CHAT"
-_ELIGIBILITY_LIFECYCLE_TIMEOUT_SECONDS = 60
-_ELIGIBILITY_LOCK_TIMEOUT = "5s"
-_ELIGIBILITY_STATEMENT_TIMEOUT = "60s"
-_ELIGIBILITY_CLARIFICATION_FALLBACK = (
-    "어떤 정책의 지원 가능성을 확인하고 싶으신가요? 정책명을 알려주시면 조건을 기준으로 분석해 드릴게요."
-)
-_ELIGIBILITY_FALLBACK_FOLLOW_UP = (
-    "지원 가능성을 판단하려면 정보가 조금 더 필요해요. 지원 가능성 분석 화면에서 추가 정보를 입력해 주세요."
-)
-_ELIGIBILITY_FALLBACK_ERROR = (
-    "지원 가능성을 분석하는 중 문제가 발생했어요. 잠시 후 다시 시도해 주세요."
-)
-_COMPARE_CLARIFICATION_FALLBACK = (
-    "비교할 정책 2개를 알려주세요. 예를 들어 '농식품바우처와 건강보험 임신출산 진료비를 비교해줘'처럼 질문하면 조건 기준으로 비교해 드릴게요."
-)
-_COMPARE_FALLBACK_ERROR = (
-    "정책 비교 결과를 만드는 중 문제가 발생했어요. 잠시 후 다시 시도해 주세요."
-)
-_APPLY_CLARIFICATION_FALLBACK = (
-    "어떤 정책의 신청 방법을 알고 싶으신가요? 정책명을 알려주시면 신청 방법과 준비서류를 안내해 드릴게요."
-)
-_APPLY_LIFECYCLE_TIMEOUT_SECONDS = 12
-_APPLY_LOCK_TIMEOUT = "5s"
-_APPLY_STATEMENT_TIMEOUT = "10s"
-_APPLY_CHECKLIST_PREVIEW = 5
-_APPLY_MAX_RETRIES = 1
-_APPLY_TEMPORARY_FAILURE_FALLBACK = (
-    "신청 안내를 준비하는 중 문제가 발생했어요. 잠시 후 다시 시도해 주세요."
-)
-_EVIDENCE_ROLE_ENUM: frozenset[str] = frozenset(
-    {"SUMMARY", "TARGET", "BENEFIT", "APPLICATION", "CAUTION"}
-)
 
 
 def _normalize_evidence_role(value: Any) -> str | None:
@@ -647,6 +319,19 @@ class _IntentDecision(BaseModel):
 
 BRANCH_LLM_TAG = "chat_branch_llm"
 _BRANCH_LLM_CONFIG = {"tags": [BRANCH_LLM_TAG]}
+_BRANCH_TOKEN_CALLBACK: ContextVar[
+    Callable[[str], Awaitable[None]] | None
+] = ContextVar("chat_branch_token_callback", default=None)
+
+
+def set_branch_token_callback(
+    callback: Callable[[str], Awaitable[None]] | None,
+):
+    return _BRANCH_TOKEN_CALLBACK.set(callback)
+
+
+def reset_branch_token_callback(token) -> None:
+    _BRANCH_TOKEN_CALLBACK.reset(token)
 
 
 def _llm() -> ChatOpenAI:
@@ -1199,118 +884,6 @@ class ChatGraphNodes:
         self.eligibility_graph = eligibility_graph
         self.comparison_graph = comparison_graph
         self.policy_summary_graph = policy_summary_graph
-
-    async def supervisor(self, state: ChatGraphState) -> ChatGraphState:
-        llm = _llm().with_structured_output(_IntentDecision)
-        slot = state.get("slot")
-        profile: ProfileSlot = (slot or {}).get("profile") or {}
-        pending: PendingState | None = (slot or {}).get("pending") or None
-        slot_context = _format_slot_context(slot)
-        profile_context = _format_profile_context(profile)
-        system_prompt = SUPERVISOR_SYSTEM_TEMPLATE.format(
-            slot_context=slot_context, profile_context=profile_context
-        )
-        messages: list[BaseMessage] = [SystemMessage(content=system_prompt)]
-        messages.extend(_history_to_lc_messages(state["history"]))
-        messages.append(HumanMessage(content=state["user_content"]))
-
-        resolved_slug: str | None = None
-        extracted: dict[str, Any] | None = None
-        try:
-            decision = await llm.ainvoke(messages)
-            intent: Intent = decision.intent
-            raw = decision.model_dump_json()
-            candidate = decision.resolved_policy_slug
-            if candidate and _find_slot_policy_by_slug(slot, candidate):
-                resolved_slug = candidate
-            if decision.extracted_profile is not None:
-                extracted = decision.extracted_profile.model_dump(exclude_none=True)
-        except Exception as exc:
-            logger.exception("Intent classification failed; falling back to unclear")
-            intent = "unclear"
-            raw = f"error: {exc}"
-
-        # 1) 추출한 조건을 세션 프로필에 병합 (모든 intent 공유)
-        profile = _merge_profile(profile, extracted)
-
-        prev_kind = (pending or {}).get("kind", "slot") if pending else None
-        profile_confirm: dict[str, Any] | None = None
-        awaiting: list[str] = []
-
-        # 2-A) 직전 턴이 "회원 프로필 확인" 프롬프트였으면 yes/no 로 처리
-        if pending and prev_kind == "confirm" and intent in ("unclear", "recommend"):
-            intent = "recommend"
-            answer = _interpret_confirm(state["user_content"])
-            if answer == "yes":
-                awaiting = []  # 저장 프로필로 추천 (엔진이 profile_snapshot 사용)
-                profile = {**profile, "db_profile_confirmed": True}
-            elif answer == "no":
-                awaiting = list(REQUIRED_SLOTS.get("recommend", ()))  # 조건 칩 폼으로
-            else:
-                awaiting = _missing_required("recommend", profile)  # 애매하면 일반 게이트
-            logger.info("chat_profile_confirm_resume", extra={"answer": answer})
-        else:
-            # 2-B) 채우던 슬롯이 있으면 이어받기 판단
-            resumed = False
-            if pending and pending.get("intent") and prev_kind != "confirm":
-                pending_intent = pending["intent"]
-                pending_awaiting = pending.get("awaiting") or list(
-                    REQUIRED_SLOTS.get(pending_intent, ())
-                )
-                answered_slot = bool(extracted) and any(
-                    key in (extracted or {}) for key in pending_awaiting
-                )
-                # 같은 intent거나, 분류가 모호(unclear)하거나, 빠진 슬롯을 답한 경우 → 이어받기.
-                # 그 외 다른 구체 intent가 나오면 주제 전환으로 보고 새 intent 사용.
-                if intent in ("unclear", pending_intent) or answered_slot:
-                    intent = pending_intent
-                    resumed = True
-                    # 이미 한 번 물어봤으므로, 그래도 안 채워진 슬롯은 "건너뛴 것"으로 기록 →
-                    # 다음 턴에 다시 묻지 않는다. (게이트는 pending당 최대 1회)
-                    unfilled = _missing_required(intent, profile)
-                    if unfilled:
-                        asked = pending.get("awaiting") or unfilled
-                        skipped = set(profile.get("skipped") or [])
-                        skipped.update(s for s in unfilled if s in asked)
-                        profile = {**profile, "skipped": sorted(skipped)}
-                logger.info(
-                    "chat_pending_resume",
-                    extra={"pending_intent": pending_intent, "resumed": resumed},
-                )
-
-            # 3) 결정된 intent의 필수 슬롯 중 빠진 것 계산 (건너뛴 슬롯 제외)
-            awaiting = _missing_required(intent, profile)
-            if (
-                intent == "summary"
-                and _summary_target_type(
-                    state["user_content"],
-                    slot,
-                    resolved_slug,
-                )
-                is None
-            ):
-                awaiting = ["summary_target"]
-
-            # 3-A) 추천인데 세션 조건이 부족하면 → 저장된 회원 프로필이 있으면 먼저 "확인"
-            if intent == "recommend" and awaiting:
-                summary = await _load_db_profile_summary(state["user_id"])
-                if summary:
-                    profile_confirm = {"summary": summary, "options": _CONFIRM_OPTIONS}
-                    awaiting = []  # 이번 턴은 슬롯 대신 확인 프롬프트를 띄운다
-
-        pending_active = bool(awaiting or profile_confirm)
-        return {
-            **state,
-            "profile": profile,
-            "pending_intent": intent if pending_active else None,
-            "awaiting_slots": awaiting,
-            "profile_confirm": profile_confirm,
-            "supervisor_decision": {
-                "intent": intent,
-                "raw": raw,
-                "resolved_policy_slug": resolved_slug,
-            },
-        }
 
     async def branch_recommend(self, state: ChatGraphState) -> ChatGraphState:
         selected_conditions = _profile_to_selected_conditions(state.get("profile"))
@@ -1916,7 +1489,6 @@ class ChatGraphNodes:
             "apply_card": state.get("branch_apply_card"),
             "easy_summary": state.get("branch_easy_summary"),
             "key_points": state.get("branch_key_points", []),
-            "disclaimer": (intent != "unclear") and not is_prompt,
             # 슬롯/확인을 되묻는 중에는 면책 문구·확정 경고 불필요
             "disclaimer": (intent != "unclear") and not is_prompt,
             "slot_request": slot_request,
@@ -2394,6 +1966,27 @@ class ChatGraphNodes:
         messages.append(HumanMessage(content=state["user_content"]))
 
         try:
+            token_callback = _BRANCH_TOKEN_CALLBACK.get()
+            if token_callback is not None:
+                parts: list[str] = []
+                async for chunk in _llm().astream(messages, config=_BRANCH_LLM_CONFIG):
+                    content = chunk.content
+                    if isinstance(content, str):
+                        delta = content
+                    elif isinstance(content, list):
+                        delta_parts: list[str] = []
+                        for item in content:
+                            if isinstance(item, str):
+                                delta_parts.append(item)
+                            elif isinstance(item, dict) and isinstance(item.get("text"), str):
+                                delta_parts.append(item["text"])
+                        delta = "".join(delta_parts)
+                    else:
+                        delta = ""
+                    if delta:
+                        parts.append(delta)
+                        await token_callback(delta)
+                return "".join(parts)
             response = await _llm().ainvoke(messages, config=_BRANCH_LLM_CONFIG)
             content = response.content
             return content if isinstance(content, str) else str(content)
