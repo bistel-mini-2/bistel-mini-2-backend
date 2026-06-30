@@ -152,14 +152,17 @@ def test_branch_compare_runs_comparison_graph(monkeypatch) -> None:
     assert "두 정책은 지원 대상 조건이 다릅니다" in result["branch_content"]
     assert "주요 차이" not in result["branch_content"]
     assert "정책 비교 화면" not in result["branch_content"]
-    assert result["branch_policies"] == []
+    assert [p["slug"] for p in result["branch_policies"]] == ["WLF1", "WLF2"]
     assert len(result["branch_evidences"]) == 2
 
     link_result = asyncio.run(extract_policy_links({
         **result,
         "supervisor_decision": {"intent": "compare", "raw": "{}"},
     }))
-    assert link_result == []
+    assert link_result == [
+        {"policy_slug": "WLF1", "action_type": "COMPARED"},
+        {"policy_slug": "WLF2", "action_type": "COMPARED"},
+    ]
 
 
 def test_branch_compare_uses_direct_policy_name_lookup_when_rag_misses(monkeypatch) -> None:

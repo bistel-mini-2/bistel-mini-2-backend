@@ -151,9 +151,23 @@ def _adapt_comparison_result(
             "두 정책의 지원 대상과 혜택 방향을 함께 보고, 현재 상황에 더 가까운 정책을 선택해 주세요."
         )
 
-    # 챗봇 compare 답변은 상황별 선택 가이드만 노출한다.
-    # 정책 카드/비교표는 프론트에서 렌더하지 않도록 policies를 비워 둔다.
-    return "\n\n".join(content_parts), []
+    policies = []
+    for policy in (policy_a, policy_b):
+        slug = policy.get("slug")
+        if not slug:
+            continue
+        policies.append(
+            {
+                "policy_id": policy.get("policy_id") or slug,
+                "slug": slug,
+                "policy_name": policy.get("name") or "",
+                "summary": (policy.get("summary") or {}).get("condition"),
+                "tag": None,
+                "tagTone": None,
+            }
+        )
+
+    return "\n\n".join(content_parts), policies
 
 
 def _evidence_chunk_to_chat_evidence(
