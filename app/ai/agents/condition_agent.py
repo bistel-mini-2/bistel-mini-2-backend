@@ -91,6 +91,8 @@ ALLOWED_INCOME_STATUS = {
     "housing_benefit_recipient",
     "education_benefit_recipient",
     "near_poverty_class",
+    # 기초생활/차상위 등 수급 자격이 "없다"고 명시한 경우(부정). null과 구분한다.
+    "none",
 }
 INCOME_STATUS_ALIASES = {
     "기초생활수급자": "basic_livelihood_recipient",
@@ -107,6 +109,13 @@ INCOME_STATUS_ALIASES = {
     "교육급여수급자": "education_benefit_recipient",
     "차상위": "near_poverty_class",
     "차상위계층": "near_poverty_class",
+    # 수급 자격 없음(부정) alias
+    "없음": "none",
+    "해당없음": "none",
+    "해당없어요": "none",
+    "비수급": "none",
+    "수급아님": "none",
+    "일반가구": "none",
 }
 
 
@@ -199,8 +208,12 @@ class LangChainConditionExtractor:
                     - housing_benefit_recipient: 주거급여 수급
                     - education_benefit_recipient: 교육급여 수급
                     - near_poverty_class: 차상위계층
+                    - none: 기초생활/차상위 등 수급 자격이 "없다"고 명시한 경우
+                      (예: "수급 자격 없어요", "기초생활·차상위 아니에요", "해당 안 돼요").
                     급여 종류를 명확히 말하면 해당 세부값을, 단순히 "기초생활수급자"면
-                    basic_livelihood_recipient를 쓴다. 여러 개면 배열로, 없으면 null로 둔다.
+                    basic_livelihood_recipient를 쓴다. 수급 자격이 없다고 명시하면 "none"을 쓴다.
+                    여러 개면 배열로, 수급 관련 언급이 전혀 없으면 null로 둔다.
+                    ("없다"는 명시적 부정이므로 null이 아니라 "none"으로 구분한다.)
 
                     age: 신청자 본인 나이(정수). 예: "저는 70세" → 70. 없으면 null.
 

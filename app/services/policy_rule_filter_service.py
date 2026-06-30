@@ -3,6 +3,7 @@ from typing import Any
 
 from app.services.policy_rule_condition_value import condition_value
 from app.services.policy_rule_grouping import (
+    is_denied_income_mismatch,
     INCOME_LEVEL_TO_PERCENT,
     OUTCOME_FAIL,
     OUTCOME_MANUAL,
@@ -73,6 +74,15 @@ class PolicyRuleFilterService:
                     result.missing_conditions.append(
                         self.explanation.explain(rule, VERDICT_UNCERTAIN)
                     )
+                continue
+
+            # 수급 자격을 "없다"고 명시(income_status="none")한 사용자에게는, 특정 수급
+            # 자격을 요구하는 정책을 hard filter가 아니어도 명확한 미충족으로 처리한다.
+            # 공유 술어로 candidate/OR 그룹 평가와 동일 판정을 보장한다.
+            if is_denied_income_mismatch(field_name, condition_value, rule_value):
+                result.rule_failures.append(
+                    self.explanation.explain(rule, VERDICT_EXCLUDED)
+                )
                 continue
 
             match_result = self._rule_matches(operator, condition_value, rule_value)
