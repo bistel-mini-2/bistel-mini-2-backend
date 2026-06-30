@@ -876,66 +876,82 @@ class RecommendationRerankService:
     ) -> list[str]:
         if not follow_up_denials:
             return []
-        text = self._candidate_text_for_denial_match(item)
         conflicts: list[str] = []
         for denial in follow_up_denials:
             if not isinstance(denial, dict):
                 continue
             topic = str(denial.get("topic") or "").strip()
             category = str(denial.get("category") or "").strip()
-            if not topic or not self._candidate_matches_denied_topic(text, category, topic):
+            if not topic or not self._candidate_matches_denied_topic(item, category):
                 continue
             conflicts.append(f"사용자가 {topic}에 해당하지 않는다고 답함")
             if len(conflicts) >= 3:
                 break
         return conflicts
 
-    def _candidate_text_for_denial_match(self, item: dict[str, Any]) -> str:
-        parts: list[str] = []
-        for key in (
-            "policy_name",
-            "summary",
-            "target_description",
-            "benefit_description",
-            "reason_summary",
-            "check_before_apply",
-            "manual_check_summary",
-        ):
-            parts.append(str(item.get(key) or ""))
+    # 수급 자격(recipient) enum. 정책이 이 값을 '요구'할 때만 income 부정과 충돌로 본다.
+    _INCOME_RECIPIENT_VALUES = (
+        "basic_livelihood_recipient",
+        "livelihood_benefit_recipient",
+        "medical_benefit_recipient",
+        "housing_benefit_recipient",
+        "education_benefit_recipient",
+        "near_poverty_class",
+    )
+
+    def _candidate_matches_denied_topic(
+        self,
+        item: dict[str, Any],
+        category: str,
+    ) -> bool:
+        # 자유 텍스트 전체 키워드 매칭은 "수급자 제외", "법률 상담이 아닌 생활지원"처럼
+        # 해당 조건을 요구하지 않는 문맥까지 충돌로 잡는다. 그래서 구조화된 '요구/확인'
+        # 신호(룰 field/value, 대상·확인 맥락) 위주로 판정해 정상 후보 오탐을 줄인다.
+        if category == "income_status":
+            # 정책이 실제로 '수급 자격(recipient)'을 조건/확인 항목으로 요구할 때만.
+            return self._requires_income_status_recipient(item)
+        if category == "legal_need":
+            # 법률은 룰 field가 없으므로 정책명·대상(요구 맥락)으로만 본다(혜택 본문 제외).
+            text = self._candidate_requirement_text(item)
+            return self._contains_any(
+                text, ("법률상담", "법률 상담", "무료법률", "법률구조", "소송 지원")
+            )
+        if category == "birth_registration":
+            text = self._candidate_requirement_text(item)
+            return self._contains_any(text, ("출생신고", "주민등록"))
+        # 모호한 기타 카테고리는 오탐 방지를 위해 충돌로 잡지 않는다.
+        return False
+
+    def _requires_income_status_recipient(self, item: dict[str, Any]) -> bool:
+        """정책이 수급 자격(recipient)을 요구/확인하는 룰을 가졌는지(구조화 판정)."""
+        filter_match_json = item.get("filter_match_json") or {}
+        if not isinstance(filter_match_json, dict):
+            return False
+        for key in ("matched_rules", "uncertain_rules", "excluded_rules"):
+            for rule in filter_match_json.get(key) or []:
+                if not isinstance(rule, dict):
+                    continue
+                if str(rule.get("field") or "") != "income_status":
+                    continue
+                policy_value = str(rule.get("policy_value") or "")
+                if any(rv in policy_value for rv in self._INCOME_RECIPIENT_VALUES):
+                    return True
+        return False
+
+    def _candidate_requirement_text(self, item: dict[str, Any]) -> str:
+        """정책의 '대상/요구/확인' 맥락만 모은다(혜택·요약 본문의 부수 언급은 제외)."""
+        parts: list[str] = [
+            str(item.get("policy_name") or ""),
+            str(item.get("target_description") or ""),
+            str(item.get("check_before_apply") or ""),
+        ]
         filter_match_json = item.get("filter_match_json") or {}
         if isinstance(filter_match_json, dict):
             for key in ("matched_rules", "uncertain_rules", "excluded_rules"):
                 for rule in filter_match_json.get(key) or []:
                     if isinstance(rule, dict):
-                        parts.append(str(rule.get("field") or ""))
                         parts.append(str(rule.get("reason") or ""))
-                        parts.append(str(rule.get("policy_value") or ""))
         return " ".join(parts)
-
-    def _candidate_matches_denied_topic(
-        self,
-        text: str,
-        category: str,
-        topic: str,
-    ) -> bool:
-        if category == "income_status":
-            return self._contains_any(
-                text,
-                (
-                    "수급",
-                    "기초생활",
-                    "차상위",
-                    "의료급여",
-                    "주거급여",
-                    "생계급여",
-                    "한부모가족 수급",
-                ),
-            )
-        if category == "legal_need":
-            return self._contains_any(text, ("법률", "법률상담", "소송", "계약", "손해배상"))
-        if category == "birth_registration":
-            return self._contains_any(text, ("출생신고", "주민등록", "출생"))
-        return bool(topic and topic in text)
 
     @staticmethod
     def _contains_any(text: str, keywords: tuple[str, ...]) -> bool:
@@ -1077,29 +1093,20 @@ class RecommendationRerankService:
         if not follow_up_denials:
             return []
         detail = candidate.detail
-        parts = [
-            str(candidate.policy.policy_name or ""),
-            str(candidate.policy.benefit_type or ""),
-            str(getattr(detail, "target_description", "") or ""),
-            str(getattr(detail, "benefit_description", "") or ""),
-            str(getattr(detail, "easy_summary", "") or ""),
-        ]
-        filter_match_json = candidate.filter_match_json or {}
-        if isinstance(filter_match_json, dict):
-            for key in ("matched_rules", "uncertain_rules", "excluded_rules"):
-                for rule in filter_match_json.get(key) or []:
-                    if isinstance(rule, dict):
-                        parts.append(str(rule.get("field") or ""))
-                        parts.append(str(rule.get("reason") or ""))
-                        parts.append(str(rule.get("policy_value") or ""))
-        text = " ".join(parts)
+        # 후보를 result item과 같은 형태로 맞춰 구조화 매칭(_candidate_matches_denied_topic)에 넘긴다.
+        item = {
+            "policy_name": str(candidate.policy.policy_name or ""),
+            "target_description": str(getattr(detail, "target_description", "") or ""),
+            "check_before_apply": "",
+            "filter_match_json": candidate.filter_match_json or {},
+        }
         conflicts: list[str] = []
         for denial in follow_up_denials:
             if not isinstance(denial, dict):
                 continue
             topic = str(denial.get("topic") or "").strip()
             category = str(denial.get("category") or "").strip()
-            if topic and self._candidate_matches_denied_topic(text, category, topic):
+            if topic and self._candidate_matches_denied_topic(item, category):
                 conflicts.append(f"사용자가 {topic}에 해당하지 않는다고 답함")
         return conflicts
 

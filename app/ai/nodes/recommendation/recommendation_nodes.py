@@ -76,6 +76,7 @@ class RecommendationGraphNodes:
             input_issues=state.get("input_issues", []),
             profile_conflict_json=state.get("profile_conflict_json", []),
             result_limit=self.recommendation_service.result_limit,
+            follow_up_answers=state.get("follow_up_answers", []),
         )
         return {
             **state,
