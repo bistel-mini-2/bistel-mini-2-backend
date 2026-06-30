@@ -6,7 +6,8 @@ from unittest.mock import AsyncMock
 import pytest
 
 from app.ai.nodes.chat import chat_nodes
-from app.ai.nodes.chat.chat_nodes import ChatGraphNodes
+from app.services import chat_handlers
+from app.services.chat_handlers import handle_summary
 
 
 class _FakeRagResult:
@@ -46,7 +47,7 @@ def _fake_llm(monkeypatch: Any, response: str = "요약 답변입니다.") -> As
 
 @pytest.fixture
 def patched_session(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(chat_nodes, "AsyncSessionLocal", lambda: _FakeSession())
+    monkeypatch.setattr(chat_handlers, "AsyncSessionLocal", lambda: _FakeSession())
 
 
 def test_branch_summary_resolved_slug_uses_policy_name_for_rag(
@@ -57,7 +58,7 @@ def test_branch_summary_resolved_slug_uses_policy_name_for_rag(
     rag = _FakeRagService(
         [_rag_chunk(chunk_id=1, policy_code="WLF1", policy_name="임신·출산 진료비")]
     )
-    nodes = ChatGraphNodes(rag_service=rag)
+    monkeypatch.setattr(chat_handlers, "_RAG_SERVICE", rag)
 
     state = {
         "user_id": 7,
@@ -79,7 +80,7 @@ def test_branch_summary_resolved_slug_uses_policy_name_for_rag(
         },
     }
 
-    result = asyncio.run(nodes.branch_summary(state))
+    result = asyncio.run(handle_summary(state))
 
     rag.search.assert_awaited_once()
     llm.ainvoke.assert_awaited_once()
@@ -95,7 +96,7 @@ def test_branch_summary_no_resolved_slug_runs_rag(
     rag = _FakeRagService(
         [_rag_chunk(chunk_id=2, policy_code="WLF2", policy_name="산모 건강관리")]
     )
-    nodes = ChatGraphNodes(rag_service=rag)
+    monkeypatch.setattr(chat_handlers, "_RAG_SERVICE", rag)
 
     state = {
         "user_id": 7,
@@ -104,7 +105,7 @@ def test_branch_summary_no_resolved_slug_runs_rag(
         "supervisor_decision": {"intent": "summary", "raw": "{}"},
     }
 
-    result = asyncio.run(nodes.branch_summary(state))
+    result = asyncio.run(handle_summary(state))
 
     rag.search.assert_awaited_once()
     assert result["branch_content"] == "일반 요약입니다."

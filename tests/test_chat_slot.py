@@ -7,7 +7,6 @@ import pytest
 
 from app.ai.nodes.chat import chat_nodes
 from app.ai.nodes.chat.chat_nodes import (
-    ChatGraphNodes,
     _find_slot_policy_by_slug,
     _format_slot_context,
 )
@@ -16,7 +15,11 @@ from app.repositories.policy_repository import PolicyRepository
 from app.services import chat_service as chat_service_module
 from app.services import chat_handlers as chat_handlers_module
 from app.services.chat_service import ChatService, _build_next_slot
-from app.services.chat_handlers import classify_intent
+from app.services.chat_handlers import (
+    classify_intent,
+    handle_apply,
+    handle_eligibility,
+)
 from app.db.models.chat_session import ChatSession
 
 
@@ -222,7 +225,7 @@ def test_branch_apply_skips_rag_when_slot_resolved(
     from app.schemas.apply_schema import ApplyPreparationResponse, ChecklistItem
 
     rag = _FakeRagService()
-    nodes = ChatGraphNodes(rag_service=rag)
+    monkeypatch.setattr(chat_handlers_module, "_RAG_SERVICE", rag)
 
     apply_response = ApplyPreparationResponse(
         apply_id=None,
@@ -241,7 +244,7 @@ def test_branch_apply_skips_rag_when_slot_resolved(
         AsyncMock(return_value=apply_response),
     )
 
-    out = asyncio.run(nodes.branch_apply(_state_with_slot()))
+    out = asyncio.run(handle_apply(_state_with_slot()))
 
     # RAG는 호출되지 않아야 함
     rag.search.assert_not_called()
@@ -273,7 +276,7 @@ def test_branch_apply_uses_rag_when_no_resolved_slug(
     )
     rag = _FakeRagService()
     rag.search = AsyncMock(return_value=_FakeRagResult([rag_chunk]))
-    nodes = ChatGraphNodes(rag_service=rag)
+    monkeypatch.setattr(chat_handlers_module, "_RAG_SERVICE", rag)
 
     apply_response = ApplyPreparationResponse(
         apply_id=None,
@@ -303,7 +306,7 @@ def test_branch_apply_uses_rag_when_no_resolved_slug(
             "resolved_policy_slug": None,
         },
     }
-    out = asyncio.run(nodes.branch_apply(state))
+    out = asyncio.run(handle_apply(state))
 
     # 슬롯 없으면 RAG 경로
     rag.search.assert_called_once()
@@ -488,7 +491,10 @@ def test_branch_eligibility_skips_rag_when_slot_resolved(
 ) -> None:
     rag = _FakeRagService()
     eligibility_graph = _FakeEligibilityGraph()
-    nodes = ChatGraphNodes(rag_service=rag, eligibility_graph=eligibility_graph)
+    monkeypatch.setattr(chat_handlers_module, "_RAG_SERVICE", rag)
+    monkeypatch.setattr(chat_handlers_module, "_ELIGIBILITY_GRAPH", eligibility_graph)
+    # eligibility lifecycle도 chat_handlers.AsyncSessionLocal을 사용하므로 패치
+    monkeypatch.setattr(chat_handlers_module, "AsyncSessionLocal", lambda: _FakeSession())
 
     state = _state_with_slot("WLF1")
     state["supervisor_decision"] = {
@@ -498,7 +504,7 @@ def test_branch_eligibility_skips_rag_when_slot_resolved(
     }
     state["user_content"] = "나도 받을 수 있어?"
 
-    out = asyncio.run(nodes.branch_eligibility(state))
+    out = asyncio.run(handle_eligibility(state))
 
     rag.search.assert_not_called()
     eligibility_graph.run.assert_awaited_once()

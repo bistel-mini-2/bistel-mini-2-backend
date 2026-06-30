@@ -5,8 +5,13 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.ai.nodes.chat import chat_nodes
-from app.ai.nodes.chat.chat_nodes import ChatGraphNodes
+from app.services import chat_handlers
+from app.services.chat_handlers import (
+    handle_policy_summary,
+    build_assistant_payload,
+    extract_evidences,
+    extract_policy_links,
+)
 from app.repositories.policy_repository import PolicyRepository
 from app.schemas.ai_contract import EvidenceChunk
 
@@ -96,7 +101,7 @@ def _state() -> dict[str, Any]:
 
 @pytest.fixture
 def patched_session(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(chat_nodes, "AsyncSessionLocal", lambda: _FakeSession())
+    monkeypatch.setattr(chat_handlers, "AsyncSessionLocal", lambda: _FakeSession())
 
 
 def test_branch_policy_summary_runs_graph_and_exposes_summary_payload(
@@ -125,15 +130,14 @@ def test_branch_policy_summary_runs_graph_and_exposes_summary_payload(
             ],
         }
     )
-    nodes = ChatGraphNodes(
-        rag_service=_FakeRagService([_chunk()]),
-        policy_summary_graph=graph,
-    )
+    rag = _FakeRagService([_chunk()])
+    monkeypatch.setattr(chat_handlers, "_RAG_SERVICE", rag)
+    monkeypatch.setattr(chat_handlers, "_POLICY_SUMMARY_GRAPH", graph)
 
-    branch_state = asyncio.run(nodes.branch_policy_summary(_state()))
-    payload_state = asyncio.run(nodes.assistant_payload_build(branch_state))
-    evidence_state = asyncio.run(nodes.evidence_extract(payload_state))
-    link_state = asyncio.run(nodes.policy_link_extract(evidence_state))
+    branch_state = asyncio.run(handle_policy_summary(_state()))
+    payload_state = asyncio.run(build_assistant_payload(branch_state))
+    evidences_list = asyncio.run(extract_evidences(branch_state))
+    link_result = asyncio.run(extract_policy_links(branch_state))
 
     graph.run.assert_awaited_once_with(_policy())
     payload = payload_state["assistant_payload"]
@@ -144,14 +148,14 @@ def test_branch_policy_summary_runs_graph_and_exposes_summary_payload(
     ]
     assert payload["actions"] == ["chat"]
     assert payload["evidences"][0]["chunk_id"] == 55
-    assert evidence_state["evidences_to_save"] == [
+    assert evidences_list == [
         {
             "chunk_id": 55,
             "snippet": "Evidence snippet",
             "evidence_role": "SUMMARY",
         }
     ]
-    assert link_state["policy_links_to_save"] == []
+    assert link_result == []
 
 
 def test_branch_policy_summary_uses_resolved_slot_without_rag(
@@ -163,10 +167,11 @@ def test_branch_policy_summary_uses_resolved_slot_without_rag(
     graph = MagicMock()
     graph.run = AsyncMock(return_value={"summary": "Slot summary"})
     rag = _FakeRagService([_chunk()])
-    nodes = ChatGraphNodes(rag_service=rag, policy_summary_graph=graph)
+    monkeypatch.setattr(chat_handlers, "_RAG_SERVICE", rag)
+    monkeypatch.setattr(chat_handlers, "_POLICY_SUMMARY_GRAPH", graph)
 
     result = asyncio.run(
-        nodes.branch_policy_summary(
+        handle_policy_summary(
             {
                 **_state(),
                 "supervisor_decision": {
@@ -204,13 +209,12 @@ def test_branch_policy_summary_fallback_key_points_prefer_condition_profile(
     )
     graph = MagicMock()
     graph.run = AsyncMock(return_value={"summary": "Profile summary"})
-    nodes = ChatGraphNodes(
-        rag_service=_FakeRagService([_chunk()]),
-        policy_summary_graph=graph,
-    )
+    rag = _FakeRagService([_chunk()])
+    monkeypatch.setattr(chat_handlers, "_RAG_SERVICE", rag)
+    monkeypatch.setattr(chat_handlers, "_POLICY_SUMMARY_GRAPH", graph)
 
-    branch_state = asyncio.run(nodes.branch_policy_summary(_state()))
-    payload_state = asyncio.run(nodes.assistant_payload_build(branch_state))
+    branch_state = asyncio.run(handle_policy_summary(_state()))
+    payload_state = asyncio.run(build_assistant_payload(branch_state))
 
     payload = payload_state["assistant_payload"]
     assert payload["key_points"][0] == {

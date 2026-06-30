@@ -1,11 +1,7 @@
 import asyncio
 from typing import Any
 
-from app.ai.nodes.chat.chat_nodes import ChatGraphNodes
-
-
-def _nodes() -> ChatGraphNodes:
-    return ChatGraphNodes(rag_service=object())
+from app.services.chat_handlers import handle_confirm_profile, build_assistant_payload
 
 
 def _state(*, summary: list[str] | None = None) -> dict[str, Any]:
@@ -27,7 +23,7 @@ def _state(*, summary: list[str] | None = None) -> dict[str, Any]:
 
 def test_confirm_profile_formats_summary_in_content() -> None:
     summary = ["생애단계: 영유아", "소득: 하위 50%"]
-    result = asyncio.run(_nodes().confirm_profile(_state(summary=summary)))
+    result = asyncio.run(handle_confirm_profile(_state(summary=summary)))
 
     assert "생애단계: 영유아" in result["branch_content"]
     assert "소득: 하위 50%" in result["branch_content"]
@@ -36,7 +32,7 @@ def test_confirm_profile_formats_summary_in_content() -> None:
 
 
 def test_confirm_profile_sets_pending_confirm_kind() -> None:
-    result = asyncio.run(_nodes().confirm_profile(_state()))
+    result = asyncio.run(handle_confirm_profile(_state()))
 
     pending = result["pending"]
     assert pending["kind"] == "confirm"
@@ -46,14 +42,14 @@ def test_confirm_profile_sets_pending_confirm_kind() -> None:
 
 def test_confirm_profile_preserves_profile_confirm_in_state() -> None:
     state = _state(summary=["지역: 서울"])
-    result = asyncio.run(_nodes().confirm_profile(state))
+    result = asyncio.run(handle_confirm_profile(state))
 
     assert result["profile_confirm"] == state["profile_confirm"]
 
 
 def test_confirm_profile_payload_includes_profile_confirm(monkeypatch) -> None:
-    result = asyncio.run(_nodes().confirm_profile(_state()))
-    payload_state = asyncio.run(_nodes().assistant_payload_build(result))
+    result = asyncio.run(handle_confirm_profile(_state()))
+    payload_state = asyncio.run(build_assistant_payload(result))
 
     payload = payload_state["assistant_payload"]
     assert payload["profile_confirm"] is not None

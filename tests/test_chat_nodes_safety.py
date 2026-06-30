@@ -3,12 +3,15 @@ import logging
 
 import pytest
 
-from app.ai.nodes.chat import chat_nodes
 from app.ai.nodes.chat.chat_nodes import (
     _BRANCH_SYSTEM_PROMPTS,
     _COMMON_SAFETY_RULES,
-    ChatGraphNodes,
     _detect_assertive_phrases,
+)
+from app.services import chat_handlers
+from app.services.chat_handlers import (
+    handle_unclear,
+    build_assistant_payload,
 )
 
 
@@ -52,11 +55,10 @@ def _build_state(*, intent: str, content: str) -> dict:
 def test_assistant_payload_logs_warning_on_assertive_phrase(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    nodes = ChatGraphNodes(rag_service=object())
     state = _build_state(intent="eligibility", content="당신은 대상입니다.")
 
-    with caplog.at_level(logging.WARNING, logger=chat_nodes.__name__):
-        result = asyncio.run(nodes.assistant_payload_build(state))
+    with caplog.at_level(logging.WARNING, logger=chat_handlers.__name__):
+        result = asyncio.run(build_assistant_payload(state))
 
     assert any(
         "assertive phrases" in record.message for record in caplog.records
@@ -67,14 +69,13 @@ def test_assistant_payload_logs_warning_on_assertive_phrase(
 def test_assistant_payload_no_warning_when_content_safe(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    nodes = ChatGraphNodes(rag_service=object())
     state = _build_state(
         intent="eligibility",
         content="조건에 맞으면 해당될 수 있어요. 주민센터에서 확인해 보세요.",
     )
 
-    with caplog.at_level(logging.WARNING, logger=chat_nodes.__name__):
-        asyncio.run(nodes.assistant_payload_build(state))
+    with caplog.at_level(logging.WARNING, logger=chat_handlers.__name__):
+        asyncio.run(build_assistant_payload(state))
 
     assert not any(
         "assertive phrases" in record.message for record in caplog.records
@@ -84,11 +85,10 @@ def test_assistant_payload_no_warning_when_content_safe(
 def test_assistant_payload_skips_detection_for_unclear(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    nodes = ChatGraphNodes(rag_service=object())
     state = _build_state(intent="unclear", content="당신은 대상입니다.")
 
-    with caplog.at_level(logging.WARNING, logger=chat_nodes.__name__):
-        result = asyncio.run(nodes.assistant_payload_build(state))
+    with caplog.at_level(logging.WARNING, logger=chat_handlers.__name__):
+        result = asyncio.run(build_assistant_payload(state))
 
     assert not any(
         "assertive phrases" in record.message for record in caplog.records

@@ -37,8 +37,8 @@ _FIELD_ALIASES: dict[str, tuple[str, ...]] = {
     "special_flags": _SPECIAL,
     "special_conditions": _SPECIAL,
     "special_condition": _SPECIAL,
-    # 신청자 본인 나이만(자녀 나이 fallback 없음).
-    "age": ("age", "user_age"),
+    # 일부 수집 룰은 아동 연령도 age로 들어온다. 명시 age가 없을 때만 자녀 나이로 보완한다.
+    "age": ("age", "user_age") + _CHILD_AGE,
     # 가구원 나이만(자녀 나이 fallback 없음).
     "household_member_age": (
         "household_member_age",

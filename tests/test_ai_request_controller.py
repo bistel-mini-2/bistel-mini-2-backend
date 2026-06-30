@@ -499,8 +499,9 @@ def test_eligibility_evidence_response_has_display_text() -> None:
     )
 
     assert response.evidences[0].display_text == (
-        "개인회생 파산 종합지원(지원센터)에서는 채무 상황 조건을 확인했고, "
-        "현재 입력한 정보만으로는 지원 가능성이 높다고 판단했어요."
+        "개인회생 파산 종합지원(지원센터)에서는 채무 상황 조건을 정해 두고 있어요. "
+        "현재 입력하신 정보만으로는 이 기준에 어긋나는 부분이 없어, "
+        "지원 가능성이 높다고 판단했어요."
     )
 
 
