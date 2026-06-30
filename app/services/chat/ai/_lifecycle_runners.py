@@ -28,7 +28,11 @@ from app.ai.states.chat_state import ChatGraphState
 from app.common.ai_status import RequestStatus
 from app.db.session import AsyncSessionLocal
 from app.schemas.ai_request_schema import AiRequestSnapshot
-from app.services.chat.ai._graph_clients import get_comparison_graph, get_eligibility_graph
+from app.services.chat.ai._graph_clients import (
+    get_comparison_graph,
+    get_eligibility_graph,
+    get_lifecycle_service,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -39,15 +43,13 @@ async def run_recommendation_lifecycle(
     selected_conditions: dict[str, Any] | None = None,
     follow_up_resolved: bool = False,
 ) -> tuple[AiRequestSnapshot | None, str | None]:
-    from app.ai.nodes.chat.chat_nodes import _lifecycle_service_class
-
     request_id: int | None = None
     try:
         async with AsyncSessionLocal() as db:
             try:
                 await db.execute(text(f"SET LOCAL lock_timeout = '{_RECOMMEND_LOCK_TIMEOUT}'"))
                 await db.execute(text(f"SET LOCAL statement_timeout = '{_RECOMMEND_STATEMENT_TIMEOUT}'"))
-                lifecycle = _lifecycle_service_class()()
+                lifecycle = get_lifecycle_service()
                 created = await lifecycle.create_request(
                     db=db,
                     user_id=user_id,

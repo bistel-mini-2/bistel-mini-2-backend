@@ -82,6 +82,31 @@ def test_assistant_payload_no_warning_when_content_safe(
     )
 
 
+def test_assistant_payload_skips_disclaimer_for_structured_eligibility_result(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    state = {
+        **_build_state(intent="eligibility", content="지원 대상입니다."),
+        "branch_eligibility_result": {
+            "status": "COMPLETED",
+            "user_status": "eligible",
+            "assessment_status": "PASS",
+            "follow_up_questions": [],
+            "summary": "지원 대상입니다.",
+            "request_id": 99,
+            "criteria": [],
+        },
+    }
+
+    with caplog.at_level(logging.WARNING, logger=chat_handlers.__name__):
+        result = asyncio.run(build_assistant_payload(state))
+
+    assert not any(
+        "assertive phrases" in record.message for record in caplog.records
+    )
+    assert result["assistant_payload"]["disclaimer"] is False
+
+
 def test_assistant_payload_skips_detection_for_unclear(
     caplog: pytest.LogCaptureFixture,
 ) -> None:

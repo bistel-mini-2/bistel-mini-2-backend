@@ -61,6 +61,11 @@ async def _run_policy_summary_target(
             fallback_evidences=fallback_evidences,
         )
     )
+    if (
+        (state.get("supervisor_decision") or {}).get("intent") == "summary"
+        and easy_summary
+    ):
+        content = easy_summary
     return {
         **state,
         "branch_content": content,

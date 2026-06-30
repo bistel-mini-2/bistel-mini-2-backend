@@ -171,7 +171,10 @@ class PolicyRuleFilterService:
 
     def _condition_value(self, condition: dict[str, Any], field_name: str) -> Any:
         # alias 해석은 RecommendationCandidateService와 공유(드리프트 방지).
-        return condition_value(condition, field_name)
+        value = condition_value(condition, field_name)
+        if value in (None, "", []) and field_name == "age":
+            return condition_value(condition, "childAge")
+        return value
 
     # 매처는 RecommendationCandidateService와 동일 동작을 보장하기 위해 공유 모듈에 위임한다.
     def _rule_matches(

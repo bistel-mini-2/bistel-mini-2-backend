@@ -26,16 +26,10 @@ from app.schemas.chat_schema import (
     ChatSessionTitleUpdateResponse,
 )
 from app.services import chat_cancel_registry
-from app.services.chat.ai._follow_up import (
-    attach_similar_policies as _attach_similar_policies,
-    build_eligibility_clarification_text as _build_eligibility_clarification_text,
-    classify_follow_up_intent as _classify_follow_up_intent,
-    find_follow_up_policy as _find_follow_up_policy,
-    map_follow_up_answers as _map_follow_up_answers,
-    run_follow_up_eligibility as _run_follow_up_eligibility,
-)
+from app.services.chat.ai import _follow_up as _follow_up_module
 from app.services.chat.persistence._message_serializer import (
     build_message_items as _build_message_items,
+    to_message_item as _to_message_item,
 )
 from app.services.chat.persistence._slot_builder import (
     build_next_slot as _build_next_slot,
@@ -61,6 +55,24 @@ from app.services.chat.persistence._session_helpers import (
 logger = logging.getLogger(f"{__name__}.ChatService")
 
 _INTENT_TO_SSE: dict[str, str] = defaultdict(lambda: "general", {"recommend": "recommendation"})  # type: ignore[assignment]
+_FOLLOW_UP_LLM = _follow_up_module._FOLLOW_UP_LLM
+
+_attach_similar_policies = _follow_up_module.attach_similar_policies
+_build_eligibility_clarification_text = (
+    _follow_up_module.build_eligibility_clarification_text
+)
+_find_follow_up_policy = _follow_up_module.find_follow_up_policy
+_run_follow_up_eligibility = _follow_up_module.run_follow_up_eligibility
+
+
+async def _classify_follow_up_intent(*args: Any, **kwargs: Any) -> str:
+    _follow_up_module._FOLLOW_UP_LLM = _FOLLOW_UP_LLM
+    return await _follow_up_module.classify_follow_up_intent(*args, **kwargs)
+
+
+async def _map_follow_up_answers(*args: Any, **kwargs: Any) -> list[dict]:
+    _follow_up_module._FOLLOW_UP_LLM = _FOLLOW_UP_LLM
+    return await _follow_up_module.map_follow_up_answers(*args, **kwargs)
 
 
 def _sse_event(payload: dict[str, Any]) -> str:

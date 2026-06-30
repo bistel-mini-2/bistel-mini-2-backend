@@ -23,13 +23,19 @@ async def build_assistant_payload(
     is_prompt = bool(slot_request or profile_confirm)
     api_action = None if is_prompt else _INTENT_TO_API_ACTION.get(intent)
     content = state.get("branch_content") or ""
-    if intent != "unclear" and not is_prompt:
+    disclaimer = False
+    if (
+        intent != "unclear"
+        and not is_prompt
+        and state.get("branch_eligibility_result") is None
+    ):
         assertive = _detect_assertive_phrases(content)
         if assertive:
             logger.warning(
                 "chat answer contains assertive phrases despite safety prompt",
                 extra={"intent": intent, "phrases": assertive},
             )
+            disclaimer = True
     payload = {
         "content": content,
         "user_status": state.get("branch_user_status"),
@@ -40,7 +46,7 @@ async def build_assistant_payload(
         "apply_card": state.get("branch_apply_card"),
         "easy_summary": state.get("branch_easy_summary"),
         "key_points": state.get("branch_key_points", []),
-        "disclaimer": False,
+        "disclaimer": disclaimer,
         "slot_request": slot_request,
         "profile_confirm": profile_confirm,
         "eligibility_result": state.get("branch_eligibility_result"),

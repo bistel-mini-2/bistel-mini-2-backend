@@ -181,14 +181,23 @@ class LangChainPolicySummaryGenerator:
             if line.strip() and not self._is_generic_summary_line(line)
         ][:3]
         fallback = self._fallback(policy, evidence_chunks)
-        # LLM 요약이 있으면 그대로 쓴다. 비었을 때만 fallback으로 대체한다.
-        # (부족한 줄 수를 잘린 템플릿 "대상: …" 줄로 메우지 않아 잘림이 사라진다.)
         if not summary_lines:
             summary_lines = [
                 line.strip()
                 for line in fallback.summary.splitlines()
                 if line.strip()
             ][:3]
+        elif len(summary_lines) < 3:
+            fallback_lines = [
+                line.strip()
+                for line in fallback.summary.splitlines()
+                if line.strip()
+            ]
+            for line in fallback_lines:
+                if len(summary_lines) >= 3:
+                    break
+                if line not in summary_lines:
+                    summary_lines.append(line)
         summary = "\n".join(summary_lines[:3])
         evidence = [
             self._short(item, 180)
