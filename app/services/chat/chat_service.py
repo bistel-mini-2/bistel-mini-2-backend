@@ -788,6 +788,39 @@ async def _run_follow_up_eligibility(
         return None
 
 
+async def _attach_similar_policies(db: AsyncSession, state: dict[str, Any]) -> None:
+    """답변의 기준 정책으로 유사 정책 3건을 구해 assistant_payload에 덧붙인다.
+
+    명시 요청(supervisor_decision.similar_policy_requested)일 때만 호출된다.
+    실패해도 조용히 넘어가 답변 자체는 깨지지 않게 한다.
+    """
+    payload = state.get("assistant_payload") or {}
+    primary_slug = next(
+        (str(p["slug"]) for p in payload.get("policies", []) if p.get("slug")),
+        None,
+    )
+    if not primary_slug:
+        return
+    try:
+        from app.services.similar_policy_service import SimilarPolicyService
+
+        result = await SimilarPolicyService().find_similar(
+            db, policy_slug=primary_slug, limit=3
+        )
+        payload["similar_policies"] = [
+            {
+                "policy_id": str(item.policy_id),
+                "slug": item.slug,
+                "name": item.name,
+                "category": item.category,
+                "similarity_reason": item.similarity_reason,
+            }
+            for item in result.items
+        ]
+    except Exception as exc:
+        logger.warning("similar policy attach failed for %s: %s", primary_slug, exc)
+
+
 async def _run_chat(
     *,
     db: AsyncSession,
@@ -805,7 +838,7 @@ async def _run_chat(
         reset_branch_token_callback,
         set_branch_token_callback,
     )
-    from app.services.chat_handlers import (
+    from app.services.chat.chat_handlers import (
         build_assistant_payload,
         classify_intent,
         extract_evidences,
@@ -862,6 +895,9 @@ async def _run_chat(
 
         state.update(branch_result)
         state.update(await build_assistant_payload(state))
+        # 사용자가 '유사 정책'을 명시 요청했을 때만 답변 payload에 덧붙인다.
+        if decision.get("similar_policy_requested"):
+            await _attach_similar_policies(db, state)
         return {
             **(preseed_result or {}),
             **state,
@@ -931,6 +967,8 @@ async def _persist_assistant_outputs(
         profile=graph_result.get("profile"),
         pending=graph_result.get("pending"),
         eligibility_slot_update=graph_result.get("eligibility_slot_update"),
+        similar_policies=payload.get("similar_policies", []),
+        base_slug=decision.get("resolved_policy_slug"),
     )
     if next_slot is not None:
         await ChatRepository.update_session_slot(db, session_id, next_slot)
@@ -944,7 +982,46 @@ async def _persist_assistant_outputs(
     return assistant_message, response
 
 
-_SLOT_MAX_POLICIES = 3
+# 유사 정책 요청 턴에서 기준 정책 1 + 유사 정책 3을 모두 최근 맥락에 담도록 4로 둔다.
+_SLOT_MAX_POLICIES = 4
+
+
+def _similar_turn_base_entry(
+    existing: list[dict],
+    branch_policies: list[dict],
+    base_slug: str | None,
+) -> dict | None:
+    """유사 정책 요청 턴에서 최근 맥락 맨 앞에 둘 기준 정책 항목을 만든다.
+
+    policy_summary는 action이 없어 기준 정책이 policy_links로는 안 잡히므로,
+    1) 기존 slot에 있으면 그 항목(직전 action 보존)을, 없으면
+    2) 이번 턴 답변의 기준 정책(branch_policies)에서 자체 policy_id로 구성한다.
+    → "그 원래 정책이랑 비교해줘" 같은 후속 지시가 안정적으로 동작한다.
+    """
+    if base_slug:
+        for entry in existing:
+            if entry.get("slug") == base_slug:
+                return entry
+
+    base_src = None
+    if base_slug:
+        base_src = next(
+            (p for p in branch_policies if p.get("slug") == base_slug), None
+        )
+    if base_src is None and branch_policies:
+        base_src = branch_policies[0]
+    if not base_src or not base_src.get("slug"):
+        return None
+    try:
+        base_pid = int(base_src["policy_id"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    return {
+        "policy_id": base_pid,
+        "slug": base_src["slug"],
+        "policy_name": base_src.get("policy_name") or base_src.get("name") or "",
+        "last_action": "VIEWED",
+    }
 
 
 def _build_next_slot(
@@ -956,6 +1033,8 @@ def _build_next_slot(
     profile: dict | None = None,
     pending: dict | None = None,
     eligibility_slot_update: dict | None = None,
+    similar_policies: list[dict] | None = None,
+    base_slug: str | None = None,
 ) -> dict | None:
     slug_to_action: dict[str, str] = {}
     for link in policy_links:
@@ -988,13 +1067,40 @@ def _build_next_slot(
             "last_action": action,
         })
 
+    # 유사 정책은 자체 policy_id를 이미 가지므로 policy_links 없이 직접 맥락에 넣는다.
+    # (chat_message_policy 행을 만들지 않아 이력 복원 시 카드로 중복 노출되지 않음.)
+    # 후속 지시어("두 번째 정책", "이거")가 유사 후보를 참조할 수 있게 한다.
+    for sim in similar_policies or []:
+        slug = sim.get("slug")
+        if not slug or slug in seen:
+            continue
+        try:
+            sim_policy_id = int(sim["policy_id"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        seen.add(slug)
+        new_entries.append({
+            "policy_id": sim_policy_id,
+            "slug": slug,
+            "policy_name": sim.get("name") or sim.get("policy_name") or "",
+            "last_action": "SIMILAR_POLICY",
+        })
+
     # 저장할 게 아무것도 없으면(새 정책·프로필·pending·eligibility 업데이트 모두 없음) 생략.
     if not new_entries and profile is None and pending is None and not eligibility_slot_update:
         return None
 
     if new_entries:
         existing = list(current_slot.get("recent_policies") or [])
-        merged: list[dict] = list(new_entries)
+        merged: list[dict] = []
+        # 유사 정책 요청 턴: 기준 정책을 맨 앞에 보존한 뒤 유사 후보로 채운다.
+        # 유사 정책 3개가 슬롯을 다 차지해 기준 정책이 밀려나는 것을 막는다.
+        if similar_policies:
+            base_entry = _similar_turn_base_entry(existing, branch_policies, base_slug)
+            if base_entry and base_entry.get("slug") not in seen:
+                merged.append(base_entry)
+                seen.add(base_entry["slug"])
+        merged.extend(new_entries)
         for entry in existing:
             slug = entry.get("slug")
             if not slug or slug in seen:
@@ -1064,6 +1170,7 @@ def _build_structured_json(decision: dict, payload: dict) -> dict:
         "sources": payload.get("sources", []),
         "policies": payload.get("policies", []),
         "actions": payload.get("actions", []),
+        "similar_policies": payload.get("similar_policies", []),
         "apply_card": payload.get("apply_card"),
         "disclaimer": payload.get("disclaimer"),
         "slot_request": payload.get("slot_request"),
@@ -1121,7 +1228,7 @@ def _build_assistant_response(
     }
     policies = [
         AssistantMessagePolicy(
-            policy_id=str(slug_to_id[p["slug"]]) if p.get("slug") in slug_to_id else p["policy_id"],
+            policy_id=str(slug_to_id[p["slug"]]) if p.get("slug") in slug_to_id else str(p["policy_id"]),
             slug=p["slug"],
             policy_name=p["policy_name"],
             summary=p.get("summary"),
@@ -1165,6 +1272,7 @@ def _build_assistant_response(
         policies=policies,
         actions=payload.get("actions", []),
         evidences=evidences,
+        similar_policies=payload.get("similar_policies", []),
         apply_card=apply_card,
         disclaimer=payload.get("disclaimer"),
         slot_request=payload.get("slot_request"),
@@ -1234,7 +1342,13 @@ def _to_message_item(
         content=message.content,
         sequence_no=message.sequence_no,
         created_at=message.created_at,
-        policies=[AssistantMessagePolicy(**p) for p in resolved_policies],
+        # DB 정책 행은 policy_id가 정수라 str로 강제 변환(스키마는 str 요구).
+        policies=[
+            AssistantMessagePolicy(
+                **{**p, "policy_id": str(p.get("policy_id", ""))}
+            )
+            for p in resolved_policies
+        ],
         evidences=[AssistantMessageEvidence(**e) for e in evidences],
         **meta,
     )
@@ -1252,6 +1366,7 @@ def _unwrap_message_meta(structured_json: dict | None) -> dict:
         "sources": structured_json.get("sources", []),
         "policies": structured_json.get("policies", []),
         "actions": structured_json.get("actions", []),
+        "similar_policies": structured_json.get("similar_policies", []),
         "apply_card": apply_card,
         "disclaimer": structured_json.get("disclaimer"),
         "slot_request": structured_json.get("slot_request"),
