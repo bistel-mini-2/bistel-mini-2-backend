@@ -968,6 +968,7 @@ async def _persist_assistant_outputs(
         pending=graph_result.get("pending"),
         eligibility_slot_update=graph_result.get("eligibility_slot_update"),
         similar_policies=payload.get("similar_policies", []),
+        base_slug=decision.get("resolved_policy_slug"),
     )
     if next_slot is not None:
         await ChatRepository.update_session_slot(db, session_id, next_slot)
@@ -981,7 +982,8 @@ async def _persist_assistant_outputs(
     return assistant_message, response
 
 
-_SLOT_MAX_POLICIES = 3
+# 유사 정책 요청 턴에서 기준 정책 1 + 유사 정책 3을 모두 최근 맥락에 담도록 4로 둔다.
+_SLOT_MAX_POLICIES = 4
 
 
 def _build_next_slot(
@@ -994,6 +996,7 @@ def _build_next_slot(
     pending: dict | None = None,
     eligibility_slot_update: dict | None = None,
     similar_policies: list[dict] | None = None,
+    base_slug: str | None = None,
 ) -> dict | None:
     slug_to_action: dict[str, str] = {}
     for link in policy_links:
@@ -1051,7 +1054,17 @@ def _build_next_slot(
 
     if new_entries:
         existing = list(current_slot.get("recent_policies") or [])
-        merged: list[dict] = list(new_entries)
+        merged: list[dict] = []
+        # 유사 정책 요청 턴: 기준 정책(resolved)을 먼저 보존한 뒤 유사 후보로 채운다.
+        # 유사 정책 3개가 슬롯을 다 차지해 기준 정책이 밀려나는 것을 막는다.
+        if similar_policies and base_slug and base_slug not in seen:
+            base_entry = next(
+                (e for e in existing if e.get("slug") == base_slug), None
+            )
+            if base_entry is not None:
+                merged.append(base_entry)
+                seen.add(base_slug)
+        merged.extend(new_entries)
         for entry in existing:
             slug = entry.get("slug")
             if not slug or slug in seen:
