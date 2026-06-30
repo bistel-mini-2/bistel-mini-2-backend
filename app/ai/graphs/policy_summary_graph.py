@@ -30,10 +30,7 @@ class PolicySummaryGraphRunner:
         return {
             "summary": summary,
             "easy_summary": summary,
-            "key_points": build_policy_summary_key_points(
-                policy,
-                content_limit=160,
-            ),
+            "key_points": build_policy_summary_key_points(policy),
             "evidence": list(final_state.get("evidence") or []),
             "evidence_chunks": list(final_state.get("evidence_chunks") or []),
         }

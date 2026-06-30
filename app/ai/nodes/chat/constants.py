@@ -8,8 +8,8 @@ INTENT_TO_API_ACTION: dict[Intent, str | None] = {
     "eligibility": "eligibility",
     "compare": "compare",
     "apply": "apply",
-    "summary": "summary",
-    "policy_summary": "chat",
+    "summary": None,
+    "policy_summary": None,
     "unclear": None,
 }
 
