@@ -97,7 +97,7 @@ def test_build_next_slot_returns_none_when_no_resolvable_policy() -> None:
     )
 
 
-def test_build_next_slot_prepends_new_dedups_and_caps_three() -> None:
+def test_build_next_slot_prepends_new_dedups_and_caps_four() -> None:
     existing = {
         "recent_policies": [
             {"policy_id": 1, "slug": "A", "policy_name": "A", "last_action": "RECOMMENDED"},
@@ -119,12 +119,59 @@ def test_build_next_slot_prepends_new_dedups_and_caps_three() -> None:
     )
     assert slot is not None
     slugs = [p["slug"] for p in slot["recent_policies"]]
-    # 새 항목(D, A)이 앞에 prepend, 기존 A는 dedup으로 제거, cap 3
-    assert slugs == ["D", "A", "B"]
-    assert len(slot["recent_policies"]) == 3
+    # 새 항목(D, A)이 앞에 prepend, 기존 A는 dedup으로 제거, cap 4
+    assert slugs == ["D", "A", "B", "C"]
+    assert len(slot["recent_policies"]) == 4
     # A의 last_action은 최신(COMPARED)으로 갱신
     a_entry = next(p for p in slot["recent_policies"] if p["slug"] == "A")
     assert a_entry["last_action"] == "COMPARED"
+
+
+def test_build_next_slot_includes_similar_policies() -> None:
+    # 유사 정책은 자체 policy_id로 SIMILAR_POLICY action으로 최근 맥락에 들어간다.
+    # (policy_summary는 action이 없어 기준 정책은 링크로 안 잡힘 → 유사만 채워짐)
+    slot = _build_next_slot(
+        current_slot={},
+        policy_links=[],
+        branch_policies=[{"slug": "BASE", "policy_name": "기준정책"}],
+        slug_to_policy_id={},
+        similar_policies=[
+            {"slug": "S1", "policy_id": "11", "name": "유사1"},
+            {"slug": "S2", "policy_id": "12", "name": "유사2"},
+        ],
+    )
+    assert slot is not None
+    assert [p["slug"] for p in slot["recent_policies"]] == ["S1", "S2"]
+    first = slot["recent_policies"][0]
+    assert first["policy_id"] == 11  # str → int 변환
+    assert first["policy_name"] == "유사1"
+    assert all(p["last_action"] == "SIMILAR_POLICY" for p in slot["recent_policies"])
+
+
+def test_build_next_slot_preserves_base_policy_over_similar() -> None:
+    # 기존 slot에 기준 정책이 있고 유사 3개가 내려와도, 기준 정책이 맨 앞에 보존되고
+    # 캡 4라 기준 1 + 유사 3이 모두 최근 맥락에 담긴다.
+    existing = {
+        "recent_policies": [
+            {"policy_id": 1, "slug": "BASE", "policy_name": "기준", "last_action": "RECOMMENDED"},
+        ]
+    }
+    slot = _build_next_slot(
+        current_slot=existing,
+        policy_links=[],
+        branch_policies=[{"slug": "BASE", "policy_name": "기준"}],
+        slug_to_policy_id={},
+        similar_policies=[
+            {"slug": "S1", "policy_id": "11", "name": "유사1"},
+            {"slug": "S2", "policy_id": "12", "name": "유사2"},
+            {"slug": "S3", "policy_id": "13", "name": "유사3"},
+        ],
+        base_slug="BASE",
+    )
+    assert slot is not None
+    slugs = [p["slug"] for p in slot["recent_policies"]]
+    assert slugs == ["BASE", "S1", "S2", "S3"]
+    assert len(slot["recent_policies"]) == 4
 
 
 # ---------------- branch_apply 슬롯 분기 ----------------
