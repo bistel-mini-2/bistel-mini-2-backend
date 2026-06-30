@@ -277,6 +277,7 @@ class CompareRepository:
                         SELECT jsonb_agg(rd.document_name ORDER BY rd.document_name)
                         FROM required_document rd
                         WHERE rd.policy_id = p.policy_id
+                          AND COALESCE(rd.source_type, 'REQUIRED') <> 'POLICY_REFERENCE'
                     ),
                     '[]'::jsonb
                 ) AS required_documents
