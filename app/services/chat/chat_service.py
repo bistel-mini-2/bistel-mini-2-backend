@@ -17,6 +17,7 @@ from app.ai.nodes.chat.chat_nodes import _adapt_eligibility_result
 from app.ai.states.chat_state import HistoryMessage
 from app.core.config import settings
 from app.common.exceptions import AppException, ErrorCode
+from app.db.models.eligibility_request import EligibilityRequest
 from app.db.models.chat_message import ChatMessage
 from app.db.models.chat_session import ChatSession
 from app.repositories.chat_repository import ChatRepository
@@ -224,6 +225,117 @@ class ChatService:
         db: AsyncSession, user_id: int, chat_session_id: int
     ) -> ChatSession:
         return await _get_owned_session_or_raise(db, user_id, chat_session_id)
+
+    @staticmethod
+    async def persist_eligibility_result_message(
+        db: AsyncSession,
+        *,
+        user_id: int,
+        request: EligibilityRequest,
+        result_json: dict[str, Any],
+    ) -> None:
+        chat_session_id = _chat_session_id_from_source_ref(request.source_ref_id)
+        if chat_session_id is None:
+            return
+        session = await _get_owned_session_or_raise(db, user_id, chat_session_id)
+        if await ChatRepository.eligibility_result_message_exists(
+            db,
+            chat_session_id=chat_session_id,
+            request_id=request.request_id,
+        ):
+            return
+
+        content_text, user_status, policies, evidences = _adapt_eligibility_result(
+            result_json,
+            fallback_slug=str(result_json.get("slug") or request.policy_id),
+            fallback_policy_name=result_json.get("policy_name"),
+        )
+        policy_slug = str(result_json.get("slug") or request.policy_id)
+        policy_links = [{"policy_slug": policy_slug, "action_type": "ELIGIBILITY_TARGET"}]
+        payload = {
+            "content": content_text,
+            "user_status": user_status,
+            "policies": policies,
+            "evidences": evidences,
+            "actions": ["eligibility"],
+            "disclaimer": True,
+            "eligibility_result": result_json,
+        }
+        sequence_no = await ChatRepository.next_sequence_no(db, chat_session_id)
+        structured_json = _build_structured_json(
+            {"intent": "eligibility", "raw": "eligibility_request"},
+            payload,
+        )
+        assistant_message = await ChatRepository.save_message(
+            db,
+            ChatMessage(
+                chat_session_id=chat_session_id,
+                parent_message_id=None,
+                role="assistant",
+                message_type="TEXT",
+                content=content_text,
+                structured_json=structured_json,
+                sequence_no=sequence_no,
+            ),
+        )
+        slug_to_policy_id = await _resolve_policy_ids(
+            db,
+            policy_links,
+        )
+        await ChatRepository.bulk_save_message_policies(
+            db,
+            _build_policy_link_rows(
+                assistant_message.chat_message_id,
+                policy_links,
+                slug_to_policy_id,
+            ),
+        )
+        await ChatRepository.bulk_save_message_evidences(
+            db,
+            _build_evidence_rows(
+                assistant_message.chat_message_id,
+                [
+                    {
+                        "chunk_id": ev["chunk_id"],
+                        "snippet": ev.get("snippet"),
+                        "evidence_role": ev.get("evidence_role"),
+                    }
+                    for ev in evidences
+                    if ev.get("chunk_id") is not None
+                ],
+            ),
+        )
+        if result_json.get("status") == "FOLLOW_UP_REQUIRED":
+            slot_policy_ids = dict(slug_to_policy_id)
+            if policy_slug not in slot_policy_ids:
+                slot_policy_ids[policy_slug] = int(request.policy_id)
+            next_slot = _build_next_slot(
+                current_slot=session.slot_json or {},
+                policy_links=policy_links,
+                branch_policies=policies,
+                slug_to_policy_id=slot_policy_ids,
+                eligibility_slot_update={
+                    "slug": policy_slug,
+                    "eligibility_request_id": request.request_id,
+                    "follow_up_questions": (
+                        result_json.get("follow_up_questions")
+                        or result_json.get("questions")
+                        or []
+                    ),
+                    "eligibility_status": result_json.get("status"),
+                },
+            )
+            if next_slot is not None:
+                await ChatRepository.update_session_slot(
+                    db,
+                    chat_session_id,
+                    next_slot,
+                )
+        await ChatRepository.update_last_message_at(
+            db,
+            chat_session_id,
+            datetime.now(timezone.utc),
+        )
 
     @staticmethod
     async def send_message_stream(
@@ -677,6 +789,15 @@ async def _save_user_message(
             sequence_no=sequence_no,
         ),
     )
+
+
+def _chat_session_id_from_source_ref(source_ref_id: str | None) -> int | None:
+    if not source_ref_id or not source_ref_id.startswith("chat_session:"):
+        return None
+    raw_id = source_ref_id.removeprefix("chat_session:").split(";", 1)[0].strip()
+    if not raw_id.isdecimal():
+        return None
+    return int(raw_id)
 
 
 _FOLLOW_UP_ANSWER_SYSTEM = """\

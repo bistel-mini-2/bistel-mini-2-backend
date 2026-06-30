@@ -1007,6 +1007,87 @@ def test_build_next_slot_logs_warning_on_slug_mismatch(caplog) -> None:
     assert result["recent_policies"][0]["slug"] == "WLF1"
 
 
+def test_persist_eligibility_follow_up_updates_session_slot(monkeypatch) -> None:
+    session = _session(user_id=1, chat_session_id=10)
+    session.slot_json = {"recent_policies": []}
+    db = AsyncMock()
+    saved_message = ChatMessage(
+        chat_message_id=77,
+        chat_session_id=10,
+        role="assistant",
+        message_type="TEXT",
+        content="추가 질문",
+        sequence_no=1,
+    )
+    request = MagicMock(
+        request_id=99,
+        user_id=1,
+        policy_id=100,
+        source_ref_id="chat_session:10;source:recommendation:1",
+    )
+    result_json = {
+        "request_id": "99",
+        "status": "FOLLOW_UP_REQUIRED",
+        "policy_id": "100",
+        "slug": "WLF1",
+        "policy_name": "정책1",
+        "summary": "추가 확인이 필요해요.",
+        "follow_up_questions": [
+            {
+                "field_name": "income",
+                "question_text": "소득을 확인해 주세요.",
+            }
+        ],
+    }
+
+    monkeypatch.setattr(ChatRepository, "find_session_by_id", AsyncMock(return_value=session))
+    monkeypatch.setattr(ChatRepository, "eligibility_result_message_exists", AsyncMock(return_value=False))
+    monkeypatch.setattr(ChatRepository, "next_sequence_no", AsyncMock(return_value=1))
+    monkeypatch.setattr(ChatRepository, "save_message", AsyncMock(return_value=saved_message))
+    monkeypatch.setattr(ChatRepository, "bulk_save_message_policies", AsyncMock())
+    monkeypatch.setattr(ChatRepository, "bulk_save_message_evidences", AsyncMock())
+    monkeypatch.setattr(ChatRepository, "update_session_slot", AsyncMock())
+    monkeypatch.setattr(ChatRepository, "update_last_message_at", AsyncMock())
+    monkeypatch.setattr(PolicyRepository, "find_ids_by_codes", AsyncMock(return_value={"WLF1": 100}))
+    monkeypatch.setattr(
+        chat_service_module,
+        "_adapt_eligibility_result",
+        MagicMock(return_value=(
+            "추가 질문",
+            None,
+            [
+                {
+                    "policy_id": "100",
+                    "slug": "WLF1",
+                    "policy_name": "정책1",
+                    "summary": "추가 확인이 필요해요.",
+                    "tag": None,
+                    "tagTone": None,
+                }
+            ],
+            [],
+        )),
+    )
+
+    asyncio.run(
+        ChatService.persist_eligibility_result_message(
+            db,
+            user_id=1,
+            request=request,
+            result_json=result_json,
+        )
+    )
+
+    ChatRepository.update_session_slot.assert_awaited_once()
+    _, chat_session_id, next_slot = ChatRepository.update_session_slot.await_args.args
+    assert chat_session_id == 10
+    [policy] = next_slot["recent_policies"]
+    assert policy["slug"] == "WLF1"
+    assert policy["eligibility_request_id"] == 99
+    assert policy["eligibility_status"] == "FOLLOW_UP_REQUIRED"
+    assert policy["follow_up_questions"] == result_json["follow_up_questions"]
+
+
 # --- 신규 이슈 시나리오 --------------------------------------------------------
 
 

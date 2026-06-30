@@ -235,6 +235,128 @@ def test_create_eligibility_request_accepts_manual_confirmations(monkeypatch) ->
     }
 
 
+def test_create_eligibility_request_preserves_chat_session_source(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    async def fake_db() -> AsyncGenerator[object, None]:
+        db = SimpleNamespace()
+
+        async def commit():
+            captured["committed"] = True
+
+        db.commit = commit
+        yield db
+
+    async def fake_current_user() -> object:
+        return SimpleNamespace(user_id=7)
+
+    async def fake_ensure_owned_session(db, *, user_id, chat_session_id):
+        captured["ensure_session"] = {
+            "user_id": user_id,
+            "chat_session_id": chat_session_id,
+        }
+
+    async def fake_create_eligibility_request(
+        self,
+        db,
+        *,
+        user_id,
+        policy_identifier,
+        source_type,
+        source_ref_id,
+        raw_query,
+        selected_conditions,
+    ):
+        captured["source_ref_id"] = source_ref_id
+        return SimpleNamespace(
+            request_id="123",
+            status=SimpleNamespace(value="READY"),
+        )
+
+    async def fake_mark_processing(self, db, request_type, request_id):
+        return SimpleNamespace(
+            request_id=str(request_id),
+            status=SimpleNamespace(value="PROCESSING"),
+        )
+
+    async def fake_process_ai_condition_request(
+        request_type: str,
+        request_id: int,
+    ) -> None:
+        return None
+
+    monkeypatch.setattr(
+        ai_request_controller.ChatService,
+        "ensure_owned_session",
+        fake_ensure_owned_session,
+    )
+    monkeypatch.setattr(
+        AiRequestLifecycleService,
+        "create_eligibility_request",
+        fake_create_eligibility_request,
+    )
+    monkeypatch.setattr(
+        AiRequestLifecycleService,
+        "mark_processing",
+        fake_mark_processing,
+    )
+    monkeypatch.setattr(
+        ai_request_controller,
+        "process_ai_condition_request",
+        fake_process_ai_condition_request,
+    )
+
+    app = FastAPI()
+    app.include_router(eligibility_router)
+    app.dependency_overrides[get_db_session] = fake_db
+    app.dependency_overrides[get_current_user] = fake_current_user
+    register_exception_handlers(app)
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/eligibility/requests",
+            json={
+                "policy_id": "WLF00000024",
+                "chat_session_id": "82",
+                "source_ref_id": "recommendation:123",
+                "user_conditions": {"income": "low"},
+            },
+        )
+
+    assert response.status_code == 202
+    assert captured["ensure_session"] == {
+        "user_id": 7,
+        "chat_session_id": 82,
+    }
+    assert captured["source_ref_id"] == "chat_session:82;source:recommendation:123"
+
+
+def test_create_eligibility_request_rejects_non_numeric_chat_session_id() -> None:
+    async def fake_db() -> AsyncGenerator[object, None]:
+        yield SimpleNamespace()
+
+    async def fake_current_user() -> object:
+        return SimpleNamespace(user_id=7)
+
+    app = FastAPI()
+    app.include_router(eligibility_router)
+    app.dependency_overrides[get_db_session] = fake_db
+    app.dependency_overrides[get_current_user] = fake_current_user
+    register_exception_handlers(app)
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/eligibility/requests",
+            json={
+                "policy_id": "WLF00000024",
+                "chat_session_id": "abc",
+                "user_conditions": {"income": "low"},
+            },
+        )
+
+    assert response.status_code == 422
+
+
 def test_get_eligibility_request_returns_result_response(monkeypatch) -> None:
     captured: dict[str, object] = {}
 
@@ -298,6 +420,110 @@ def test_get_eligibility_request_returns_result_response(monkeypatch) -> None:
         "request_id": 123,
         "user_id": 7,
     }
+
+
+def test_get_eligibility_request_persists_terminal_chat_result(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    async def fake_db() -> AsyncGenerator[object, None]:
+        db = SimpleNamespace()
+
+        async def commit():
+            captured["committed"] = True
+
+        async def rollback():
+            captured["rolled_back"] = True
+
+        db.commit = commit
+        db.rollback = rollback
+        yield db
+
+    async def fake_current_user() -> object:
+        return SimpleNamespace(user_id=7)
+
+    def fake_init(self):
+        async def find_by_id(db, request_type, request_id):
+            captured["find_request"] = {
+                "request_type": request_type,
+                "request_id": request_id,
+            }
+            return SimpleNamespace(
+                request_id=request_id,
+                user_id=7,
+                policy_id=24,
+                source_ref_id="chat_session:82;source:recommendation:123",
+            )
+
+        self.repository = SimpleNamespace(find_by_id=find_by_id)
+
+    async def fake_get_eligibility_result(
+        self,
+        db,
+        *,
+        request_id,
+        user_id,
+    ):
+        return EligibilityResultResponse(
+            request_id=str(request_id),
+            status=RequestStatus.COMPLETED,
+            policy_id="24",
+            slug="WLF00000024",
+            policy_name="테스트 정책",
+            user_status="RECOMMENDABLE",
+            banner_level="high",
+            summary="지원 가능성이 높습니다.",
+            matched_conditions=["region"],
+            evidences=[],
+        )
+
+    async def fake_persist_eligibility_result_message(
+        db,
+        *,
+        user_id,
+        request,
+        result_json,
+    ):
+        captured["persist"] = {
+            "user_id": user_id,
+            "request_id": request.request_id,
+            "source_ref_id": request.source_ref_id,
+            "result_request_id": result_json["request_id"],
+        }
+
+    monkeypatch.setattr(AiRequestLifecycleService, "__init__", fake_init)
+    monkeypatch.setattr(
+        AiRequestLifecycleService,
+        "get_eligibility_result",
+        fake_get_eligibility_result,
+    )
+    monkeypatch.setattr(
+        ai_request_controller.ChatService,
+        "persist_eligibility_result_message",
+        fake_persist_eligibility_result_message,
+    )
+
+    app = FastAPI()
+    app.include_router(eligibility_router)
+    app.dependency_overrides[get_db_session] = fake_db
+    app.dependency_overrides[get_current_user] = fake_current_user
+    register_exception_handlers(app)
+
+    with TestClient(app) as client:
+        response = client.get("/api/v1/eligibility/requests/123")
+
+    assert response.status_code == 200
+    assert captured["find_request"] == {
+        "request_type": "eligibility",
+        "request_id": 123,
+    }
+    assert captured["persist"] == {
+        "user_id": 7,
+        "request_id": 123,
+        "source_ref_id": "chat_session:82;source:recommendation:123",
+        "result_request_id": "123",
+    }
+    assert captured["committed"] is True
+    assert "rolled_back" not in captured
 
 
 def test_eligibility_result_response_maps_assessment_to_user_response() -> None:
