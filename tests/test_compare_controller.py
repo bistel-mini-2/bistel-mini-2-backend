@@ -116,6 +116,7 @@ def test_get_compare_history_returns_items_and_pagination(monkeypatch) -> None:
                     policy_b_name="B 정책",
                     policy_a_slug="WLF00000001",
                     policy_b_slug="WLF00000002",
+                    selection_guide="A는 비용 지원, B는 돌봄 공백 대응에 장점이 있습니다.",
                     compared_at=datetime(2026, 6, 25, 10, 30, 0),
                 )
             ],
@@ -138,6 +139,7 @@ def test_get_compare_history_returns_items_and_pagination(monkeypatch) -> None:
         "policy_b_name": "B 정책",
         "policy_a_slug": "WLF00000001",
         "policy_b_slug": "WLF00000002",
+        "selection_guide": "A는 비용 지원, B는 돌봄 공백 대응에 장점이 있습니다.",
         "compared_at": "2026-06-25T10:30:00",
     }
     assert body["meta"] == {

@@ -9,6 +9,14 @@ from app.repositories.compare_repository import CompareRepository
 from app.services.compare_service import CompareService
 
 
+@pytest.fixture(autouse=True)
+def disable_compare_guide_llm(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "app.ai.agents.comparison_guide_agent.settings.openai_api_key",
+        None,
+    )
+
+
 def make_policy(
     *,
     policy_id: int,
@@ -111,6 +119,88 @@ def test_compare_policies_returns_diff_and_related(monkeypatch) -> None:
     assert response.related_policies[0].slug == "WLF00000003"
 
 
+def test_compare_policies_uses_guide_agent(monkeypatch) -> None:
+    policy_a = make_policy(policy_id=1, slug="WLF00000001", name="A ?뺤콉")
+    policy_b = make_policy(policy_id=2, slug="WLF00000002", name="B ?뺤콉")
+
+    class FakeGuideAgent:
+        def __init__(self) -> None:
+            self.called = False
+
+        async def rewrite_selection_guide(self, **kwargs):
+            self.called = True
+            assert kwargs["policy_a"] == policy_a
+            assert kwargs["policy_b"] == policy_b
+            assert kwargs["diff_table"]
+            assert kwargs["fallback_guide"]
+            return "A 정책은 현재 조건이 더 가까울 때, B 정책은 다른 지원 조건을 함께 확인하고 싶을 때 먼저 볼 만해요."
+
+    guide_agent = FakeGuideAgent()
+    monkeypatch.setattr(
+        CompareRepository,
+        "find_policies_by_slugs",
+        AsyncMock(return_value=[policy_a, policy_b]),
+    )
+    monkeypatch.setattr(
+        CompareRepository,
+        "find_related_policies",
+        AsyncMock(return_value=[]),
+    )
+
+    service = CompareService()
+    service.guide_agent = guide_agent
+
+    response = asyncio.run(
+        service.compare_policies(
+            object(),  # type: ignore[arg-type]
+            slug_a="WLF00000001",
+            slug_b="WLF00000002",
+        )
+    )
+
+    assert guide_agent.called is True
+    assert response.selection_guide.startswith("A 정책은 현재 조건")
+
+
+def test_compare_policies_releases_db_before_guide_agent(monkeypatch) -> None:
+    policy_a = make_policy(policy_id=1, slug="WLF00000001", name="A 정책")
+    policy_b = make_policy(policy_id=2, slug="WLF00000002", name="B 정책")
+    events: list[str] = []
+
+    class FakeDb:
+        async def commit(self) -> None:
+            events.append("commit")
+
+    class FakeGuideAgent:
+        async def rewrite_selection_guide(self, **kwargs):
+            events.append("guide")
+            return kwargs["fallback_guide"]
+
+    monkeypatch.setattr(
+        CompareRepository,
+        "find_policies_by_slugs",
+        AsyncMock(return_value=[policy_a, policy_b]),
+    )
+    monkeypatch.setattr(
+        CompareRepository,
+        "find_related_policies",
+        AsyncMock(return_value=[]),
+    )
+
+    service = CompareService()
+    service.guide_agent = FakeGuideAgent()
+
+    asyncio.run(
+        service.compare_policies(
+            FakeDb(),  # type: ignore[arg-type]
+            slug_a="WLF00000001",
+            slug_b="WLF00000002",
+        )
+    )
+
+    assert events == ["commit", "guide"]
+
+
 def test_to_policy_summary_keeps_benefit_meaning() -> None:
     policy = make_policy(policy_id=1, slug="WLF00000001", name="A 정책")
 
@@ -190,9 +280,39 @@ def test_selection_guide_handles_missing_condition_profiles() -> None:
     }
 
     assert CompareService._selection_guide(policy_a, policy_b) == (
-        "두 정책 모두 정리된 조건 정보가 부족합니다. "
-        "비교 결과는 공식 안내와 담당 기관 안내를 함께 확인하세요."
+        "A 정책은 공식 안내에서 핵심 혜택을 먼저 확인해 볼 만하고, "
+        "B 정책은 함께 비교할 대안으로 볼 수 있습니다. "
+        "아직 정리된 조건 정보가 부족하므로 두 정책의 혜택과 신청 준비 부담을 함께 확인해 주세요."
     )
+
+
+def test_selection_guide_target_summary_does_not_append_bad_particle() -> None:
+    policy_a = {
+        "name": "유아학비 지원",
+        "condition_profile_target_summary": (
+            "국공립 또는 사립유치원에 다니는 3~5세 유아에게 "
+            "유아학비와 방과후 과정비를 지원합니다."
+        ),
+        "condition_profile_source_text": "A 원문",
+        "condition_profile_review_required": False,
+    }
+    policy_b = {
+        "name": "긴급돌봄 지원사업",
+        "condition_profile_target_summary": (
+            "긴급하고 일시적인 돌봄이 필요하지만 기존 공적 돌봄서비스로 "
+            "해결하기 어려운 사람에게 재가방문형 돌봄서비스를 지원합니다."
+        ),
+        "condition_profile_source_text": "B 원문",
+        "condition_profile_review_required": False,
+    }
+
+    guide = CompareService._selection_guide(policy_a, policy_b)
+
+    assert "지원합니다.에게" not in guide
+    assert "지원합니다.을" not in guide
+    assert "유아학비 지원과 긴급돌봄 지원사업은" in guide
+    assert "첫 번째 정책은" in guide
+    assert "두 번째 정책은" in guide
 
 
 def test_compare_policies_saves_history_when_user_exists(monkeypatch) -> None:
@@ -222,7 +342,19 @@ def test_compare_policies_saves_history_when_user_exists(monkeypatch) -> None:
     )
 
     save_history.assert_awaited_once_with(
-        fake_db, user_id=7, policy_a_id=1, policy_b_id=2
+        fake_db,
+        user_id=7,
+        policy_a_id=1,
+        policy_b_id=2,
+        policy_a_slug="WLF00000001",
+        policy_b_slug="WLF00000002",
+        policy_a_name="A 정책",
+        policy_b_name="B 정책",
+        selection_guide=(
+            "A 정책과 B 정책은 지원하는 대상과 활용 상황이 서로 다릅니다. "
+            "첫 번째 정책은 비교표에 보이는 혜택이 더 필요할 때 먼저 볼 만하고, "
+            "두 번째 정책은 다른 돌봄·지원 상황을 함께 검토할 때 좋은 대안이 될 수 있습니다."
+        ),
     )
 
 
@@ -291,6 +423,7 @@ def test_get_compare_history_returns_items_and_total(monkeypatch) -> None:
                         "policy_b_name": "B 정책",
                         "policy_a_slug": "WLF00000001",
                         "policy_b_slug": "WLF00000002",
+                        "selection_guide": "A는 비용 지원, B는 돌봄 공백 대응에 장점이 있습니다.",
                         "compared_at": compared_at,
                     }
                 ],
@@ -311,6 +444,7 @@ def test_get_compare_history_returns_items_and_total(monkeypatch) -> None:
     assert total == 1
     assert items[0].id == "3"
     assert items[0].policy_a_slug == "WLF00000001"
+    assert items[0].selection_guide == "A는 비용 지원, B는 돌봄 공백 대응에 장점이 있습니다."
     assert items[0].compared_at == compared_at
 
 

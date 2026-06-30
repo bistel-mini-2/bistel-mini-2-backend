@@ -36,6 +36,7 @@ class CompareHistoryItem(BaseModel):
     policy_b_name: str
     policy_a_slug: str
     policy_b_slug: str
+    selection_guide: str | None = None
     compared_at: datetime
 
 
