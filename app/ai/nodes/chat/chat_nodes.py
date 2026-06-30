@@ -294,12 +294,72 @@ def _normalize_policy_mention_text(value: str | None) -> str:
     return re.sub(r"[^0-9A-Za-z가-힣]+", "", value).lower()
 
 
+_POLICY_NAME_GENERIC_TOKENS = {
+    "지원",
+    "사업",
+    "서비스",
+    "정책",
+    "제도",
+    "안내",
+    "대상",
+    "신청",
+    "급여",
+}
+_POLICY_NAME_GENERIC_SUFFIXES = (
+    "지원사업",
+    "지원서비스",
+    "지원제도",
+    "지원",
+    "사업",
+    "서비스",
+    "제도",
+)
+
+
+def _policy_mention_terms(policy_name: str | None) -> set[str]:
+    normalized_name = _normalize_policy_mention_text(policy_name)
+    if not normalized_name:
+        return set()
+
+    terms: set[str] = {normalized_name}
+    for suffix in _POLICY_NAME_GENERIC_SUFFIXES:
+        normalized_suffix = _normalize_policy_mention_text(suffix)
+        if normalized_name.endswith(normalized_suffix):
+            trimmed = normalized_name[: -len(normalized_suffix)]
+            if len(trimmed) >= 4:
+                terms.add(trimmed)
+
+    tokens = [
+        _normalize_policy_mention_text(token)
+        for token in re.findall(r"[0-9A-Za-z가-힣]+", policy_name or "")
+    ]
+    tokens = [
+        token
+        for token in tokens
+        if token and token not in _POLICY_NAME_GENERIC_TOKENS
+    ]
+    for token in tokens:
+        if len(token) >= 5:
+            terms.add(token)
+
+    for start in range(len(tokens)):
+        combined = ""
+        for token in tokens[start : start + 4]:
+            combined += token
+            if len(combined) >= 5:
+                terms.add(combined)
+
+    return terms
+
+
 def _user_mentions_policy_name(user_content: str, policy_name: str | None) -> bool:
-    normalized_policy_name = _normalize_policy_mention_text(policy_name)
-    if len(normalized_policy_name) < 2:
+    mention_terms = _policy_mention_terms(policy_name)
+    if not mention_terms:
         return False
     normalized_user_content = _normalize_policy_mention_text(user_content)
-    return normalized_policy_name in normalized_user_content
+    if len(normalized_user_content) < 2:
+        return False
+    return any(term in normalized_user_content for term in mention_terms)
 
 
 _CONTEXT_DEPENDENT_APPLY_PATTERNS: tuple[re.Pattern[str], ...] = (

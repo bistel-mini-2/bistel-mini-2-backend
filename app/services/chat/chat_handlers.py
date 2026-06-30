@@ -74,7 +74,6 @@ async def handle_compare(
 async def handle_unclear(
     state: ChatGraphState,
 ) -> dict[str, Any]:
-    from app.ai.nodes.chat.chat_nodes import _generate_branch_answer
     content = await _generate_branch_answer("unclear", state, evidences=[])
     return {
         **state,

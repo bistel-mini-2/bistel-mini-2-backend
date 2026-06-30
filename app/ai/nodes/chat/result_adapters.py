@@ -141,27 +141,15 @@ def _adapt_comparison_result(
     policy_b = result_json.get("policy_b") or {}
     name_a = str(policy_a.get("name") or policy_a.get("slug") or "첫 번째 정책")
     name_b = str(policy_b.get("name") or policy_b.get("slug") or "두 번째 정책")
-    selection_guide = str(result_json.get("selection_guide") or "")
-    diff_table = [
-        item for item in result_json.get("diff_table") or []
-        if isinstance(item, dict)
-    ]
-    highlights: list[str] = []
-    for item in diff_table[:3]:
-        field = item.get("field")
-        a_value = str(item.get("a") or "공식 안내 확인 필요")
-        b_value = str(item.get("b") or "공식 안내 확인 필요")
-        if field:
-            highlights.append(f"- {field}: {name_a}은 {a_value}, {name_b}은 {b_value}")
+    selection_guide = str(result_json.get("selection_guide") or "").strip()
 
-    content_parts = [
-        f"{name_a}와 {name_b}를 조건 기준으로 비교했어요.",
-    ]
+    content_parts = [f"{name_a}와 {name_b}를 비교해봤어요."]
     if selection_guide:
         content_parts.append(selection_guide)
-    if highlights:
-        content_parts.append("주요 차이는 다음과 같아요.\n" + "\n".join(highlights))
-    content_parts.append("자세한 항목별 비교는 정책 비교 화면에서 이어서 확인할 수 있어요.")
+    else:
+        content_parts.append(
+            "두 정책의 지원 대상과 혜택 방향을 함께 보고, 현재 상황에 더 가까운 정책을 선택해 주세요."
+        )
 
     policies = []
     for policy in (policy_a, policy_b):
@@ -178,6 +166,7 @@ def _adapt_comparison_result(
                 "tagTone": None,
             }
         )
+
     return "\n\n".join(content_parts), policies
 
 
