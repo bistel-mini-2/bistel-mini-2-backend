@@ -4,9 +4,10 @@ from typing import Any
 from unittest.mock import AsyncMock
 
 from app.ai.nodes.chat.chat_nodes import (
-    ChatGraphNodes,
     _pick_compare_targets,
 )
+from app.services import chat_handlers
+from app.services.chat_handlers import handle_compare, extract_policy_links
 
 
 class _FakeRagResult:
@@ -92,20 +93,17 @@ def test_pick_compare_targets_uses_two_rag_policies() -> None:
 
 
 def test_branch_compare_runs_comparison_graph(monkeypatch) -> None:
-    monkeypatch.setattr(
-        "app.ai.nodes.chat.chat_nodes.AsyncSessionLocal",
-        lambda: _FakeSession(),
-    )
+    monkeypatch.setattr(chat_handlers, "AsyncSessionLocal", lambda: _FakeSession())
     comparison_graph = _FakeComparisonGraph()
-    nodes = ChatGraphNodes(
-        rag_service=_FakeRagService(
-            [
-                _rag_chunk(chunk_id=1, policy_code="WLF1", policy_name="A 정책"),
-                _rag_chunk(chunk_id=2, policy_code="WLF2", policy_name="B 정책"),
-            ]
-        ),
-        comparison_graph=comparison_graph,  # type: ignore[arg-type]
+    rag = _FakeRagService(
+        [
+            _rag_chunk(chunk_id=1, policy_code="WLF1", policy_name="A 정책"),
+            _rag_chunk(chunk_id=2, policy_code="WLF2", policy_name="B 정책"),
+        ]
     )
+    monkeypatch.setattr(chat_handlers, "_RAG_SERVICE", rag)
+    monkeypatch.setattr(chat_handlers, "_COMPARISON_GRAPH", comparison_graph)
+
     state = {
         "user_id": 7,
         "user_content": "A 정책과 B 정책 비교해줘",
@@ -113,26 +111,28 @@ def test_branch_compare_runs_comparison_graph(monkeypatch) -> None:
         "supervisor_decision": {"intent": "compare", "raw": "{}"},
     }
 
-    result = asyncio.run(nodes.branch_compare(state))  # type: ignore[arg-type]
+    result = asyncio.run(handle_compare(state))
 
     comparison_graph.run.assert_awaited_once()
     assert "두 정책은 지원 대상 조건이 다릅니다" in result["branch_content"]
     assert [p["slug"] for p in result["branch_policies"]] == ["WLF1", "WLF2"]
     assert len(result["branch_evidences"]) == 2
 
-    link_state = asyncio.run(nodes.policy_link_extract(result))  # type: ignore[arg-type]
-    assert link_state["policy_links_to_save"] == [
+    link_result = asyncio.run(extract_policy_links({
+        **result,
+        "supervisor_decision": {"intent": "compare", "raw": "{}"},
+    }))
+    assert link_result == [
         {"policy_slug": "WLF1", "action_type": "COMPARED"},
         {"policy_slug": "WLF2", "action_type": "COMPARED"},
     ]
 
 
 def test_branch_compare_asks_for_two_targets(monkeypatch) -> None:
-    monkeypatch.setattr(
-        "app.ai.nodes.chat.chat_nodes.AsyncSessionLocal",
-        lambda: _FakeSession(),
-    )
-    nodes = ChatGraphNodes(rag_service=_FakeRagService([]))
+    monkeypatch.setattr(chat_handlers, "AsyncSessionLocal", lambda: _FakeSession())
+    rag = _FakeRagService([])
+    monkeypatch.setattr(chat_handlers, "_RAG_SERVICE", rag)
+
     state = {
         "user_id": 7,
         "user_content": "두 정책 비교해줘",
@@ -140,7 +140,7 @@ def test_branch_compare_asks_for_two_targets(monkeypatch) -> None:
         "supervisor_decision": {"intent": "compare", "raw": "{}"},
     }
 
-    result = asyncio.run(nodes.branch_compare(state))  # type: ignore[arg-type]
+    result = asyncio.run(handle_compare(state))
 
     assert "비교할 정책 2개" in result["branch_content"]
     assert result["branch_policies"] == []

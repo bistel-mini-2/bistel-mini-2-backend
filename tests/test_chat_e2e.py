@@ -13,12 +13,11 @@ from __future__ import annotations
 import asyncio
 from types import SimpleNamespace
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from app.ai.nodes.chat import chat_nodes as _chat_nodes_module
-from app.ai.nodes.chat.chat_nodes import ChatGraphNodes
 from app.services import chat_handlers as _handlers_module
 from app.services.chat_service import _run_chat
 
@@ -98,24 +97,14 @@ async def _run(
     *,
     monkeypatch: pytest.MonkeyPatch,
     intent_state: dict[str, Any],
-    nodes: ChatGraphNodes | None = None,
 ) -> dict[str, Any]:
     """
-    Patch classify_intent to return a fixed state, then run _run_chat
-    with a real ChatGraphNodes instance.
+    Patch classify_intent to return a fixed state, then run _run_chat.
     """
     async def _fake_classify(**kwargs: Any) -> dict[str, Any]:
         return intent_state
 
     monkeypatch.setattr(_handlers_module, "classify_intent", _fake_classify)
-
-    if nodes is not None:
-        singleton = nodes
-
-        def _fake_nodes(n: Any = None) -> ChatGraphNodes:
-            return singleton
-
-        monkeypatch.setattr(_handlers_module, "_nodes", _fake_nodes)
 
     return await _run_chat(
         db=object(),
@@ -135,12 +124,11 @@ async def _run(
 def test_e2e_unclear_returns_payload_without_policies(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(_chat_nodes_module, "AsyncSessionLocal", _fake_db)
     _mock_llm(monkeypatch, "무엇을 도와드릴까요?")
+    monkeypatch.setattr(_handlers_module, "_RAG_SERVICE", _FakeRagService())
 
-    nodes = ChatGraphNodes(rag_service=_FakeRagService())
     result = asyncio.run(
-        _run(monkeypatch=monkeypatch, intent_state=_intent_state("unclear"), nodes=nodes)
+        _run(monkeypatch=monkeypatch, intent_state=_intent_state("unclear"))
     )
 
     payload = result["assistant_payload"]
@@ -160,7 +148,7 @@ def test_e2e_unclear_returns_payload_without_policies(
 def test_e2e_recommend_routes_and_builds_payload(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(_chat_nodes_module, "AsyncSessionLocal", _fake_db)
+    monkeypatch.setattr(_handlers_module, "AsyncSessionLocal", _fake_db)
     _mock_llm(monkeypatch, "맞춤 정책을 추천해드릴게요.")
 
     recommend_result = {
@@ -182,8 +170,6 @@ def test_e2e_recommend_routes_and_builds_payload(
             }
         ]
     }
-    recommend_runner = MagicMock()
-    recommend_runner.run = AsyncMock(return_value=recommend_result)
 
     from app.services.ai_request_lifecycle_service import AiRequestLifecycleService
     from app.common.ai_status import RequestStatus
@@ -207,16 +193,13 @@ def test_e2e_recommend_routes_and_builds_payload(
     lifecycle.mark_processing = AsyncMock()
     lifecycle.process_condition_request = AsyncMock(return_value=fake_snapshot)
 
-    nodes = ChatGraphNodes(
-        rag_service=_FakeRagService(),
-        lifecycle_service=lifecycle,
-    )
+    monkeypatch.setattr(_handlers_module, "_LIFECYCLE_SERVICE", lifecycle)
+    monkeypatch.setattr(_handlers_module, "_RAG_SERVICE", _FakeRagService())
 
     result = asyncio.run(
         _run(
             monkeypatch=monkeypatch,
             intent_state=_intent_state("recommend"),
-            nodes=nodes,
         )
     )
 
@@ -242,7 +225,7 @@ def test_e2e_eligibility_resolved_slug_runs_lifecycle(
 ) -> None:
     from app.common.ai_status import RequestStatus
 
-    monkeypatch.setattr(_chat_nodes_module, "AsyncSessionLocal", _fake_db)
+    monkeypatch.setattr(_handlers_module, "AsyncSessionLocal", _fake_db)
 
     eligibility_return = {
         "status": RequestStatus.COMPLETED.value,
@@ -272,13 +255,11 @@ def test_e2e_eligibility_resolved_slug_runs_lifecycle(
         ]
     }
 
-    nodes = ChatGraphNodes(
-        rag_service=_FakeRagService(),
-        eligibility_graph=eligibility_graph,
-    )
+    monkeypatch.setattr(_handlers_module, "_ELIGIBILITY_GRAPH", eligibility_graph)
+    monkeypatch.setattr(_handlers_module, "_RAG_SERVICE", _FakeRagService())
 
     result = asyncio.run(
-        _run(monkeypatch=monkeypatch, intent_state=state, nodes=nodes)
+        _run(monkeypatch=monkeypatch, intent_state=state)
     )
 
     eligibility_graph.run.assert_awaited_once()
@@ -298,7 +279,7 @@ def test_e2e_eligibility_resolved_slug_runs_lifecycle(
 def test_e2e_compare_routes_and_builds_diff_payload(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(_chat_nodes_module, "AsyncSessionLocal", _fake_db)
+    monkeypatch.setattr(_handlers_module, "AsyncSessionLocal", _fake_db)
 
     compare_return = {
         "policy_a": {"policy_id": "1", "slug": "WLF1", "name": "A 정책",
@@ -320,18 +301,20 @@ def test_e2e_compare_routes_and_builds_diff_payload(
         ]
     }
 
-    nodes = ChatGraphNodes(
-        rag_service=_FakeRagService(
+    monkeypatch.setattr(_handlers_module, "_COMPARISON_GRAPH", comparison_graph)
+    monkeypatch.setattr(
+        _handlers_module,
+        "_RAG_SERVICE",
+        _FakeRagService(
             [
                 _rag_chunk(chunk_id=1, policy_code="WLF1", policy_name="A 정책"),
                 _rag_chunk(chunk_id=2, policy_code="WLF2", policy_name="B 정책"),
             ]
         ),
-        comparison_graph=comparison_graph,
     )
 
     result = asyncio.run(
-        _run(monkeypatch=monkeypatch, intent_state=state, nodes=nodes)
+        _run(monkeypatch=monkeypatch, intent_state=state)
     )
 
     comparison_graph.run.assert_awaited_once()
@@ -352,15 +335,11 @@ def test_e2e_compare_routes_and_builds_diff_payload(
 def test_e2e_collect_slots_emits_slot_request(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(_chat_nodes_module, "AsyncSessionLocal", _fake_db)
-
     state = _intent_state("recommend")
     state["awaiting_slots"] = ["child_age"]
 
-    nodes = ChatGraphNodes(rag_service=_FakeRagService())
-
     result = asyncio.run(
-        _run(monkeypatch=monkeypatch, intent_state=state, nodes=nodes)
+        _run(monkeypatch=monkeypatch, intent_state=state)
     )
 
     payload = result["assistant_payload"]
@@ -378,8 +357,6 @@ def test_e2e_collect_slots_emits_slot_request(
 def test_e2e_profile_confirm_emits_confirm_payload(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(_chat_nodes_module, "AsyncSessionLocal", _fake_db)
-
     state = _intent_state("recommend")
     state["profile_confirm"] = {
         "summary": ["생애단계: 영유아", "소득: 하위 50%"],
@@ -389,10 +366,8 @@ def test_e2e_profile_confirm_emits_confirm_payload(
         ],
     }
 
-    nodes = ChatGraphNodes(rag_service=_FakeRagService())
-
     result = asyncio.run(
-        _run(monkeypatch=monkeypatch, intent_state=state, nodes=nodes)
+        _run(monkeypatch=monkeypatch, intent_state=state)
     )
 
     payload = result["assistant_payload"]
@@ -433,21 +408,19 @@ def test_e2e_exception_in_classify_returns_fallback(
 
 
 # ---------------------------------------------------------------------------
-# 8. apply intent (policy not found → LLM fallback, no apply card)
+# 8. apply intent (no slug → clarification fallback)
 # ---------------------------------------------------------------------------
 
 
 def test_e2e_apply_no_slug_returns_clarification(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(_chat_nodes_module, "AsyncSessionLocal", _fake_db)
-
-    nodes = ChatGraphNodes(rag_service=_FakeRagService())
+    monkeypatch.setattr(_handlers_module, "_RAG_SERVICE", _FakeRagService())
 
     state = _intent_state("apply")
 
     result = asyncio.run(
-        _run(monkeypatch=monkeypatch, intent_state=state, nodes=nodes)
+        _run(monkeypatch=monkeypatch, intent_state=state)
     )
 
     payload = result["assistant_payload"]

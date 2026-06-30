@@ -1,27 +1,92 @@
 from __future__ import annotations
 
+import asyncio
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.nodes.chat.chat_nodes import (
-    ChatGraphNodes,
+    _attach_recommendation_context,
+    _build_apply_card,
+    _detect_assertive_phrases,
     _find_slot_policy_by_slug,
-    _format_profile_context,
+    _format_apply_card_context,
     _format_slot_context,
+    _generate_apply_answer,
+    _generate_branch_answer,
     _history_to_lc_messages,
     _IntentDecision,
-    _interpret_confirm,
+    _is_context_dependent_apply_question,
+    _lifecycle_service_class,
     _llm,
+    _load_application_period_context,
     _load_db_profile_summary,
-    _merge_profile,
-    _missing_required,
+    _load_policy_detail,
+    _mark_recommendation_failed,
+    _pick_apply_target,
+    _pick_compare_targets,
+    _recent_assistant_policy_target,
+    _recommend_follow_up_already_asked,
+    _run_apply_preparation,
+    _summary_mode,
+    _summary_target_id,
     _summary_target_type,
 )
+from app.ai.nodes.chat.profile_helpers import (
+    _build_slot_question,
+    _filled_slots,
+    _format_profile_context,
+    _interpret_confirm,
+    _merge_profile,
+    _missing_required,
+    _profile_to_selected_conditions,
+)
+from app.ai.nodes.chat.result_adapters import (
+    _adapt_comparison_result,
+    _adapt_eligibility_result,
+    _adapt_policy_summary_result,
+    _adapt_recommendation_result,
+    _policy_summary_fallback_content,
+)
+from app.ai.nodes.chat.constants import (
+    APPLY_CLARIFICATION_FALLBACK as _APPLY_CLARIFICATION_FALLBACK,
+    APPLY_MAX_RETRIES as _APPLY_MAX_RETRIES,
+    APPLY_TEMPORARY_FAILURE_FALLBACK as _APPLY_TEMPORARY_FAILURE_FALLBACK,
+    COMPARE_CLARIFICATION_FALLBACK as _COMPARE_CLARIFICATION_FALLBACK,
+    COMPARE_FALLBACK_ERROR as _COMPARE_FALLBACK_ERROR,
+    ELIGIBILITY_CLARIFICATION_FALLBACK as _ELIGIBILITY_CLARIFICATION_FALLBACK,
+    ELIGIBILITY_FALLBACK_ERROR as _ELIGIBILITY_FALLBACK_ERROR,
+    ELIGIBILITY_LIFECYCLE_TIMEOUT_SECONDS as _ELIGIBILITY_LIFECYCLE_TIMEOUT_SECONDS,
+    ELIGIBILITY_LOCK_TIMEOUT as _ELIGIBILITY_LOCK_TIMEOUT,
+    ELIGIBILITY_SOURCE_TYPE as _ELIGIBILITY_SOURCE_TYPE,
+    ELIGIBILITY_STATEMENT_TIMEOUT as _ELIGIBILITY_STATEMENT_TIMEOUT,
+    EVIDENCES_MAX as _EVIDENCES_MAX,
+    INTENT_TO_ACTION_TYPE as _INTENT_TO_ACTION_TYPE,
+    INTENT_TO_API_ACTION as _INTENT_TO_API_ACTION,
+    POLICIES_MAX as _POLICIES_MAX,
+    RAG_TOP_K as _RAG_TOP_K,
+    RECOMMEND_FALLBACK_ERROR as _RECOMMEND_FALLBACK_ERROR,
+    RECOMMEND_FALLBACK_FOLLOW_UP as _RECOMMEND_FALLBACK_FOLLOW_UP,
+    RECOMMEND_FOLLOW_UP_LIMIT_REACHED as _RECOMMEND_FOLLOW_UP_LIMIT_REACHED,
+    RECOMMEND_LIFECYCLE_TIMEOUT_SECONDS as _RECOMMEND_LIFECYCLE_TIMEOUT_SECONDS,
+    RECOMMEND_LOCK_TIMEOUT as _RECOMMEND_LOCK_TIMEOUT,
+    RECOMMEND_MAX_RETRIES as _RECOMMEND_MAX_RETRIES,
+    RECOMMEND_SOURCE_TYPE as _RECOMMEND_SOURCE_TYPE,
+    RECOMMEND_STATEMENT_TIMEOUT as _RECOMMEND_STATEMENT_TIMEOUT,
+    SNIPPET_LIMIT as _SNIPPET_LIMIT,
+)
 from app.ai.nodes.chat.prompts import SUPERVISOR_SYSTEM_TEMPLATE
-from app.ai.nodes.chat.slots import CONFIRM_OPTIONS, REQUIRED_SLOTS
+from app.ai.nodes.chat.slots import (
+    CONFIRM_OPTIONS,
+    RECOMMEND_WIZARD_FIELDS,
+    REQUIRED_SLOTS,
+    SLOT_LABELS as _SLOT_LABELS,
+    SLOT_OPTIONS as _SLOT_OPTIONS,
+    SLOT_QUESTIONS as _SLOT_QUESTIONS,
+)
 from app.ai.states.chat_state import (
     ChatGraphState,
     ChatSlot,
@@ -30,21 +95,319 @@ from app.ai.states.chat_state import (
     PendingState,
     ProfileSlot,
 )
+from app.common.ai_status import RequestStatus
+from app.db.session import AsyncSessionLocal
+from app.schemas.ai_request_schema import AiRequestSnapshot
+
+if TYPE_CHECKING:
+    from app.ai.graphs.comparison_graph import ComparisonGraphRunner
+    from app.ai.graphs.eligibility_graph import EligibilityGraphRunner
+    from app.ai.graphs.policy_summary_graph import PolicySummaryGraphRunner
+    from app.services.ai_request_lifecycle_service import AiRequestLifecycleService
+    from app.services.policy_rag_service import PolicyRagService
 
 
 logger = logging.getLogger(__name__)
 
+# ─── lazy singletons ────────────────────────────────────────────────────────
 
-_DEFAULT_NODES: ChatGraphNodes | None = None
+_RAG_SERVICE: PolicyRagService | None = None
+_LIFECYCLE_SERVICE: AiRequestLifecycleService | None = None
+_ELIGIBILITY_GRAPH: EligibilityGraphRunner | None = None
+_COMPARISON_GRAPH: ComparisonGraphRunner | None = None
+_POLICY_SUMMARY_GRAPH: PolicySummaryGraphRunner | None = None
 
 
-def _nodes(nodes: ChatGraphNodes | None = None) -> ChatGraphNodes:
-    global _DEFAULT_NODES
-    if nodes is not None:
-        return nodes
-    if _DEFAULT_NODES is None:
-        _DEFAULT_NODES = ChatGraphNodes()
-    return _DEFAULT_NODES
+def _rag_service() -> PolicyRagService:
+    global _RAG_SERVICE
+    if _RAG_SERVICE is None:
+        from app.services.policy_rag_service import PolicyRagService
+        _RAG_SERVICE = PolicyRagService()
+    return _RAG_SERVICE
+
+
+def _get_eligibility_graph() -> EligibilityGraphRunner:
+    global _ELIGIBILITY_GRAPH
+    if _ELIGIBILITY_GRAPH is None:
+        from app.ai.graphs.eligibility_graph import EligibilityGraphRunner
+        _ELIGIBILITY_GRAPH = EligibilityGraphRunner()
+    return _ELIGIBILITY_GRAPH
+
+
+def _get_comparison_graph() -> ComparisonGraphRunner:
+    global _COMPARISON_GRAPH
+    if _COMPARISON_GRAPH is None:
+        from app.ai.graphs.comparison_graph import ComparisonGraphRunner
+        _COMPARISON_GRAPH = ComparisonGraphRunner()
+    return _COMPARISON_GRAPH
+
+
+def _get_policy_summary_graph() -> PolicySummaryGraphRunner:
+    global _POLICY_SUMMARY_GRAPH
+    if _POLICY_SUMMARY_GRAPH is None:
+        from app.ai.graphs.policy_summary_graph import PolicySummaryGraphRunner
+        _POLICY_SUMMARY_GRAPH = PolicySummaryGraphRunner()
+    return _POLICY_SUMMARY_GRAPH
+
+
+# ─── module-level helpers ───────────────────────────────────────────────────
+
+
+async def _rag_lookup(query: str) -> tuple[list[dict], list[dict]]:
+    try:
+        result = await _rag_service().search(query=query, k=_RAG_TOP_K)
+    except Exception:
+        logger.exception("RAG lookup failed; returning empty context")
+        return [], []
+
+    evidences: list[dict] = []
+    seen_chunks: set[int] = set()
+    for chunk in result.results:
+        if chunk.chunk_id is None or chunk.chunk_id in seen_chunks:
+            continue
+        seen_chunks.add(chunk.chunk_id)
+        evidences.append({
+            "chunk_id": chunk.chunk_id,
+            "snippet": (chunk.chunk_text or "")[:_SNIPPET_LIMIT],
+            "source_title": chunk.policy_name,
+            "source_url": chunk.source_url,
+            "evidence_role": None,
+        })
+        if len(evidences) >= _EVIDENCES_MAX:
+            break
+
+    policies: list[dict] = []
+    seen_policies: set[str] = set()
+    for chunk in result.results:
+        if not chunk.policy_code or chunk.policy_code in seen_policies:
+            continue
+        seen_policies.add(chunk.policy_code)
+        policies.append({
+            "policy_id": chunk.policy_code,
+            "slug": chunk.policy_code,
+            "policy_name": chunk.policy_name or "",
+            "summary": None,
+            "tag": None,
+            "tagTone": None,
+        })
+        if len(policies) >= _POLICIES_MAX:
+            break
+
+    return policies, evidences
+
+
+async def _branch_with_rag(intent: Intent, state: ChatGraphState) -> ChatGraphState:
+    policies, evidences = await _rag_lookup(state["user_content"])
+    content = await _generate_branch_answer(intent, state, evidences)
+    return {
+        **state,
+        "branch_content": content,
+        "branch_policies": policies,
+        "branch_evidences": evidences,
+    }
+
+
+async def _run_recommendation_lifecycle(
+    user_id: int,
+    user_content: str,
+    selected_conditions: dict[str, Any] | None = None,
+    follow_up_resolved: bool = False,
+) -> tuple[AiRequestSnapshot | None, str | None]:
+    request_id: int | None = None
+    try:
+        async with AsyncSessionLocal() as db:
+            try:
+                await db.execute(
+                    text(f"SET LOCAL lock_timeout = '{_RECOMMEND_LOCK_TIMEOUT}'")
+                )
+                await db.execute(
+                    text(
+                        f"SET LOCAL statement_timeout = "
+                        f"'{_RECOMMEND_STATEMENT_TIMEOUT}'"
+                    )
+                )
+                lifecycle = (
+                    _LIFECYCLE_SERVICE if _LIFECYCLE_SERVICE is not None
+                    else _lifecycle_service_class()()
+                )
+                created = await lifecycle.create_request(
+                    db=db,
+                    user_id=user_id,
+                    request_type="recommendation",
+                    source_type=_RECOMMEND_SOURCE_TYPE,
+                    raw_query=user_content,
+                    selected_conditions=selected_conditions,
+                    follow_up_resolved=follow_up_resolved,
+                )
+                request_id = int(created.request_id)
+                await lifecycle.mark_processing(
+                    db=db,
+                    request_type="recommendation",
+                    request_id=request_id,
+                )
+                await db.commit()
+
+                await db.execute(
+                    text(f"SET LOCAL lock_timeout = '{_RECOMMEND_LOCK_TIMEOUT}'")
+                )
+                await db.execute(
+                    text(
+                        f"SET LOCAL statement_timeout = "
+                        f"'{_RECOMMEND_STATEMENT_TIMEOUT}'"
+                    )
+                )
+                snapshot = await asyncio.wait_for(
+                    lifecycle.process_condition_request(
+                        db=db,
+                        request_type="recommendation",
+                        request_id=request_id,
+                    ),
+                    timeout=_RECOMMEND_LIFECYCLE_TIMEOUT_SECONDS,
+                )
+                await db.commit()
+                return snapshot, None
+            except Exception:
+                await db.rollback()
+                raise
+    except Exception as exc:
+        logger.exception("chat branch_recommend lifecycle failed")
+        if request_id is not None:
+            await _mark_recommendation_failed(request_id, str(exc))
+        return None, "temporary_failure"
+
+
+async def _run_eligibility_lifecycle(
+    user_id: int,
+    user_content: str,
+    policy_slug: str,
+) -> dict[str, Any] | None:
+    try:
+        async with AsyncSessionLocal() as db:
+            try:
+                await db.execute(
+                    text(f"SET LOCAL lock_timeout = '{_ELIGIBILITY_LOCK_TIMEOUT}'")
+                )
+                await db.execute(
+                    text(
+                        f"SET LOCAL statement_timeout = "
+                        f"'{_ELIGIBILITY_STATEMENT_TIMEOUT}'"
+                    )
+                )
+                result_json = await asyncio.wait_for(
+                    _get_eligibility_graph().run(
+                        db=db,
+                        user_id=user_id,
+                        policy_identifier=policy_slug,
+                        raw_query=user_content,
+                        source_type=_ELIGIBILITY_SOURCE_TYPE,
+                    ),
+                    timeout=_ELIGIBILITY_LIFECYCLE_TIMEOUT_SECONDS,
+                )
+                await db.commit()
+                return result_json
+            except Exception:
+                await db.rollback()
+                raise
+    except Exception:
+        logger.exception("chat branch_eligibility lifecycle failed")
+        return None
+
+
+async def _run_eligibility_branch(
+    *,
+    state: ChatGraphState,
+    policy_slug: str,
+    policy_name: str | None,
+    evidences: list[dict],
+) -> ChatGraphState:
+    result_json = await _run_eligibility_lifecycle(
+        user_id=state["user_id"],
+        user_content=state["user_content"],
+        policy_slug=policy_slug,
+    )
+    if result_json is None:
+        return {
+            **state,
+            "branch_content": _ELIGIBILITY_FALLBACK_ERROR,
+            "branch_user_status": None,
+            "branch_policies": [],
+            "branch_evidences": evidences,
+        }
+
+    content, user_status, policies, result_evidences = _adapt_eligibility_result(
+        result_json,
+        fallback_slug=policy_slug,
+        fallback_policy_name=policy_name,
+    )
+    result_status = result_json.get("status")
+    if result_status == RequestStatus.FOLLOW_UP_REQUIRED.value:
+        eligibility_slot_update: dict | None = {
+            "slug": policy_slug,
+            "eligibility_request_id": result_json.get("request_id"),
+            "follow_up_questions": (
+                result_json.get("follow_up_questions")
+                or result_json.get("questions")
+                or []
+            ),
+            "eligibility_status": RequestStatus.FOLLOW_UP_REQUIRED.value,
+        }
+    else:
+        eligibility_slot_update = {
+            "slug": policy_slug,
+            "eligibility_request_id": result_json.get("request_id"),
+            "follow_up_questions": [],
+            "eligibility_status": result_status,
+        }
+    return {
+        **state,
+        "branch_content": content,
+        "branch_user_status": user_status,
+        "branch_policies": policies,
+        "branch_evidences": result_evidences or evidences,
+        "eligibility_slot_update": eligibility_slot_update,
+    }
+
+
+async def _run_comparison_branch(
+    *,
+    state: ChatGraphState,
+    slug_a: str,
+    slug_b: str,
+    evidences: list[dict],
+) -> ChatGraphState:
+    try:
+        async with AsyncSessionLocal() as db:
+            try:
+                result_json = await _get_comparison_graph().run(
+                    db,
+                    slug_a=slug_a,
+                    slug_b=slug_b,
+                    user_id=state["user_id"],
+                    raw_query=state["user_content"],
+                )
+                await db.commit()
+            except Exception:
+                await db.rollback()
+                raise
+    except Exception:
+        logger.exception("chat branch_compare comparison graph failed")
+        return {
+            **state,
+            "branch_content": _COMPARE_FALLBACK_ERROR,
+            "branch_policies": [],
+            "branch_evidences": evidences,
+        }
+
+    content, policies = _adapt_comparison_result(result_json)
+    return {
+        **state,
+        "branch_content": content,
+        "branch_policies": policies,
+        "branch_evidences": evidences,
+    }
+
+
+# ─── intent classification ──────────────────────────────────────────────────
 
 
 async def classify_intent(
@@ -54,10 +417,8 @@ async def classify_intent(
     slot: ChatSlot | dict | None,
     recent_assistant_policy: dict[str, Any] | None,
     user_id: int,
-    nodes: ChatGraphNodes | None = None,
 ) -> ChatGraphState:
     """Classify intent and prepare slot/profile routing state."""
-    del nodes
     state: ChatGraphState = {
         "user_id": user_id,
         "user_content": user_content,
@@ -81,6 +442,7 @@ async def classify_intent(
 
     resolved_slug: str | None = None
     extracted: dict[str, Any] | None = None
+    raw = "{}"
     try:
         decision = await llm.ainvoke(messages)
         intent: Intent = decision.intent
@@ -174,29 +536,172 @@ async def classify_intent(
     }
 
 
+# ─── branch handlers ────────────────────────────────────────────────────────
+
+
 async def handle_recommend(
     state: ChatGraphState,
     db: AsyncSession | None = None,
-    *,
-    nodes: ChatGraphNodes | None = None,
 ) -> dict[str, Any]:
-    """Run the former recommend branch, including graph-level retry/fallback."""
     del db
-    handler_nodes = _nodes(nodes)
-    current: ChatGraphState = await handler_nodes.branch_recommend(state)
+    selected_conditions = _profile_to_selected_conditions(state.get("profile"))
+    follow_up_already_asked = _recommend_follow_up_already_asked(
+        state.get("slot")
+    ) or bool((state.get("profile") or {}).get("db_profile_confirmed"))
+
+    async def _branch(s: ChatGraphState) -> ChatGraphState:
+        snapshot, lifecycle_error = await _run_recommendation_lifecycle(
+            user_id=s["user_id"],
+            user_content=s["user_content"],
+            selected_conditions=selected_conditions or None,
+            follow_up_resolved=follow_up_already_asked,
+        )
+        if lifecycle_error == "temporary_failure":
+            return {
+                **s,
+                "recommend_flow_status": "retryable_error",
+                "recommend_error_message": _RECOMMEND_FALLBACK_ERROR,
+                "recommend_max_retries": _RECOMMEND_MAX_RETRIES,
+                "branch_content": _RECOMMEND_FALLBACK_ERROR,
+                "branch_policies": [],
+                "branch_evidences": [],
+                "branch_apply_card": None,
+            }
+        if snapshot is None:
+            return {
+                **s,
+                "recommend_flow_status": "fallback_needed",
+                "recommend_error_message": _RECOMMEND_FALLBACK_ERROR,
+                "branch_content": _RECOMMEND_FALLBACK_ERROR,
+                "branch_policies": [],
+                "branch_evidences": [],
+                "branch_apply_card": None,
+            }
+        if snapshot.status == RequestStatus.FOLLOW_UP_REQUIRED:
+            if follow_up_already_asked:
+                return {
+                    **s,
+                    "recommend_flow_status": "fallback_needed",
+                    "recommend_error_message": _RECOMMEND_FOLLOW_UP_LIMIT_REACHED,
+                    "branch_content": _RECOMMEND_FOLLOW_UP_LIMIT_REACHED,
+                    "branch_policies": [],
+                    "branch_evidences": [],
+                    "branch_apply_card": None,
+                    "slot_request": None,
+                    "pending": None,
+                }
+            questions = snapshot.questions or []
+            if questions:
+                awaiting = [
+                    str(question.get("field_name") or f"follow_up_{index + 1}")
+                    for index, question in enumerate(questions)
+                ]
+                slot_request = {
+                    "flow_type": "recommend",
+                    "request_id": snapshot.request_id,
+                    "target_policy_id": None,
+                    "source_type": "CHAT",
+                    "source_ref_id": snapshot.request_id,
+                    "target_type": None,
+                    "summary_mode": None,
+                    "current": awaiting[0] if awaiting else None,
+                    "awaiting": awaiting,
+                    "multi": ["special"],
+                    "fields": [
+                        {
+                            "key": key,
+                            "label": (
+                                question.get("question_text")
+                                or _SLOT_LABELS.get(key, key)
+                            ),
+                            "options": _SLOT_OPTIONS.get(key, []),
+                        }
+                        for key, question in zip(awaiting, questions, strict=False)
+                    ],
+                }
+                pending: PendingState = {
+                    "intent": "recommend",
+                    "awaiting": awaiting,
+                    "asked": [awaiting[0]] if awaiting else [],
+                    "kind": "slot",
+                }
+                return {
+                    **s,
+                    "recommend_flow_status": "ok",
+                    "recommend_error_message": None,
+                    "branch_content": "맞춤 추천을 위해 정보가 조금 더 필요해요.",
+                    "branch_policies": [],
+                    "branch_evidences": [],
+                    "branch_apply_card": None,
+                    "slot_request": slot_request,
+                    "pending": pending,
+                }
+            return {
+                **s,
+                "recommend_flow_status": "fallback_needed",
+                "recommend_error_message": _RECOMMEND_FALLBACK_FOLLOW_UP,
+                "branch_content": _RECOMMEND_FALLBACK_FOLLOW_UP,
+                "branch_policies": [],
+                "branch_evidences": [],
+                "branch_apply_card": None,
+            }
+        if snapshot.status != RequestStatus.COMPLETED:
+            return {
+                **s,
+                "recommend_flow_status": "fallback_needed",
+                "recommend_error_message": _RECOMMEND_FALLBACK_ERROR,
+                "branch_content": _RECOMMEND_FALLBACK_ERROR,
+                "branch_policies": [],
+                "branch_evidences": [],
+                "branch_apply_card": None,
+            }
+        policies, evidences = _adapt_recommendation_result(snapshot.result_json)
+        policies = _attach_recommendation_context(
+            policies,
+            request_id=snapshot.request_id,
+            selected_conditions=selected_conditions,
+            merged_condition_json=snapshot.merged_condition_json or selected_conditions,
+        )
+        content = await _generate_branch_answer("recommend", s, evidences)
+        return {
+            **s,
+            "recommend_flow_status": "ok",
+            "recommend_error_message": None,
+            "branch_content": content,
+            "branch_policies": policies,
+            "branch_evidences": evidences,
+        }
+
+    current: ChatGraphState = await _branch(state)
 
     while current.get("recommend_flow_status") == "retryable_error":
-        current = await handler_nodes.recommend_retry_increment(current)
-        retry_count = int(current.get("recommend_retry_count") or 0)
+        retry_count = int(current.get("recommend_retry_count") or 0) + 1
+        current = {**current, "recommend_retry_count": retry_count}
         max_retries = int(current.get("recommend_max_retries") or 1)
         if retry_count <= max_retries:
-            current = await handler_nodes.branch_recommend(current)
+            current = await _branch(current)
         else:
-            current = await handler_nodes.recommend_fallback_build(current)
+            fallback_message = current.get("recommend_error_message") or _RECOMMEND_FALLBACK_ERROR
+            current = {
+                **current,
+                "recommend_flow_status": "ok",
+                "branch_content": fallback_message,
+                "branch_policies": [],
+                "branch_evidences": [],
+                "branch_apply_card": None,
+            }
             break
 
     if current.get("recommend_flow_status") == "fallback_needed":
-        current = await handler_nodes.recommend_fallback_build(current)
+        fallback_message = current.get("recommend_error_message") or _RECOMMEND_FALLBACK_ERROR
+        current = {
+            **current,
+            "recommend_flow_status": "ok",
+            "branch_content": fallback_message,
+            "branch_policies": [],
+            "branch_evidences": [],
+            "branch_apply_card": None,
+        }
 
     return current
 
@@ -204,123 +709,533 @@ async def handle_recommend(
 async def handle_eligibility(
     state: ChatGraphState,
     db: AsyncSession | None = None,
-    *,
-    nodes: ChatGraphNodes | None = None,
 ) -> dict[str, Any]:
-    """Run the former eligibility branch."""
     del db
-    return await _nodes(nodes).branch_eligibility(state)
+    decision = state.get("supervisor_decision") or {}
+    resolved_slug = decision.get("resolved_policy_slug")
+    if resolved_slug:
+        slot_policy = _find_slot_policy_by_slug(state.get("slot"), resolved_slug)
+        logger.info(
+            "chat_slot_resolved",
+            extra={"intent": "eligibility", "slot_used": True, "rag_skipped": True},
+        )
+        return await _run_eligibility_branch(
+            state=state,
+            policy_slug=resolved_slug,
+            policy_name=(slot_policy or {}).get("policy_name"),
+            evidences=[],
+        )
+    logger.info(
+        "chat_slot_resolved",
+        extra={"intent": "eligibility", "slot_used": False, "rag_skipped": False},
+    )
+    policies, evidences = await _rag_lookup(state["user_content"])
+    slug, policy_name = _pick_apply_target(
+        policies,
+        user_content=state["user_content"],
+        require_policy_name_mention=True,
+    )
+    if slug is None:
+        slug, policy_name = _recent_assistant_policy_target(
+            state.get("recent_assistant_policy")
+        )
+    if slug is None:
+        return {
+            **state,
+            "branch_content": _ELIGIBILITY_CLARIFICATION_FALLBACK,
+            "branch_user_status": None,
+            "branch_policies": [],
+            "branch_evidences": evidences,
+        }
+    return await _run_eligibility_branch(
+        state=state,
+        policy_slug=slug,
+        policy_name=policy_name,
+        evidences=evidences,
+    )
 
 
 async def handle_compare(
     state: ChatGraphState,
-    *,
-    nodes: ChatGraphNodes | None = None,
 ) -> dict[str, Any]:
-    """Run the former compare branch."""
-    return await _nodes(nodes).branch_compare(state)
+    policies, evidences = await _rag_lookup(state["user_content"])
+    first, second = _pick_compare_targets(
+        policies,
+        slot=state.get("slot"),
+        user_content=state["user_content"],
+    )
+    if first is None or second is None:
+        return {
+            **state,
+            "branch_content": _COMPARE_CLARIFICATION_FALLBACK,
+            "branch_policies": [],
+            "branch_evidences": evidences,
+        }
+    return await _run_comparison_branch(
+        state=state,
+        slug_a=first[0],
+        slug_b=second[0],
+        evidences=evidences,
+    )
 
 
 async def handle_apply(
     state: ChatGraphState,
     db: AsyncSession | None = None,
-    *,
-    nodes: ChatGraphNodes | None = None,
 ) -> dict[str, Any]:
-    """Run the former apply branch, including graph-level retry/fallback."""
     del db
-    handler_nodes = _nodes(nodes)
-    current: ChatGraphState = await handler_nodes.branch_apply(state)
+    decision = state.get("supervisor_decision") or {}
+    resolved_slug = decision.get("resolved_policy_slug")
+    slot_policy = _find_slot_policy_by_slug(state.get("slot"), resolved_slug or "")
+    if resolved_slug and slot_policy:
+        slug = resolved_slug
+        policy_name = slot_policy.get("policy_name") or None
+        evidences: list[dict[str, Any]] = []
+        logger.info(
+            "chat_slot_resolved",
+            extra={"intent": "apply", "slot_used": True, "rag_skipped": True},
+        )
+    else:
+        policies, evidences = await _rag_lookup(state["user_content"])
+        slug, policy_name = _pick_apply_target(
+            policies,
+            user_content=state["user_content"],
+            require_policy_name_mention=True,
+        )
+        if slug is None and _is_context_dependent_apply_question(state["user_content"]):
+            slug, policy_name = _recent_assistant_policy_target(
+                state.get("recent_assistant_policy")
+            )
+            if slug is not None:
+                evidences = []
+            logger.info(
+                "chat_recent_assistant_policy_resolved",
+                extra={
+                    "intent": "apply",
+                    "recent_policy_used": slug is not None,
+                    "rag_skipped": False,
+                },
+            )
+        logger.info(
+            "chat_slot_resolved",
+            extra={"intent": "apply", "slot_used": False, "rag_skipped": False},
+        )
+
+    async def _branch(s: ChatGraphState) -> ChatGraphState:
+        if slug is None:
+            return {
+                **s,
+                "apply_flow_status": "fallback_needed",
+                "apply_error_message": _APPLY_CLARIFICATION_FALLBACK,
+                "branch_content": _APPLY_CLARIFICATION_FALLBACK,
+                "branch_policies": [],
+                "branch_evidences": [],
+                "branch_apply_card": None,
+            }
+
+        apply_response, apply_error = await _run_apply_preparation(
+            user_id=s["user_id"],
+            policy_slug=slug,
+        )
+        if apply_error == "temporary_failure":
+            return {
+                **s,
+                "apply_flow_status": "retryable_error",
+                "apply_error_message": _APPLY_TEMPORARY_FAILURE_FALLBACK,
+                "apply_max_retries": _APPLY_MAX_RETRIES,
+                "branch_content": _APPLY_TEMPORARY_FAILURE_FALLBACK,
+                "branch_policies": [],
+                "branch_evidences": evidences,
+                "branch_apply_card": None,
+            }
+
+        if apply_response is None:
+            content = await _generate_branch_answer("apply", s, evidences)
+            return {
+                **s,
+                "apply_flow_status": "ok",
+                "apply_error_message": None,
+                "branch_content": content,
+                "branch_policies": [],
+                "branch_evidences": evidences,
+                "branch_apply_card": None,
+            }
+
+        apply_card = _build_apply_card(apply_response, policy_name)
+        application_period_context = await _load_application_period_context(slug)
+        apply_policies = [
+            {
+                "policy_id": None,
+                "slug": slug,
+                "policy_name": policy_name or "",
+                "summary": None,
+                "tag": None,
+                "tagTone": None,
+            }
+        ]
+        content = await _generate_apply_answer(
+            s,
+            evidences,
+            apply_card,
+            application_period_context,
+        )
+        return {
+            **s,
+            "apply_flow_status": "ok",
+            "apply_error_message": None,
+            "branch_content": content,
+            "branch_policies": apply_policies,
+            "branch_evidences": evidences,
+            "branch_apply_card": apply_card,
+        }
+
+    current: ChatGraphState = await _branch(state)
 
     while current.get("apply_flow_status") == "retryable_error":
-        current = await handler_nodes.apply_retry_increment(current)
-        retry_count = int(current.get("apply_retry_count") or 0)
+        retry_count = int(current.get("apply_retry_count") or 0) + 1
+        current = {**current, "apply_retry_count": retry_count}
         max_retries = int(current.get("apply_max_retries") or 1)
         if retry_count <= max_retries:
-            current = await handler_nodes.branch_apply(current)
+            current = await _branch(current)
         else:
-            current = await handler_nodes.apply_fallback_build(current)
+            fallback_message = (
+                current.get("apply_error_message")
+                or "신청 안내를 준비하는 중 문제가 발생했어요. 잠시 후 다시 시도해 주세요."
+            )
+            current = {
+                **current,
+                "apply_flow_status": "ok",
+                "branch_content": fallback_message,
+                "branch_policies": [],
+                "branch_evidences": [],
+                "branch_apply_card": None,
+            }
             break
 
     if current.get("apply_flow_status") == "fallback_needed":
-        current = await handler_nodes.apply_fallback_build(current)
+        fallback_message = (
+            current.get("apply_error_message")
+            or "신청 안내를 준비하는 중 문제가 발생했어요. 잠시 후 다시 시도해 주세요."
+        )
+        current = {
+            **current,
+            "apply_flow_status": "ok",
+            "branch_content": fallback_message,
+            "branch_policies": [],
+            "branch_evidences": [],
+            "branch_apply_card": None,
+        }
 
     return current
 
 
 async def handle_policy_summary(
     state: ChatGraphState,
-    *,
-    nodes: ChatGraphNodes | None = None,
 ) -> dict[str, Any]:
-    """Run the former policy summary branch."""
-    return await _nodes(nodes).branch_policy_summary(state)
+    decision = state.get("supervisor_decision") or {}
+    resolved_slug = decision.get("resolved_policy_slug")
+    fallback_evidences: list[dict[str, Any]] = []
+
+    if resolved_slug:
+        slot_policy = _find_slot_policy_by_slug(state.get("slot"), resolved_slug)
+        policy_slug = str(resolved_slug)
+        policy_name = (slot_policy or {}).get("policy_name")
+        logger.info(
+            "chat_slot_resolved",
+            extra={"intent": "policy_summary", "slot_used": True, "rag_skipped": True},
+        )
+    else:
+        policies, fallback_evidences = await _rag_lookup(state["user_content"])
+        policy_slug, policy_name = _pick_apply_target(policies)
+        logger.info(
+            "chat_slot_resolved",
+            extra={"intent": "policy_summary", "slot_used": False, "rag_skipped": False},
+        )
+
+    if not policy_slug:
+        content = await _generate_branch_answer(
+            "policy_summary",
+            state,
+            fallback_evidences,
+        )
+        return {
+            **state,
+            "branch_content": content,
+            "branch_policies": [],
+            "branch_evidences": fallback_evidences,
+        }
+
+    policy = await _load_policy_detail(policy_slug)
+    if policy is None:
+        content = await _generate_branch_answer(
+            "policy_summary",
+            state,
+            fallback_evidences,
+        )
+        return {
+            **state,
+            "branch_content": content,
+            "branch_policies": [
+                {
+                    "policy_id": policy_slug,
+                    "slug": policy_slug,
+                    "policy_name": policy_name or "",
+                    "summary": None,
+                    "tag": None,
+                    "tagTone": None,
+                }
+            ],
+            "branch_evidences": fallback_evidences,
+        }
+
+    try:
+        summary_result = await _get_policy_summary_graph().run(policy)
+    except Exception:
+        logger.exception("Policy summary graph failed; using RAG fallback")
+        content = await _generate_branch_answer(
+            "policy_summary",
+            state,
+            fallback_evidences,
+        )
+        return {
+            **state,
+            "branch_content": content,
+            "branch_policies": [],
+            "branch_evidences": fallback_evidences,
+        }
+
+    content, easy_summary, key_points, policies, evidences = (
+        _adapt_policy_summary_result(
+            summary_result,
+            policy=policy,
+            fallback_evidences=fallback_evidences,
+        )
+    )
+    return {
+        **state,
+        "branch_content": content,
+        "branch_easy_summary": easy_summary,
+        "branch_key_points": key_points,
+        "branch_policies": policies,
+        "branch_evidences": evidences,
+    }
 
 
 async def handle_summary(
     state: ChatGraphState,
-    *,
-    nodes: ChatGraphNodes | None = None,
 ) -> dict[str, Any]:
-    """Run the former summary branch."""
-    return await _nodes(nodes).branch_summary(state)
+    decision = state.get("supervisor_decision") or {}
+    resolved_slug = decision.get("resolved_policy_slug")
+    target_type = _summary_target_type(
+        state["user_content"],
+        state.get("slot"),
+        resolved_slug,
+    )
+    if target_type == "policy" and resolved_slug:
+        slot_policy = _find_slot_policy_by_slug(state.get("slot"), resolved_slug)
+        policy_name = (slot_policy or {}).get("policy_name") or ""
+        _, evidences = await _rag_lookup(policy_name or state["user_content"])
+        logger.info(
+            "chat_slot_resolved",
+            extra={"intent": "summary", "slot_used": True, "rag_skipped": False},
+        )
+        policies = [
+            {
+                "policy_id": None,
+                "slug": resolved_slug,
+                "policy_name": policy_name,
+                "summary": None,
+                "tag": None,
+                "tagTone": None,
+            }
+        ]
+        content = await _generate_branch_answer("summary", state, evidences)
+        return {
+            **state,
+            "branch_content": content,
+            "branch_policies": policies,
+            "branch_evidences": evidences,
+        }
+    return await _branch_with_rag("summary", state)
 
 
 async def handle_unclear(
     state: ChatGraphState,
-    *,
-    nodes: ChatGraphNodes | None = None,
 ) -> dict[str, Any]:
-    """Run the former unclear branch."""
-    return await _nodes(nodes).branch_unclear(state)
+    content = await _generate_branch_answer("unclear", state, evidences=[])
+    return {
+        **state,
+        "branch_content": content,
+        "branch_policies": [],
+        "branch_evidences": [],
+    }
 
 
 async def handle_collect_slots(
     state: ChatGraphState,
-    *,
-    nodes: ChatGraphNodes | None = None,
 ) -> dict[str, Any]:
-    """Run the former collect slots branch."""
-    return await _nodes(nodes).collect_slots(state)
+    awaiting = state.get("awaiting_slots") or []
+    profile: ProfileSlot = state.get("profile") or {}
+    decision = state.get("supervisor_decision") or {}
+    intent: Intent = decision.get("intent", "recommend")
+
+    if intent == "recommend":
+        filled = _filled_slots(profile)
+        field_keys = [f for f in RECOMMEND_WIZARD_FIELDS if f not in filled]
+        if not field_keys:
+            field_keys = list(awaiting)
+    else:
+        field_keys = list(awaiting)
+
+    prompt_awaiting = field_keys if intent == "recommend" else awaiting
+    content = _build_slot_question(prompt_awaiting, profile)
+    current = prompt_awaiting[0] if prompt_awaiting else None
+    target_policy_id = decision.get("resolved_policy_slug")
+    source_type = None
+    source_ref_id = None
+    if intent == "summary":
+        source_type = _summary_target_type(
+            state["user_content"],
+            state.get("slot"),
+            target_policy_id,
+        )
+        source_ref_id = _summary_target_id(state.get("slot"), target_policy_id)
+    elif intent == "eligibility":
+        source_type = "RECOMMENDATION_RESULT" if target_policy_id else "CHAT"
+        source_ref_id = target_policy_id
+    elif intent == "recommend":
+        source_type = "CHAT"
+    slot_request = {
+        "flow_type": intent,
+        "request_id": None,
+        "target_policy_id": target_policy_id,
+        "source_type": source_type,
+        "source_ref_id": source_ref_id,
+        "target_type": source_type if intent == "summary" else None,
+        "summary_mode": (
+            _summary_mode(state["user_content"]) if intent == "summary" else None
+        ),
+        "current": current,
+        "awaiting": field_keys,
+        "multi": ["special"],
+        "fields": [
+            {
+                "key": slot,
+                "label": _SLOT_LABELS.get(slot, slot),
+                "options": _SLOT_OPTIONS.get(slot, []),
+            }
+            for slot in field_keys
+        ],
+    }
+    pending: PendingState = {
+        "intent": intent,
+        "awaiting": field_keys,
+        "asked": [current] if current else [],
+        "kind": "slot",
+    }
+    logger.info(
+        "chat_slot_request",
+        extra={"intent": intent, "awaiting": awaiting, "steps": field_keys},
+    )
+    return {
+        **state,
+        "branch_content": content,
+        "branch_policies": [],
+        "branch_evidences": [],
+        "slot_request": slot_request,
+        "pending": pending,
+    }
 
 
 async def handle_confirm_profile(
     state: ChatGraphState,
-    *,
-    nodes: ChatGraphNodes | None = None,
 ) -> dict[str, Any]:
-    """Run the former profile confirmation branch."""
-    return await _nodes(nodes).confirm_profile(state)
+    pc = state.get("profile_confirm") or {}
+    summary = pc.get("summary") or []
+    lines = "\n".join(f"· {item}" for item in summary)
+    content = (
+        "저장된 정보로 맞춤 정책을 추천해드릴까요?\n"
+        f"{lines}\n\n다른 조건으로 받고 싶으시면 다시 입력하실 수 있어요."
+    )
+    pending: PendingState = {
+        "intent": "recommend",
+        "awaiting": [],
+        "asked": [],
+        "kind": "confirm",
+    }
+    logger.info("chat_profile_confirm", extra={"fields": len(summary)})
+    return {
+        **state,
+        "branch_content": content,
+        "branch_policies": [],
+        "branch_evidences": [],
+        "profile_confirm": pc,
+        "pending": pending,
+    }
 
 
 async def build_assistant_payload(
     state: ChatGraphState,
-    *,
-    nodes: ChatGraphNodes | None = None,
 ) -> dict[str, Any]:
-    """Build the same assistant payload produced by the former graph tail."""
-    result = await _nodes(nodes).assistant_payload_build(state)
-    return {"assistant_payload": result.get("assistant_payload")}
+    decision = state.get("supervisor_decision") or {"intent": "unclear", "raw": "missing"}
+    intent: Intent = decision["intent"]
+    slot_request = state.get("slot_request")
+    profile_confirm = state.get("profile_confirm")
+    is_prompt = bool(slot_request or profile_confirm)
+    api_action = None if is_prompt else _INTENT_TO_API_ACTION.get(intent)
+    content = state.get("branch_content") or ""
+    if intent != "unclear" and not is_prompt:
+        assertive = _detect_assertive_phrases(content)
+        if assertive:
+            logger.warning(
+                "chat answer contains assertive phrases despite safety prompt",
+                extra={"intent": intent, "phrases": assertive},
+            )
+    payload = {
+        "content": content,
+        "user_status": state.get("branch_user_status"),
+        "sources": [],
+        "policies": state.get("branch_policies", []),
+        "evidences": state.get("branch_evidences", []),
+        "actions": [api_action] if api_action else [],
+        "apply_card": state.get("branch_apply_card"),
+        "easy_summary": state.get("branch_easy_summary"),
+        "key_points": state.get("branch_key_points", []),
+        "disclaimer": (intent != "unclear") and not is_prompt,
+        "slot_request": slot_request,
+        "profile_confirm": profile_confirm,
+    }
+    return {"assistant_payload": payload}
 
 
 async def extract_evidences(
     state: ChatGraphState,
-    *,
-    nodes: ChatGraphNodes | None = None,
 ) -> list[dict[str, Any]]:
-    """Extract evidence rows from the handler state."""
-    result = await _nodes(nodes).evidence_extract(state)
-    return result.get("evidences_to_save", [])
+    evidences = state.get("branch_evidences", [])
+    return [
+        {
+            "chunk_id": e["chunk_id"],
+            "snippet": e.get("snippet"),
+            "evidence_role": e.get("evidence_role"),
+        }
+        for e in evidences
+        if e.get("chunk_id") is not None
+    ]
 
 
 async def extract_policy_links(
     state: ChatGraphState,
-    *,
-    nodes: ChatGraphNodes | None = None,
 ) -> list[dict[str, Any]]:
-    """Extract policy link rows from the handler state."""
-    result = await _nodes(nodes).policy_link_extract(state)
-    return result.get("policy_links_to_save", [])
+    decision = state.get("supervisor_decision") or {"intent": "unclear", "raw": ""}
+    intent: Intent = decision["intent"]
+    action_type = _INTENT_TO_ACTION_TYPE.get(intent)
+    if action_type is None:
+        return []
+    return [
+        {"policy_slug": p["slug"], "action_type": action_type}
+        for p in state.get("branch_policies", [])
+        if p.get("slug")
+    ]
 
 
 __all__ = [
