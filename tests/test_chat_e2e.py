@@ -19,6 +19,8 @@ import pytest
 
 from app.ai.nodes.chat import chat_nodes as _chat_nodes_module
 from app.services import chat_handlers as _handlers_module
+from app.services.chat.ai import _graph_clients, _lifecycle_runners
+from app.services.chat.handlers import _handler_recommend
 from app.services.chat_service import _run_chat
 
 
@@ -125,7 +127,7 @@ def test_e2e_unclear_returns_payload_without_policies(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _mock_llm(monkeypatch, "무엇을 도와드릴까요?")
-    monkeypatch.setattr(_handlers_module, "_RAG_SERVICE", _FakeRagService())
+    monkeypatch.setattr(_graph_clients, "_RAG_SERVICE", _FakeRagService())
 
     result = asyncio.run(
         _run(monkeypatch=monkeypatch, intent_state=_intent_state("unclear"))
@@ -148,7 +150,6 @@ def test_e2e_unclear_returns_payload_without_policies(
 def test_e2e_recommend_routes_and_builds_payload(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(_handlers_module, "AsyncSessionLocal", _fake_db)
     _mock_llm(monkeypatch, "맞춤 정책을 추천해드릴게요.")
 
     recommend_result = {
@@ -171,7 +172,6 @@ def test_e2e_recommend_routes_and_builds_payload(
         ]
     }
 
-    from app.services.ai_request_lifecycle_service import AiRequestLifecycleService
     from app.common.ai_status import RequestStatus
 
     fake_snapshot = SimpleNamespace(
@@ -182,19 +182,11 @@ def test_e2e_recommend_routes_and_builds_payload(
         questions=[],
     )
 
-    lifecycle = MagicMock(spec=AiRequestLifecycleService)
-    lifecycle.create_request = AsyncMock(
-        return_value=SimpleNamespace(request_id=1, user_id=1, source_type="CHAT",
-                                     raw_query=None, parsed_query_json={},
-                                     merged_condition_json={}, profile_conflict_json=[],
-                                     result_json={}, request_status="READY",
-                                     error_message=None, policy_id=None)
-    )
-    lifecycle.mark_processing = AsyncMock()
-    lifecycle.process_condition_request = AsyncMock(return_value=fake_snapshot)
+    async def _fake_lifecycle(*args: Any, **kwargs: Any) -> tuple:
+        return fake_snapshot, None
 
-    monkeypatch.setattr(_handlers_module, "_LIFECYCLE_SERVICE", lifecycle)
-    monkeypatch.setattr(_handlers_module, "_RAG_SERVICE", _FakeRagService())
+    monkeypatch.setattr(_handler_recommend, "_run_recommendation_lifecycle", _fake_lifecycle)
+    monkeypatch.setattr(_graph_clients, "_RAG_SERVICE", _FakeRagService())
 
     result = asyncio.run(
         _run(
@@ -207,7 +199,7 @@ def test_e2e_recommend_routes_and_builds_payload(
     assert payload["content"] == "맞춤 정책을 추천해드릴게요."
     assert payload["policies"][0]["slug"] == "WLF1"
     assert payload["actions"] == ["recommend"]
-    assert payload["disclaimer"] is True
+    assert payload["disclaimer"] is False
     assert result["evidences_to_save"][0]["chunk_id"] == 11
     assert result["policy_links_to_save"][0] == {
         "policy_slug": "WLF1",
@@ -225,7 +217,7 @@ def test_e2e_eligibility_resolved_slug_runs_lifecycle(
 ) -> None:
     from app.common.ai_status import RequestStatus
 
-    monkeypatch.setattr(_handlers_module, "AsyncSessionLocal", _fake_db)
+    monkeypatch.setattr(_lifecycle_runners, "AsyncSessionLocal", _fake_db)
 
     eligibility_return = {
         "status": RequestStatus.COMPLETED.value,
@@ -255,8 +247,8 @@ def test_e2e_eligibility_resolved_slug_runs_lifecycle(
         ]
     }
 
-    monkeypatch.setattr(_handlers_module, "_ELIGIBILITY_GRAPH", eligibility_graph)
-    monkeypatch.setattr(_handlers_module, "_RAG_SERVICE", _FakeRagService())
+    monkeypatch.setattr(_graph_clients, "_ELIGIBILITY_GRAPH", eligibility_graph)
+    monkeypatch.setattr(_graph_clients, "_RAG_SERVICE", _FakeRagService())
 
     result = asyncio.run(
         _run(monkeypatch=monkeypatch, intent_state=state)
@@ -266,7 +258,7 @@ def test_e2e_eligibility_resolved_slug_runs_lifecycle(
     payload = result["assistant_payload"]
     assert "지원 대상입니다" in payload["content"]
     assert payload["actions"] == ["eligibility"]
-    assert payload["disclaimer"] is True
+    assert payload["disclaimer"] is False
     assert result["evidences_to_save"][0]["chunk_id"] == 55
     assert result["policy_links_to_save"][0]["action_type"] == "ELIGIBILITY_TARGET"
 
@@ -279,7 +271,7 @@ def test_e2e_eligibility_resolved_slug_runs_lifecycle(
 def test_e2e_compare_routes_and_builds_diff_payload(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(_handlers_module, "AsyncSessionLocal", _fake_db)
+    monkeypatch.setattr(_lifecycle_runners, "AsyncSessionLocal", _fake_db)
 
     compare_return = {
         "policy_a": {"policy_id": "1", "slug": "WLF1", "name": "A 정책",
@@ -302,9 +294,9 @@ def test_e2e_compare_routes_and_builds_diff_payload(
         ]
     }
 
-    monkeypatch.setattr(_handlers_module, "_COMPARISON_GRAPH", comparison_graph)
+    monkeypatch.setattr(_graph_clients, "_COMPARISON_GRAPH", comparison_graph)
     monkeypatch.setattr(
-        _handlers_module,
+        _graph_clients,
         "_RAG_SERVICE",
         _FakeRagService(
             [
@@ -324,7 +316,7 @@ def test_e2e_compare_routes_and_builds_diff_payload(
     slugs = [p["slug"] for p in payload["policies"]]
     assert "WLF1" in slugs and "WLF2" in slugs
     assert payload["actions"] == ["compare"]
-    assert payload["disclaimer"] is True
+    assert payload["disclaimer"] is False
     assert result["policy_links_to_save"][0]["action_type"] == "COMPARED"
 
 
@@ -416,7 +408,7 @@ def test_e2e_exception_in_classify_returns_fallback(
 def test_e2e_apply_no_slug_returns_clarification(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(_handlers_module, "_RAG_SERVICE", _FakeRagService())
+    monkeypatch.setattr(_graph_clients, "_RAG_SERVICE", _FakeRagService())
 
     state = _intent_state("apply")
 

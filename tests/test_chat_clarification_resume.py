@@ -44,6 +44,20 @@ class _FakeSession:
         return None
 
 
+def test_chat_handlers_exposes_legacy_patch_points() -> None:
+    for name in (
+        "_llm",
+        "AsyncSessionLocal",
+        "_RAG_SERVICE",
+        "_LIFECYCLE_SERVICE",
+        "_ELIGIBILITY_GRAPH",
+        "_POLICY_SUMMARY_GRAPH",
+        "_run_eligibility_lifecycle",
+        "_mark_recommendation_failed",
+    ):
+        assert hasattr(chat_handlers_module, name), name
+
+
 @pytest.fixture
 def patched_session(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(chat_handlers_module, "AsyncSessionLocal", lambda: _FakeSession())
