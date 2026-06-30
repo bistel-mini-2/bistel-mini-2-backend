@@ -9,6 +9,7 @@ from app.db.session import get_db_session
 from app.schemas.policy_schema import (
     PolicyDetailResponse,
     PolicyListItemResponse,
+    PolicySearchScope,
     PolicySort,
 )
 from app.services.policy_service import PolicyService
@@ -74,6 +75,7 @@ def test_policy_list_returns_paginated_response(monkeypatch) -> None:
     }
     assert captured == {
         "query": "지원",
+        "detail_query": None,
         "category": "생활지원",
         "tags": ["영유아", "아동"],
         "region_code": "national",
@@ -81,6 +83,7 @@ def test_policy_list_returns_paginated_response(monkeypatch) -> None:
         "sort": PolicySort.NAME,
         "page": 2,
         "size": 10,
+        "search_scope": PolicySearchScope.NAME,
     }
 
 
@@ -105,9 +108,11 @@ def test_policy_list_accepts_issue_29_compatible_aliases(monkeypatch) -> None:
             "/api/v1/policies",
             params={
                 "q": "출산",
+                "detail_q": "서류",
                 "category": "임신·출산",
                 "region": "national",
                 "stage": "pregnant",
+                "searchScope": "all",
                 "page": 2,
                 "size": 10,
             },
@@ -124,6 +129,7 @@ def test_policy_list_accepts_issue_29_compatible_aliases(monkeypatch) -> None:
     }
     assert captured == {
         "query": "출산",
+        "detail_query": "서류",
         "category": "임신·출산",
         "tags": None,
         "region_code": "national",
@@ -131,6 +137,7 @@ def test_policy_list_accepts_issue_29_compatible_aliases(monkeypatch) -> None:
         "sort": PolicySort.UPDATED_AT,
         "page": 2,
         "size": 10,
+        "search_scope": PolicySearchScope.ALL,
     }
 
 

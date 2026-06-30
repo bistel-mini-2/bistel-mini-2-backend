@@ -65,7 +65,10 @@ def test_get_or_start_summary_returns_cached_done_without_start(monkeypatch) -> 
             "policy_id": 1,
             "request_status": RequestStatus.COMPLETED.value,
             "summary": "line 1\nline 2\nline 3",
-            "evidence_json": ["target evidence", "benefit evidence"],
+            "evidence_json": [
+                "지원 대상 항목에 '3~5세 유아' 내용이 있어 대상 정보를 이렇게 정리했어요.",
+                "지원 내용 항목에 '월 10만원 지원' 내용이 있어 핵심 혜택으로 요약했어요.",
+            ],
         },
         False,
     )
@@ -84,7 +87,54 @@ def test_get_or_start_summary_returns_cached_done_without_start(monkeypatch) -> 
 
     assert response.status == "done"
     assert response.summary == "line 1\nline 2\nline 3"
-    assert response.evidence == ["target evidence", "benefit evidence"]
+    assert response.evidence == [
+        "지원 대상 항목에 '3~5세 유아' 내용이 있어 대상 정보를 이렇게 정리했어요.",
+        "지원 내용 항목에 '월 10만원 지원' 내용이 있어 핵심 혜택으로 요약했어요.",
+    ]
+    assert start_id is None
+
+
+def test_get_or_start_summary_sanitizes_cached_display_text(monkeypatch) -> None:
+    db = object()
+    repository = AsyncMock()
+    repository.create_processing_if_absent.return_value = (
+        {
+            "summary_id": 7,
+            "policy_id": 1,
+            "request_status": RequestStatus.COMPLETED.value,
+            "summary": (
+                "대상: 질병, 부상 등으로 긴급한 돌봄이 필요하지만...\n"
+                "지원 내용을 쉽게 정리했어요.\n"
+                "source_text: raw policy_condition_profile"
+            ),
+            "evidence_json": [
+                "[정책명] 긴급돌봄 지원사업 [OpenAPI] 생애주기...",
+                "지원 대상 항목에 '긴급한 돌봄이 필요한 아동' 내용이 있어 대상 정보를 이렇게 정리했어요.",
+                {"source_text": "raw evidence chunk"},
+            ],
+        },
+        False,
+    )
+    monkeypatch.setattr(
+        PolicyRepository,
+        "find_policy_detail",
+        AsyncMock(return_value={"policy_id": 1}),
+    )
+
+    response, start_id = asyncio.run(
+        PolicySummaryService(repository=repository, graph=AsyncMock()).get_or_start_summary(
+            db,  # type: ignore[arg-type]
+            policy_slug="WLF00000024",
+        )
+    )
+
+    assert response.status == "done"
+    assert response.summary == "지원 내용을 쉽게 정리했어요."
+    assert response.evidence == [
+        "지원 대상 항목에 '긴급한 돌봄이 필요한 아동' 내용이 있어 대상 정보를 이렇게 정리했어요."
+    ]
+    assert "..." not in str(response.summary)
+    assert "OpenAPI" not in " ".join(response.evidence)
     assert start_id is None
 
 
@@ -193,7 +243,10 @@ def test_process_summary_saves_graph_result() -> None:
     graph = AsyncMock()
     graph.run.return_value = {
         "summary": "generated summary",
-        "evidence": ["evidence 1", "evidence 2"],
+        "evidence": [
+            "지원 대상 항목에 '만 2세 미만 아동' 내용이 있어 대상 정보를 이렇게 정리했어요.",
+            "지원 내용 항목에 '월 10만원 지원' 내용이 있어 핵심 혜택으로 요약했어요.",
+        ],
     }
 
     asyncio.run(
@@ -208,7 +261,10 @@ def test_process_summary_saves_graph_result() -> None:
         db,
         summary_id=7,
         summary="generated summary",
-        evidence=["evidence 1", "evidence 2"],
+        evidence=[
+            "지원 대상 항목에 '만 2세 미만 아동' 내용이 있어 대상 정보를 이렇게 정리했어요.",
+            "지원 내용 항목에 '월 10만원 지원' 내용이 있어 핵심 혜택으로 요약했어요.",
+        ],
     )
     repository.mark_failed.assert_not_awaited()
 
@@ -299,7 +355,7 @@ def test_summary_fallback_uses_condition_profile_source_text_as_evidence() -> No
         [],
     )
 
-    assert result.evidence[0] == "원본 선정기준: 만 2세 미만 아동"
+    assert result.evidence[0] == "지원 대상 항목에 '정제된 대상 요약' 내용이 있어 대상 정보를 이렇게 정리했어요."
     assert len(result.summary.splitlines()) == 3
     assert "policy_condition_profile" in prompt
     assert "condition_json" in prompt
@@ -410,7 +466,7 @@ def test_summary_normalization_pads_to_exactly_three_lines() -> None:
         ).model_copy(update={"summary": "첫 번째 줄", "evidence": ["근거"]}),
         policy={
             "name": "테스트 정책",
-            "condition_profile_source_text": "원본 선정기준",
+            "condition_profile_source_text": "원본 선정기준: 만 2세 미만 아동",
         },
         evidence_chunks=[],
     )
