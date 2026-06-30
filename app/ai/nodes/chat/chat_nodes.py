@@ -287,10 +287,19 @@ def _pick_apply_target(
     return None, None
 
 
+_POLICY_NAME_STOPWORDS: set[str] = {
+    "정책", "사업", "지원", "지원사업", "서비스", "제도", "급여", "바우처", "신청", "안내",
+}
+
+
 def _normalize_policy_mention_text(value: str | None) -> str:
     if not value:
         return ""
-    return re.sub(r"[^0-9A-Za-z가-힣]+", "", value).lower()
+    # 불용어 제거 후 정규화
+    text = value
+    for stopword in _POLICY_NAME_STOPWORDS:
+        text = re.sub(rf"\b{re.escape(stopword)}\b", "", text)
+    return re.sub(r"[^0-9A-Za-z가-힣]+", "", text).lower()
 
 
 def _user_mentions_policy_name(user_content: str, policy_name: str | None) -> bool:
@@ -298,7 +307,30 @@ def _user_mentions_policy_name(user_content: str, policy_name: str | None) -> bo
     if len(normalized_policy_name) < 2:
         return False
     normalized_user_content = _normalize_policy_mention_text(user_content)
-    return normalized_policy_name in normalized_user_content
+    if (
+        normalized_policy_name in normalized_user_content
+        or normalized_user_content in normalized_policy_name
+    ):
+        return True
+    # 토큰 기반 매칭 (예: "임신출산 진료비" 언급으로 "건강보험 임신·출산 진료비 지원" 인식)
+    policy_tokens = {
+        t.lower()
+        for t in re.split(r"[^0-9A-Za-z가-힣]+", policy_name or "")
+        if len(t) >= 2 and t.lower() not in _POLICY_NAME_STOPWORDS
+    }
+    user_tokens = {
+        t.lower()
+        for t in re.split(r"[^0-9A-Za-z가-힣]+", user_content)
+        if len(t) >= 2 and t.lower() not in _POLICY_NAME_STOPWORDS
+    }
+    # 정확한 일치 또는 부분 일치
+    matches = set()
+    for pt in policy_tokens:
+        for ut in user_tokens:
+            if pt == ut or (len(pt) >= 2 and (pt in ut or ut in pt)):
+                matches.add(pt)
+                break
+    return len(matches) >= 2 or any(len(t) >= 4 for t in matches)
 
 
 _CONTEXT_DEPENDENT_APPLY_PATTERNS: tuple[re.Pattern[str], ...] = (
