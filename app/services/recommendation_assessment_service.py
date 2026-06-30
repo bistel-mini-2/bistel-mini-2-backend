@@ -52,6 +52,7 @@ class RecommendationAssessmentService:
         input_issues: list[dict[str, Any]] | None = None,
         profile_conflict_json: list[dict[str, Any]] | None = None,
         result_limit: int = 6,
+        follow_up_answers: list[dict[str, Any]] | None = None,
     ) -> list[RecommendationPolicyAssessment]:
         # 1) 룰 기반 판정(결정론). AI 판정 실패 시 fallback이자, 사유 구조 데이터의 출처.
         assessments = [
@@ -74,6 +75,7 @@ class RecommendationAssessmentService:
             candidates=candidates,
             assessments=assessments,
             candidate_by_policy=candidate_by_policy,
+            follow_up_answers=follow_up_answers,
         )
         selected_policy_ids = {
             assessment.policy_id
@@ -103,6 +105,7 @@ class RecommendationAssessmentService:
         candidates: list[PolicyCandidate],
         assessments: list[RecommendationPolicyAssessment],
         candidate_by_policy: dict[int, PolicyCandidate],
+        follow_up_answers: list[dict[str, Any]] | None = None,
     ) -> None:
         """비-EXCLUDED 후보의 verdict를 LLM 판정으로 덮어쓴다.
 
@@ -127,6 +130,7 @@ class RecommendationAssessmentService:
         judgements = await self.judgement_agent.judge(
             user_condition=merged_condition_json,
             candidate_payloads=payloads,
+            follow_up_answers=follow_up_answers or [],
         )
         if not judgements:
             return

@@ -76,6 +76,7 @@ class RecommendationGraphNodes:
             input_issues=state.get("input_issues", []),
             profile_conflict_json=state.get("profile_conflict_json", []),
             result_limit=self.recommendation_service.result_limit,
+            follow_up_answers=state.get("follow_up_answers", []),
         )
         return {
             **state,
@@ -101,6 +102,7 @@ class RecommendationGraphNodes:
             candidates=state.get("candidates", []),
             assessments=state.get("assessments", []),
             result_limit=self.recommendation_service.result_limit,
+            follow_up_denials=state.get("follow_up_denials", []),
         )
         result_json = await self.recommendation_service.build_result(
             merged_condition_json=state["merged_condition_json"],
@@ -127,6 +129,8 @@ class RecommendationGraphNodes:
             result_limit=self.recommendation_service.result_limit,
             raw_query=state.get("raw_query"),
             selected_conditions=state.get("selected_conditions") or {},
+            follow_up_answers=state.get("follow_up_answers", []),
+            follow_up_denials=state.get("follow_up_denials", []),
             input_issues=state.get("input_issues", []),
             profile_conflict_json=state.get("profile_conflict_json", []),
         )

@@ -37,8 +37,9 @@ _FIELD_ALIASES: dict[str, tuple[str, ...]] = {
     "special_flags": _SPECIAL,
     "special_conditions": _SPECIAL,
     "special_condition": _SPECIAL,
-    # 일부 수집 룰은 아동 연령도 age로 들어온다. 명시 age가 없을 때만 자녀 나이로 보완한다.
-    "age": ("age", "user_age") + _CHILD_AGE,
+    # age는 신청자 본인 나이만 본다. childAge를 fallback으로 쓰면
+    # 청소년산모처럼 신청자 연령을 따지는 정책이 자녀 나이로 잘못 매칭된다.
+    "age": ("age", "user_age"),
     # 가구원 나이만(자녀 나이 fallback 없음).
     "household_member_age": (
         "household_member_age",
@@ -55,6 +56,25 @@ def condition_value(condition: dict[str, Any], field_name: str) -> Any:
         if value not in (None, "", []):
             return value
     return None
+
+
+# 추천 폼이 "빠짐없이" 제공하는 다중선택 필드. 사용자가 옵션을 모두 보고 아무것도
+# 선택하지 않았으면 "해당 없음"을 명시한 것이다(미입력=알 수 없음과 구분).
+_EXHAUSTIVE_FORM_FIELDS = {"special", "special_flags", "special_conditions", "special_condition"}
+
+
+def is_exhaustive_empty(condition: dict[str, Any], field_name: str) -> bool:
+    """폼이 빠짐없이 받는 필드(special)가 'condition에 키는 있으나 빈 값'인 경우.
+
+    True면 "사용자가 그 특수상황에 해당 없음을 명시"한 것으로 보고, 미입력(불확정)이
+    아니라 확정 미일치로 처리한다. 키 자체가 없으면(채팅 등 미제공) False → 기존대로 불확정.
+    """
+    if field_name not in _EXHAUSTIVE_FORM_FIELDS:
+        return False
+    for key in _FIELD_ALIASES.get(field_name, (field_name,)):
+        if key in condition:
+            return condition.get(key) in (None, "", [])
+    return False
 
 
 def normalize_condition_value(field_name: str, value: Any) -> Any:
