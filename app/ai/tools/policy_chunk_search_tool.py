@@ -1,6 +1,13 @@
+import re
+
 from app.schemas.ai_contract import EvidenceChunk
 from app.services.policy_rag_service import PolicyRagService
 
+_RAW_STRUCTURED_RE = re.compile(
+    r"\b(?:operator|matchingstrength|confidence):\s*\S"
+    r"|\bsourcetext:\s*\S.*\breason:\s*[A-Z_]{5}",
+    re.IGNORECASE | re.DOTALL,
+)
 
 ROLE_BY_SECTION = {
     "기본 정보": "SUMMARY",
@@ -27,6 +34,8 @@ async def search_policy_chunks(
     chunks: list[EvidenceChunk] = []
     for result in response.results:
         if result.chunk_id is None or result.policy_id is None:
+            continue
+        if _RAW_STRUCTURED_RE.search(result.chunk_text or ""):
             continue
 
         policy_keys = {str(result.policy_id)}

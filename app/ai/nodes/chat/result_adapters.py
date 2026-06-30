@@ -225,10 +225,7 @@ def _adapt_policy_summary_result(
         if isinstance(item, dict) and item.get("content")
     ]
     if not key_points:
-        key_points = build_policy_summary_key_points(
-            policy,
-            content_limit=_SNIPPET_LIMIT,
-        )
+        key_points = build_policy_summary_key_points(policy)
 
     evidences = [
         _evidence_chunk_to_chat_evidence(chunk)
@@ -246,7 +243,11 @@ def _adapt_policy_summary_result(
         "tag": None,
         "tagTone": None,
     }
-    content = easy_summary or _policy_summary_fallback_content(policy)
+    policy_name = policy.get("name") or policy.get("policy_name") or "정책"
+    content = (
+        f"{policy_name}의 핵심만 한눈에 정리했어요. "
+        "더 자세한 조건과 원문은 정책 상세에서 확인하실 수 있어요."
+    )
     return content, easy_summary, key_points[:3], [policy_card], evidences[:_EVIDENCES_MAX]
 
 

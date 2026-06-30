@@ -110,6 +110,20 @@ if TYPE_CHECKING:
 
 
 logger = logging.getLogger(__name__)
+
+import re as _re
+# 조건 트리 / 매칭 결과 raw 데이터 패턴 감지 (evidence 필터링용)
+_RAW_STRUCTURED_RE = _re.compile(
+    r"\b(?:operator|matchingstrength|confidence):\s*\S"
+    r"|\bsourcetext:\s*\S.*\breason:\s*[A-Z_]{5}",
+    _re.IGNORECASE | _re.DOTALL,
+)
+
+
+def _is_raw_structured_snippet(text: str) -> bool:
+    return bool(_RAW_STRUCTURED_RE.search(text))
+
+
 _POLICY_SUMMARY_CLARIFICATION_FALLBACK = (
     "어떤 정책을 요약할까요? 정책명을 알려주시면 핵심 위주로 쉽게 정리해 드릴게요."
 )
@@ -171,9 +185,12 @@ async def _rag_lookup(query: str) -> tuple[list[dict], list[dict]]:
         if chunk.chunk_id is None or chunk.chunk_id in seen_chunks:
             continue
         seen_chunks.add(chunk.chunk_id)
+        snippet = (chunk.chunk_text or "")[:_SNIPPET_LIMIT]
+        if _is_raw_structured_snippet(snippet):
+            continue
         evidences.append({
             "chunk_id": chunk.chunk_id,
-            "snippet": (chunk.chunk_text or "")[:_SNIPPET_LIMIT],
+            "snippet": snippet,
             "source_title": chunk.policy_name,
             "source_url": chunk.source_url,
             "evidence_role": None,
@@ -533,6 +550,15 @@ async def _run_eligibility_branch(
         "branch_policies": policies,
         "branch_evidences": result_evidences or evidences,
         "eligibility_slot_update": eligibility_slot_update,
+        "branch_eligibility_result": {
+            "status": result_status,
+            "user_status": result_json.get("user_status"),
+            "assessment_status": result_json.get("assessment_status"),
+            "follow_up_questions": result_json.get("follow_up_questions") or [],
+            "summary": result_json.get("summary"),
+            "request_id": result_json.get("request_id"),
+            "criteria": result_json.get("criteria") or result_json.get("criteria_results") or [],
+        },
     }
 
 
@@ -644,8 +670,15 @@ async def classify_intent(
         else:
             awaiting = _missing_required("recommend", profile)
         logger.info("chat_profile_confirm_resume", extra={"answer": answer})
+    elif pending and prev_kind == "clarification" and pending.get("intent"):
+        # 2-B) 직전 턴이 "정책 명확화 요청"이었으면 LLM 분류 무시하고 강제 이어받기.
+        # 사용자가 어떤 말을 해도 이전 intent 핸들러가 다시 정책을 찾도록 한다.
+        # 핸들러가 정책을 찾으면 pending=None 반환 → 상태 클리어.
+        # 못 찾으면 다시 clarification pending 저장 → 재질문.
+        intent = pending["intent"]
+        logger.info("chat_clarification_resume", extra={"pending_intent": intent})
     else:
-        # 2-B) 채우던 슬롯이 있으면 이어받기 판단
+        # 2-C) 채우던 슬롯이 있으면 이어받기 판단
         resumed = False
         if pending and pending.get("intent") and prev_kind != "confirm":
             pending_intent = pending["intent"]
@@ -1266,9 +1299,10 @@ async def build_assistant_payload(
         "apply_card": state.get("branch_apply_card"),
         "easy_summary": state.get("branch_easy_summary"),
         "key_points": state.get("branch_key_points", []),
-        "disclaimer": (intent != "unclear") and not is_prompt,
+        "disclaimer": False,
         "slot_request": slot_request,
         "profile_confirm": profile_confirm,
+        "eligibility_result": state.get("branch_eligibility_result"),
     }
     return {"assistant_payload": payload}
 
