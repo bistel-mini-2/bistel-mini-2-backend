@@ -1,7 +1,7 @@
 import asyncio
 
 from app.repositories.policy_repository import PolicyRepository
-from app.schemas.policy_schema import PolicySort
+from app.schemas.policy_schema import PolicySearchScope, PolicySort
 
 
 def test_build_filters_matches_documented_contract() -> None:
@@ -12,6 +12,7 @@ def test_build_filters_matches_documented_contract() -> None:
         region_code="national",
         stage_tags=[],
         stage=None,
+        search_scope=PolicySearchScope.ALL,
     )
 
     assert "p.policy_name ILIKE" in where_sql
@@ -27,6 +28,43 @@ def test_build_filters_matches_documented_contract() -> None:
         "category": "pregnancy",
         "tag_0": "infant",
         "tag_1": "child",
+    }
+
+
+def test_build_filters_defaults_keyword_search_to_policy_name() -> None:
+    where_sql, params = PolicyRepository._build_filters(
+        query_pattern="%birth%",
+        category=None,
+        tags=[],
+        region_code=None,
+        stage_tags=[],
+        stage=None,
+    )
+
+    assert "p.policy_name ILIKE" in where_sql
+    assert "p.main_category ILIKE" not in where_sql
+    assert "pd.target_description ILIKE" not in where_sql
+    assert "cp.source_text ILIKE" not in where_sql
+    assert params == {"query_pattern": "%birth%"}
+
+
+def test_build_filters_supports_separate_detail_keyword_search() -> None:
+    where_sql, params = PolicyRepository._build_filters(
+        query_pattern="%birth%",
+        category=None,
+        tags=[],
+        region_code=None,
+        stage_tags=[],
+        stage=None,
+        detail_query_pattern="%documents%",
+    )
+
+    assert "p.policy_name ILIKE :query_pattern" in where_sql
+    assert "pd.application_method ILIKE :detail_query_pattern" in where_sql
+    assert "cp.source_text ILIKE :detail_query_pattern" in where_sql
+    assert params == {
+        "query_pattern": "%birth%",
+        "detail_query_pattern": "%documents%",
     }
 
 
@@ -84,7 +122,10 @@ def test_build_filters_searches_youth_profile_alias_for_young_adult_stage() -> N
 
 
 def test_relevance_weights_title_above_category_and_detail() -> None:
-    sql = PolicyRepository._build_relevance_sql(query="birth")
+    sql = PolicyRepository._build_relevance_sql(
+        query="birth",
+        search_scope=PolicySearchScope.ALL,
+    )
 
     assert "THEN 400" in sql
     assert "THEN 200" in sql
@@ -92,6 +133,14 @@ def test_relevance_weights_title_above_category_and_detail() -> None:
     assert "THEN 20" in sql
     assert "cp.target_summary ILIKE" in sql
     assert "cp.source_text ILIKE" in sql
+
+
+def test_relevance_defaults_to_policy_name_only() -> None:
+    sql = PolicyRepository._build_relevance_sql(query="birth")
+
+    assert "p.policy_name ILIKE" in sql
+    assert "p.main_category ILIKE" not in sql
+    assert "pd.benefit_description ILIKE" not in sql
 
 
 def test_sort_sql_uses_allowlisted_columns() -> None:

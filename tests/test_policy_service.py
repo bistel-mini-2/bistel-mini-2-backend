@@ -5,7 +5,7 @@ import pytest
 
 from app.common.exceptions import AppException, ErrorCode
 from app.repositories.policy_repository import PolicyRepository
-from app.schemas.policy_schema import PolicySort
+from app.schemas.policy_schema import PolicySearchScope, PolicySort
 from app.services.policy_service import PolicyService
 
 
@@ -22,15 +22,16 @@ def test_get_policy_list_normalizes_documented_filters(monkeypatch) -> None:
         PolicyService().get_policy_list(
             db,  # type: ignore[arg-type]
             query=r"  100%_지원 정책  ",
-            category="  생활지원  ",
-            tags=[" 임신·출산, 영유아", "영유아, "],
-            region_code=" national ",
-            stage=" pregnant ",
-            sort=PolicySort.RELEVANCE,
-            page=2,
-            size=10,
-        ),
-    )
+        category="  생활지원  ",
+        tags=[" 임신·출산, 영유아", "영유아, "],
+        region_code=" national ",
+        stage=" pregnant ",
+        sort=PolicySort.RELEVANCE,
+        page=2,
+        size=10,
+        search_scope=PolicySearchScope.ALL,
+    ),
+)
 
     assert items == []
     assert total == 0
@@ -38,11 +39,13 @@ def test_get_policy_list_normalizes_documented_filters(monkeypatch) -> None:
         db,
         query=r"100%_지원 정책",
         query_pattern=r"%100\%\_지원 정책%",
+        detail_query_pattern=None,
         category="생활지원",
         tags=["임신·출산", "영유아"],
         region_code="national",
         stage_tags=["임신 · 출산", "임신·출산"],
         stage="pregnant",
+        search_scope=PolicySearchScope.ALL,
         sort=PolicySort.RELEVANCE,
         page=2,
         size=10,
@@ -73,7 +76,10 @@ def test_to_response_adds_issue_29_compatible_fields() -> None:
     response = PolicyService._to_response(row)
 
     assert response.target_stage == ["newborn", "infant"]
+    assert response.target_stage_display == ["신생아", "영유아"]
+    assert response.display_age == "신생아, 영유아"
     assert response.region == "national"
+    assert response.region_display == "전국"
 
 
 def test_to_response_prefers_condition_profile_target_stage() -> None:
@@ -112,6 +118,7 @@ def test_to_response_prefers_condition_profile_target_stage() -> None:
     response = PolicyService._to_response(row)
 
     assert response.target_stage == ["pregnant", "child"]
+    assert response.life_stage_display == "임신·출산, 아동"
 
 
 def test_get_policy_detail_returns_detail_fields(monkeypatch) -> None:
@@ -218,6 +225,9 @@ def test_to_detail_response_includes_condition_profile() -> None:
     )
     assert response.condition_profile.source_text == "source text"
     assert response.conditions == "profile target"
+    assert response.application_guide is not None
+    assert response.application_guide.summary == "online"
+    assert response.application_status_display == "신청 가능"
 
 
 def test_get_policy_detail_includes_related_policies(monkeypatch) -> None:
@@ -259,6 +269,11 @@ def test_get_policy_detail_includes_related_policies(monkeypatch) -> None:
         "policy_id": 2,
         "slug": "WLF00000025",
         "name": "related policy",
+        "related_score": 11,
+        "related_match_category": True,
+        "related_match_stage": True,
+        "related_match_region": True,
+        "related_match_tag": True,
     }
     find_policy_detail = AsyncMock(return_value=row)
     find_related_policies = AsyncMock(return_value=[related_row])
@@ -284,6 +299,9 @@ def test_get_policy_detail_includes_related_policies(monkeypatch) -> None:
     assert response.conditions == "target"
     assert response.how_to_apply == "online"
     assert response.related_policies[0].slug == "WLF00000025"
+    assert response.related_policies[0].related_reason == (
+        "같은 분야, 같은 생애 단계, 같은 지역, 유사 태그 기준으로 함께 확인할 만한 정책입니다."
+    )
     find_related_policies.assert_awaited_once_with(
         db,
         excluded_policy_ids=[1],
@@ -294,6 +312,37 @@ def test_get_policy_detail_includes_related_policies(monkeypatch) -> None:
         tags=["pregnancy"],
         limit=3,
     )
+
+
+def test_to_response_marks_all_age_display() -> None:
+    row = {
+        "policy_id": 1,
+        "slug": "WLF00000024",
+        "name": "전 연령 정책",
+        "category": "support",
+        "sub_category": None,
+        "tags": [],
+        "summary": None,
+        "benefit_summary": None,
+        "agency": None,
+        "benefit_type": None,
+        "application_status": None,
+        "application_start_date": None,
+        "application_end_date": None,
+        "application_period_text": None,
+        "region_scope": "NATIONAL",
+        "region_code": None,
+        "official_url": None,
+        "target_description": "전 연령 누구나 신청할 수 있습니다.",
+        "benefit_description": "돌봄 서비스를 제공합니다.",
+        "condition_profile_json": {"condition_tree": {}},
+    }
+
+    response = PolicyService._to_response(row)
+
+    assert response.all_age is True
+    assert response.display_age == "전 연령 대상"
+    assert response.life_stage_display == "모든 생애 단계 대상"
 
 
 def test_get_policy_detail_rejects_unknown_policy(monkeypatch) -> None:

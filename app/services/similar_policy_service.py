@@ -238,6 +238,8 @@ class SimilarPolicyService:
             row.get("sub_category"),
             row.get("easy_summary") or row.get("summary"),
             row.get("benefit_description") or row.get("benefit_summary"),
+            row.get("condition_profile_target_summary"),
+            row.get("condition_profile_source_text"),
             row.get("target_description"),
             " ".join(str(tag) for tag in row.get("tags") or []),
         ]
@@ -254,7 +256,11 @@ class SimilarPolicyService:
             "benefit": self._short(
                 row.get("benefit_description") or row.get("benefit_summary")
             ),
-            "target": self._short(row.get("target_description")),
+            "target": self._short(
+                row.get("condition_profile_target_summary")
+                or row.get("condition_profile_source_text")
+                or row.get("target_description")
+            ),
             "tags": list(row.get("tags") or []),
         }
 
@@ -266,6 +272,11 @@ class SimilarPolicyService:
             "sub_category": row.get("sub_category"),
             "summary": self._short(row.get("summary") or row.get("benefit_summary")),
             "benefit": self._short(row.get("benefit_summary")),
+            "target": self._short(
+                row.get("condition_profile_target_summary")
+                or row.get("condition_profile_source_text")
+                or row.get("target_description")
+            ),
             "tags": list(row.get("tags") or []),
         }
 
