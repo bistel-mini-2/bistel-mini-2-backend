@@ -967,6 +967,7 @@ async def _persist_assistant_outputs(
         profile=graph_result.get("profile"),
         pending=graph_result.get("pending"),
         eligibility_slot_update=graph_result.get("eligibility_slot_update"),
+        similar_policies=payload.get("similar_policies", []),
     )
     if next_slot is not None:
         await ChatRepository.update_session_slot(db, session_id, next_slot)
@@ -992,6 +993,7 @@ def _build_next_slot(
     profile: dict | None = None,
     pending: dict | None = None,
     eligibility_slot_update: dict | None = None,
+    similar_policies: list[dict] | None = None,
 ) -> dict | None:
     slug_to_action: dict[str, str] = {}
     for link in policy_links:
@@ -1022,6 +1024,25 @@ def _build_next_slot(
             "slug": slug,
             "policy_name": slug_to_name.get(slug) or "",
             "last_action": action,
+        })
+
+    # 유사 정책은 자체 policy_id를 이미 가지므로 policy_links 없이 직접 맥락에 넣는다.
+    # (chat_message_policy 행을 만들지 않아 이력 복원 시 카드로 중복 노출되지 않음.)
+    # 후속 지시어("두 번째 정책", "이거")가 유사 후보를 참조할 수 있게 한다.
+    for sim in similar_policies or []:
+        slug = sim.get("slug")
+        if not slug or slug in seen:
+            continue
+        try:
+            sim_policy_id = int(sim["policy_id"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        seen.add(slug)
+        new_entries.append({
+            "policy_id": sim_policy_id,
+            "slug": slug,
+            "policy_name": sim.get("name") or sim.get("policy_name") or "",
+            "last_action": "SIMILAR_POLICY",
         })
 
     # 저장할 게 아무것도 없으면(새 정책·프로필·pending·eligibility 업데이트 모두 없음) 생략.
