@@ -334,9 +334,17 @@ def partition_or_groups(
 
 
 def is_income_status_denied(condition_value: Any) -> bool:
-    """사용자가 수급 자격을 명시적으로 부정한 경우(income_status='none')."""
+    """사용자가 수급 자격을 명시적으로 부정한 경우(income_status='none').
+
+    주의: None(미입력)은 부정이 아니다. str(None)=='None'이라 소문자화하면 'none'과
+    같아지므로, None은 명시적으로 먼저 걸러 미입력을 부정으로 오인하지 않게 한다.
+    """
+    if condition_value is None:
+        return False
     if isinstance(condition_value, (list, tuple, set)):
-        return any(str(v).strip().lower() == "none" for v in condition_value)
+        return any(
+            v is not None and str(v).strip().lower() == "none" for v in condition_value
+        )
     return str(condition_value).strip().lower() == "none"
 
 
@@ -366,17 +374,28 @@ def evaluate_member(
     rule_value = rule.get("value_json")
     operator = str(rule.get("operator") or "").upper()
 
+    # 수급 자격 명시적 부정 → 수급-필요 정책은 manual_check/hard filter 여부와 무관하게
+    # 확정 미충족(FAIL). manual_check보다 먼저 판정해 "수급 여부 확인"으로 새지 않게 한다.
+    if is_denied_income_mismatch(field_name, condition_value, rule_value):
+        return VERDICT_FAIL, condition_value, rule_value
+
     if rule.get("manual_check_required") is True:
         return VERDICT_MANUAL, condition_value, rule_value
     if condition_value in (None, "", []):
+        # 폼이 빠짐없이 받는 특수상황(special)을 비워서 제출 = "해당 없음" 명시.
+        # 미입력(불확정)이 아니라 확정 미일치로 본다. (예: "수급 OR 한부모" OR 그룹에서
+        # 수급 부정 + 한부모 미선택 → 그룹 확정 탈락 → 제외)
+        # condition_value 모듈이 본 모듈을 import하므로 순환 회피 위해 지연 import.
+        from app.services.policy_rule_condition_value import is_exhaustive_empty
+
+        if is_exhaustive_empty(condition, field_name):
+            if rule.get("is_hard_filter") is True:
+                return VERDICT_FAIL, condition_value, rule_value
+            return VERDICT_SKIP, condition_value, rule_value
         if rule.get("is_hard_filter") is True:
             return VERDICT_MISSING, condition_value, rule_value
         # soft 조건 + 입력 없음 = 불확정(평가 불가). soft 미일치(SKIP)와 구분한다.
         return VERDICT_INDETERMINATE, condition_value, rule_value
-
-    # 수급 자격 명시적 부정 → 수급-필요 정책은 hard filter 아니어도 확정 미충족.
-    if is_denied_income_mismatch(field_name, condition_value, rule_value):
-        return VERDICT_FAIL, condition_value, rule_value
 
     matched = rule_matches_fn(operator, condition_value, rule_value)
     if matched is True:

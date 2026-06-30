@@ -214,7 +214,7 @@ class AiRequestLifecycleService:
         parsed_query_json = dict(request.parsed_query_json or {})
         parsed_query_json["follow_up_resolved"] = True
         # 답변을 구조화 저장(이력에서 Q/A로 보여주기 위함). 빈 답변은 제외.
-        parsed_query_json["follow_up_answers"] = [
+        follow_up_answers = [
             {
                 "question_text": " ".join(
                     str(answer.get("question_text") or "").split()
@@ -225,6 +225,17 @@ class AiRequestLifecycleService:
             if isinstance(answer, dict)
             and str(answer.get("answer") or "").strip()
         ]
+        parsed_query_json["follow_up_answers"] = follow_up_answers
+        follow_up_denials = self._follow_up_denials(follow_up_answers)
+        parsed_query_json["follow_up_denials"] = follow_up_denials
+        if follow_up_denials:
+            selected_conditions = dict(parsed_query_json.get("selected_conditions") or {})
+            self._apply_follow_up_denials_to_selected_conditions(
+                selected_conditions,
+                follow_up_denials,
+            )
+            if selected_conditions:
+                parsed_query_json["selected_conditions"] = selected_conditions
         augmented_raw_query = self._augment_raw_query(request.raw_query, answers)
         await self.repository.update_payload(
             db=db,
@@ -248,11 +259,129 @@ class AiRequestLifecycleService:
             value = " ".join(str(answer.get("answer") or "").split())
             if not value:
                 continue
-            extra_parts.append(f"{question} {value}".strip() if question else value)
+            extra_parts.append(self._follow_up_answer_context(question, value))
         extra = " ".join(extra_parts).strip()
         if not extra:
             return base
         return f"{base} {extra}".strip()
+
+    def _follow_up_answer_context(self, question: str, answer: str) -> str:
+        base = (
+            f'추가 확인 답변: 질문="{question}" 답변="{answer}".'
+            if question
+            else f'추가 확인 답변: 답변="{answer}".'
+        )
+        if not self._is_negative_follow_up_answer(answer):
+            return base
+
+        topic = self._negative_follow_up_topic(question)
+        if topic:
+            return f"{base} 해석: 사용자는 {topic}에 해당하지 않는다고 답했습니다."
+        return f"{base} 해석: 사용자는 해당 추가 조건에 해당하지 않는다고 답했습니다."
+
+    def _follow_up_denials(
+        self,
+        follow_up_answers: list[dict[str, Any]],
+    ) -> list[dict[str, str]]:
+        denials: list[dict[str, str]] = []
+        for row in follow_up_answers:
+            question = " ".join(str(row.get("question_text") or "").split())
+            answer = " ".join(str(row.get("answer") or "").split())
+            if not self._is_negative_follow_up_answer(answer):
+                continue
+            topic = self._negative_follow_up_topic(question) or "해당 추가 조건"
+            denials.append(
+                {
+                    "question_text": question,
+                    "answer": answer,
+                    "topic": topic,
+                    "category": self._follow_up_topic_category(question or topic),
+                }
+            )
+        return denials
+
+    def _apply_follow_up_denials_to_selected_conditions(
+        self,
+        selected_conditions: dict[str, Any],
+        follow_up_denials: list[dict[str, str]],
+    ) -> None:
+        categories = {str(denial.get("category") or "") for denial in follow_up_denials}
+        if "income_status" in categories:
+            # 수급 자격을 명시적으로 부정한 답변은 rule matcher가 이해하는 enum으로 보존한다.
+            selected_conditions["income_status"] = "none"
+
+    @staticmethod
+    def _follow_up_topic_category(question_or_topic: str) -> str:
+        text = str(question_or_topic or "")
+        if (
+            "수급" in text
+            or "기초생활" in text
+            or "차상위" in text
+            or "의료급여" in text
+            or "주거급여" in text
+            or "생계급여" in text
+        ):
+            return "income_status"
+        if "법률" in text and "상담" in text:
+            return "legal_need"
+        if "출생신고" in text or "주민등록" in text:
+            return "birth_registration"
+        return "other"
+
+    @staticmethod
+    def _is_negative_follow_up_answer(answer: str) -> bool:
+        normalized = "".join(str(answer or "").lower().split())
+        if not normalized:
+            return False
+        negative_tokens = (
+            "아니요",
+            "아니오",
+            "아님",
+            "아닙",
+            "안돼",
+            "안되",
+            "없어",
+            "없습",
+            "해당없",
+            "해당안",
+            "필요없",
+            "필요하지않",
+        )
+        return any(token in normalized for token in negative_tokens)
+
+    @staticmethod
+    def _negative_follow_up_topic(question: str) -> str:
+        text = " ".join(str(question or "").split())
+        if not text:
+            return ""
+
+        if "법률" in text and "상담" in text:
+            return "법률 상담이 필요한 상황"
+        if (
+            "수급" in text
+            or "기초생활" in text
+            or "차상위" in text
+            or "의료급여" in text
+            or "주거급여" in text
+            or "생계급여" in text
+        ):
+            return "기초생활·차상위 등 수급 자격"
+
+        cleanup_tokens = (
+            "알려주시겠어요",
+            "알려주세요",
+            "확인해 주세요",
+            "확인해주세요",
+            "확인 필요",
+            "확인이 필요합니다",
+            "여부",
+            "인가요",
+            "신가요",
+        )
+        for token in cleanup_tokens:
+            text = text.replace(token, " ")
+        text = text.replace("?", " ").replace(".", " ").replace(",", " ")
+        return " ".join(text.split())
 
     async def mark_failed(
         self,
@@ -504,6 +633,7 @@ class AiRequestLifecycleService:
         )
         # 게이트에서 받은 답변(이력 표시용)은 재실행 후에도 보존한다.
         follow_up_answers = parsed_query_json.get("follow_up_answers") or []
+        follow_up_denials = parsed_query_json.get("follow_up_denials") or []
         condition_result = await self.condition_agent.analyze(
             ConditionInput(
                 raw_query=request.raw_query,
@@ -533,6 +663,7 @@ class AiRequestLifecycleService:
             # 재실행 시 게이트가 다시 발생하지 않도록 플래그/답변을 보존한다.
             "follow_up_resolved": follow_up_resolved,
             "follow_up_answers": follow_up_answers,
+            "follow_up_denials": follow_up_denials,
         }
         await self.repository.update_payload(
             db=db,
@@ -557,6 +688,8 @@ class AiRequestLifecycleService:
                 profile_conflict_json=profile_conflict_json,
                 raw_query=request.raw_query,
                 selected_conditions=selected_conditions,
+                follow_up_answers=follow_up_answers,
+                follow_up_denials=follow_up_denials,
             )
             result_json = normalize_recommendation_result_json(result_json)
             # AI 판정 게이트: 아직 추가질문을 안 거쳤고, 최종 결과에 공통 부족정보가 있으면

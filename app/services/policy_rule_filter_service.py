@@ -63,6 +63,15 @@ class PolicyRuleFilterService:
             rule_value = rule.get("value_json")
             operator = str(rule.get("operator") or "").upper()
 
+            # 수급 자격을 "없다"고 명시(income_status="none")한 사용자에게는, 특정 수급
+            # 자격을 요구하는 정책을 manual_check/hard filter 여부와 무관하게 확정 미충족으로
+            # 처리한다(모순된 "수급 여부 확인" 안내 방지). 공유 술어로 OR 그룹과 동일 판정.
+            if is_denied_income_mismatch(field_name, condition_value, rule_value):
+                result.rule_failures.append(
+                    self.explanation.explain(rule, VERDICT_EXCLUDED)
+                )
+                continue
+
             if rule.get("manual_check_required") is True:
                 result.manual_check_points.append(
                     self.explanation.explain(rule, VERDICT_UNCERTAIN)
@@ -74,15 +83,6 @@ class PolicyRuleFilterService:
                     result.missing_conditions.append(
                         self.explanation.explain(rule, VERDICT_UNCERTAIN)
                     )
-                continue
-
-            # 수급 자격을 "없다"고 명시(income_status="none")한 사용자에게는, 특정 수급
-            # 자격을 요구하는 정책을 hard filter가 아니어도 명확한 미충족으로 처리한다.
-            # 공유 술어로 candidate/OR 그룹 평가와 동일 판정을 보장한다.
-            if is_denied_income_mismatch(field_name, condition_value, rule_value):
-                result.rule_failures.append(
-                    self.explanation.explain(rule, VERDICT_EXCLUDED)
-                )
                 continue
 
             match_result = self._rule_matches(operator, condition_value, rule_value)
