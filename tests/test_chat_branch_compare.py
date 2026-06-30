@@ -144,3 +144,54 @@ def test_branch_compare_asks_for_two_targets(monkeypatch) -> None:
 
     assert "비교할 정책 2개" in result["branch_content"]
     assert result["branch_policies"] == []
+
+
+def test_branch_compare_one_explicit_target_asks_for_second(monkeypatch) -> None:
+    monkeypatch.setattr(chat_handlers, "AsyncSessionLocal", lambda: _FakeSession())
+    comparison_graph = _FakeComparisonGraph()
+    rag = _FakeRagService(
+        [_rag_chunk(chunk_id=1, policy_code="WLF1", policy_name="A 정책")]
+    )
+    monkeypatch.setattr(chat_handlers, "_RAG_SERVICE", rag)
+    monkeypatch.setattr(chat_handlers, "_COMPARISON_GRAPH", comparison_graph)
+
+    state = {
+        "user_id": 7,
+        "user_content": "A 정책이랑 비교해줘",
+        "history": [],
+        "supervisor_decision": {"intent": "compare", "raw": "{}"},
+    }
+
+    result = asyncio.run(handle_compare(state))
+
+    comparison_graph.run.assert_not_awaited()
+    assert "비교할 정책 2개" in result["branch_content"]
+    assert result["branch_policies"] == []
+
+
+def test_branch_compare_recent_three_policies_asks_user_to_choose(monkeypatch) -> None:
+    monkeypatch.setattr(chat_handlers, "AsyncSessionLocal", lambda: _FakeSession())
+    comparison_graph = _FakeComparisonGraph()
+    rag = _FakeRagService([])
+    monkeypatch.setattr(chat_handlers, "_RAG_SERVICE", rag)
+    monkeypatch.setattr(chat_handlers, "_COMPARISON_GRAPH", comparison_graph)
+
+    state = {
+        "user_id": 7,
+        "user_content": "비교해줘",
+        "history": [],
+        "supervisor_decision": {"intent": "compare", "raw": "{}"},
+        "slot": {
+            "recent_policies": [
+                {"slug": "WLF1", "policy_name": "A 정책", "last_action": "RECOMMENDED"},
+                {"slug": "WLF2", "policy_name": "B 정책", "last_action": "RECOMMENDED"},
+                {"slug": "WLF3", "policy_name": "C 정책", "last_action": "RECOMMENDED"},
+            ]
+        },
+    }
+
+    result = asyncio.run(handle_compare(state))
+
+    comparison_graph.run.assert_not_awaited()
+    assert "비교할 정책 2개" in result["branch_content"]
+    assert result["branch_policies"] == []

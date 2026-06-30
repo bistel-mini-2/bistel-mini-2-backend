@@ -93,7 +93,7 @@ def _policy_with_condition_profile() -> dict[str, Any]:
 def _state() -> dict[str, Any]:
     return {
         "user_id": 7,
-        "user_content": "What is this policy?",
+        "user_content": "Birth Support가 뭐야?",
         "history": [],
         "supervisor_decision": {"intent": "policy_summary", "raw": "{}"},
     }
@@ -223,3 +223,23 @@ def test_branch_policy_summary_fallback_key_points_prefer_condition_profile(
     }
     assert payload["key_points"][1]["label"] == "benefit"
     assert "Legacy policy detail target" not in payload["key_points"][0]["content"]
+
+
+def test_branch_policy_summary_without_target_asks_policy_name(
+    patched_session: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    graph = MagicMock()
+    graph.run = AsyncMock(return_value={"summary": "Should not run"})
+    rag = _FakeRagService([_chunk()])
+    monkeypatch.setattr(chat_handlers, "_RAG_SERVICE", rag)
+    monkeypatch.setattr(chat_handlers, "_POLICY_SUMMARY_GRAPH", graph)
+
+    result = asyncio.run(handle_policy_summary({
+        **_state(),
+        "user_content": "정책을 핵심 위주로 쉽게 요약해줘",
+    }))
+
+    graph.run.assert_not_awaited()
+    assert "어떤 정책을 요약할까요" in result["branch_content"]
+    assert result["branch_policies"] == []
