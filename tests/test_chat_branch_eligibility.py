@@ -167,6 +167,51 @@ def test_branch_eligibility_no_policy_found_returns_clarification(
     assert "정책" in result["branch_content"]
 
 
+def test_branch_eligibility_recent_single_policy_runs_lifecycle(
+    patched_session: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    rag = _FakeRagService([])
+    graph = _make_eligibility_graph(_eligibility_result())
+    monkeypatch.setattr(chat_handlers, "_RAG_SERVICE", rag)
+    monkeypatch.setattr(chat_handlers, "_ELIGIBILITY_GRAPH", graph)
+
+    result = asyncio.run(handle_eligibility({
+        **_state(),
+        "supervisor_decision": {"intent": "eligibility", "raw": "{}"},
+        "user_content": "나도 받을 수 있어?",
+    }))
+
+    graph.run.assert_awaited_once()
+    assert result["branch_policies"][0]["slug"] == "WLF1"
+
+
+def test_branch_eligibility_recent_multiple_policies_asks_target(
+    patched_session: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    rag = _FakeRagService([])
+    graph = _make_eligibility_graph(_eligibility_result())
+    monkeypatch.setattr(chat_handlers, "_RAG_SERVICE", rag)
+    monkeypatch.setattr(chat_handlers, "_ELIGIBILITY_GRAPH", graph)
+
+    result = asyncio.run(handle_eligibility({
+        **_state(),
+        "supervisor_decision": {"intent": "eligibility", "raw": "{}"},
+        "user_content": "지원 가능성 확인해줘",
+        "slot": {
+            "recent_policies": [
+                {"policy_id": 100, "slug": "WLF1", "policy_name": "A 정책", "last_action": "RECOMMENDED"},
+                {"policy_id": 101, "slug": "WLF2", "policy_name": "B 정책", "last_action": "RECOMMENDED"},
+            ]
+        },
+    }))
+
+    graph.run.assert_not_awaited()
+    assert "어떤 정책" in result["branch_content"]
+    assert result["branch_policies"] == []
+
+
 def test_branch_eligibility_follow_up_required_saves_slot(
     patched_session: None,
     monkeypatch: pytest.MonkeyPatch,

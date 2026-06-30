@@ -294,6 +294,7 @@ def test_e2e_compare_routes_and_builds_diff_payload(
     comparison_graph.run = AsyncMock(return_value=compare_return)
 
     state = _intent_state("compare")
+    state["user_content"] = "이 둘 비교해줘"
     state["slot"] = {
         "recent_policies": [
             {"slug": "WLF1", "policy_name": "A 정책", "last_action": "RECOMMENDED"},

@@ -325,6 +325,57 @@ def test_branch_apply_uses_recent_assistant_policy_for_contextual_follow_up(
     assert result["branch_apply_card"]["policy_name"] == "아이돌봄서비스"
 
 
+def test_branch_apply_recent_single_policy_runs_apply_flow(
+    patched_session: None,
+    patched_llm: AsyncMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    rag = _FakeRagService([])
+    apply_get = AsyncMock(return_value=_apply_response())
+    monkeypatch.setattr(chat_nodes.ApplyPreparationService, "get", apply_get)
+    monkeypatch.setattr(chat_handlers, "_RAG_SERVICE", rag)
+
+    result = asyncio.run(handle_apply({
+        **_state(),
+        "user_content": "신청 준비해줘",
+        "slot": {
+            "recent_policies": [
+                {"policy_id": 42, "slug": "WLF1", "policy_name": "아이돌봄서비스", "last_action": "RECOMMENDED"}
+            ]
+        },
+    }))
+
+    apply_get.assert_awaited_once()
+    assert apply_get.await_args.kwargs["policy_slug"] == "WLF1"
+    assert result["branch_policies"][0]["slug"] == "WLF1"
+
+
+def test_branch_apply_recent_multiple_policies_asks_target(
+    patched_session: None,
+    patched_llm: AsyncMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    rag = _FakeRagService([])
+    apply_get = AsyncMock(return_value=_apply_response())
+    monkeypatch.setattr(chat_nodes.ApplyPreparationService, "get", apply_get)
+    monkeypatch.setattr(chat_handlers, "_RAG_SERVICE", rag)
+
+    result = asyncio.run(handle_apply({
+        **_state(),
+        "user_content": "신청 준비해줘",
+        "slot": {
+            "recent_policies": [
+                {"policy_id": 42, "slug": "WLF1", "policy_name": "A 정책", "last_action": "RECOMMENDED"},
+                {"policy_id": 43, "slug": "WLF2", "policy_name": "B 정책", "last_action": "RECOMMENDED"},
+            ]
+        },
+    }))
+
+    apply_get.assert_not_awaited()
+    assert "어떤 정책" in result["branch_content"]
+    assert result["branch_policies"] == []
+
+
 def test_branch_apply_prefers_explicit_rag_policy_over_recent_assistant_policy(
     patched_session: None,
     patched_llm: AsyncMock,

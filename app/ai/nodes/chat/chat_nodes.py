@@ -229,6 +229,8 @@ def _pick_compare_targets(
                 break
 
     for policy in policies:
+        if not _user_mentions_policy_name(user_content, policy.get("policy_name")):
+            continue
         append(policy.get("slug"), policy.get("policy_name"))
         if len(candidates) >= 2:
             break
