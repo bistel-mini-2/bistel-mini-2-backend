@@ -125,6 +125,28 @@ class ChatRepository:
         return message
 
     @staticmethod
+    async def eligibility_result_message_exists(
+        db: AsyncSession, chat_session_id: int, request_id: int | str
+    ) -> bool:
+        result = await db.execute(
+            text(
+                """
+                SELECT 1
+                FROM chat_message
+                WHERE chat_session_id = :chat_session_id
+                  AND role = 'assistant'
+                  AND structured_json -> 'eligibility_result' ->> 'request_id' = :request_id
+                LIMIT 1
+                """
+            ),
+            {
+                "chat_session_id": chat_session_id,
+                "request_id": str(request_id),
+            },
+        )
+        return result.scalar_one_or_none() is not None
+
+    @staticmethod
     async def update_last_message_at(
         db: AsyncSession, chat_session_id: int, when: datetime
     ) -> None:
