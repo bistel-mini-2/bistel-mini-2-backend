@@ -465,6 +465,7 @@ async def _run_eligibility_lifecycle(
     user_id: int,
     user_content: str,
     policy_slug: str,
+    selected_conditions: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     try:
         async with AsyncSessionLocal() as db:
@@ -485,6 +486,7 @@ async def _run_eligibility_lifecycle(
                         policy_identifier=policy_slug,
                         raw_query=user_content,
                         source_type=_ELIGIBILITY_SOURCE_TYPE,
+                        selected_conditions=selected_conditions,
                     ),
                     timeout=_ELIGIBILITY_LIFECYCLE_TIMEOUT_SECONDS,
                 )
@@ -509,6 +511,7 @@ async def _run_eligibility_branch(
         user_id=state["user_id"],
         user_content=state["user_content"],
         policy_slug=policy_slug,
+        selected_conditions=_profile_to_selected_conditions(state.get("profile")) or None,
     )
     if result_json is None:
         return {

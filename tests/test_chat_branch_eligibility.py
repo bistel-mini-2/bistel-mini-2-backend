@@ -121,6 +121,33 @@ def test_branch_eligibility_resolved_slug_skips_rag(
     assert result["branch_policies"][0]["slug"] == "WLF1"
 
 
+def test_branch_eligibility_passes_chat_profile_conditions(
+    patched_session: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    graph = _make_eligibility_graph(_eligibility_result())
+    monkeypatch.setattr(chat_handlers, "_RAG_SERVICE", _FakeRagService([]))
+    monkeypatch.setattr(chat_handlers, "_ELIGIBILITY_GRAPH", graph)
+
+    state = {
+        **_state(resolved_slug="WLF1"),
+        "profile": {
+            "child_age": "2-5",
+            "income": "low_income",
+            "special": ["single_parent"],
+        },
+    }
+
+    asyncio.run(handle_eligibility(state))
+
+    assert graph.run.await_args.kwargs["selected_conditions"] == {
+        "childAge": "2-5",
+        "stage": "infant",
+        "income": "low_income",
+        "special": ["single_parent"],
+    }
+
+
 def test_branch_eligibility_rag_finds_policy_runs_lifecycle(
     patched_session: None,
     monkeypatch: pytest.MonkeyPatch,
