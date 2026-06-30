@@ -563,7 +563,7 @@ class PolicyConditionProfileService:
         if settings.openai_api_key:
             kwargs["api_key"] = settings.openai_api_key
         return ChatOpenAI(
-            model="gpt-4o-mini",
+            model="gpt-5.4-mini",
             temperature=0,
             max_completion_tokens=8192,
             **kwargs,

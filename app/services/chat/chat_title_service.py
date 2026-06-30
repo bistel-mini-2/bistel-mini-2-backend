@@ -11,7 +11,7 @@ from app.repositories.chat_repository import ChatRepository
 logger = logging.getLogger(__name__)
 
 
-_LLM_MODEL = "gpt-4o-mini"
+_LLM_MODEL = "gpt-5.4-mini"
 TITLE_MAX_LENGTH = 10
 FALLBACK_TITLE = "새 상담"
 
