@@ -277,12 +277,18 @@ async def _resolve_single_policy_target(
         )
         return mentioned_recent[0][0], mentioned_recent[0][1], []
 
+    is_clarification_resume = (
+        (state.get("slot") or {}).get("pending", {}) or {}
+    ).get("kind") == "clarification"
+
     policies, evidences = await _rag_lookup(state["user_content"])
     slug, policy_name = _pick_apply_target(
         policies,
         user_content=state["user_content"],
         require_policy_name_mention=True,
     )
+    if slug is None and is_clarification_resume and policies:
+        slug, policy_name = _pick_apply_target(policies, require_policy_name_mention=False)
     logger.info(
         "chat_slot_resolved",
         extra={
@@ -290,6 +296,7 @@ async def _resolve_single_policy_target(
             "slot_used": False,
             "rag_skipped": False,
             "explicit_policy_found": slug is not None,
+            "clarification_resume": is_clarification_resume,
         },
     )
     if slug is not None:
@@ -1084,6 +1091,7 @@ async def handle_policy_summary(
             "branch_content": _POLICY_SUMMARY_CLARIFICATION_FALLBACK,
             "branch_policies": [],
             "branch_evidences": [],
+            "pending": {"intent": "policy_summary", "kind": "clarification"},
         }
     return await _run_policy_summary_target(
         state,
@@ -1106,6 +1114,7 @@ async def handle_summary(
             "branch_content": _POLICY_SUMMARY_CLARIFICATION_FALLBACK,
             "branch_policies": [],
             "branch_evidences": [],
+            "pending": {"intent": "summary", "kind": "clarification"},
         }
     return await _run_policy_summary_target(
         state,
