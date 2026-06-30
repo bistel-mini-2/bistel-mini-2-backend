@@ -485,6 +485,17 @@ class AiRequestLifecycleService:
         request = await self._get_request_or_raise(db, request_type, request_id)
         parsed_query_json = request.parsed_query_json or {}
         selected_conditions = parsed_query_json.get("selected_conditions")
+        profile_snapshot = await self._condition_profile_snapshot(
+            db=db,
+            request_type=request_type,
+            request=request,
+        )
+        selected_conditions = self._effective_selected_conditions(
+            request_type=request_type,
+            request=request,
+            selected_conditions=selected_conditions,
+            profile_snapshot=profile_snapshot,
+        )
         manual_confirmations = self._manual_confirmations(selected_conditions)
         # 추가질문 게이트를 이미 한 번 거쳤는지(답변 후 재실행인지). 재실행이면 게이트 스킵.
         follow_up_resolved = bool(parsed_query_json.get("follow_up_resolved")) or bool(
@@ -492,11 +503,6 @@ class AiRequestLifecycleService:
         )
         # 게이트에서 받은 답변(이력 표시용)은 재실행 후에도 보존한다.
         follow_up_answers = parsed_query_json.get("follow_up_answers") or []
-        profile_snapshot = await self._condition_profile_snapshot(
-            db=db,
-            request_type=request_type,
-            request=request,
-        )
         condition_result = await self.condition_agent.analyze(
             ConditionInput(
                 raw_query=request.raw_query,
@@ -576,7 +582,7 @@ class AiRequestLifecycleService:
                 result_json=result_json,
             )
         elif request_type == "eligibility":
-            await self._save_eligibility_assessment(
+            follow_up_needed = await self._save_eligibility_assessment(
                 db=db,
                 request=request,
                 request_id=request_id,
@@ -584,6 +590,12 @@ class AiRequestLifecycleService:
                 input_issues_json=input_issues_json,
                 profile_conflict_json=profile_conflict_json,
             )
+            if follow_up_needed and not follow_up_resolved:
+                return await self.mark_follow_up_required(
+                    db,
+                    request_type,
+                    request_id,
+                )
         return await self.mark_completed(db, request_type, request_id)
 
     async def _save_eligibility_assessment(
@@ -594,7 +606,7 @@ class AiRequestLifecycleService:
         merged_condition_json: dict[str, Any],
         input_issues_json: list[dict[str, Any]],
         profile_conflict_json: list[dict[str, Any]],
-    ) -> None:
+    ) -> bool:
         policy_id = int(request.policy_id)
         assessment_condition = {
             **merged_condition_json,
@@ -639,13 +651,14 @@ class AiRequestLifecycleService:
         )
         # 부족 정보 추가 질문을 LLM으로 1회 생성해 저장한다(원본 point가 키).
         # 응답/답변 매칭은 저장된 질문을 재사용하므로 매번 재생성하지 않는다.
-        await self._save_follow_up_question_overrides(
+        follow_up_points = [
+            *self._string_values(assessment_result.manual_check_points),
+            *self._string_values(assessment_result.missing_conditions),
+        ]
+        follow_up_needed = await self._save_follow_up_question_overrides(
             db=db,
             request=request,
-            manual_check_points=[
-                *self._string_values(assessment_result.manual_check_points),
-                *self._string_values(assessment_result.missing_conditions),
-            ],
+            manual_check_points=follow_up_points,
         )
 
         async with psycopg_pool.connection() as conn:
@@ -655,18 +668,19 @@ class AiRequestLifecycleService:
                 assessment_type=ASSESSMENT_TYPE_ELIGIBILITY,
                 eligibility_request_id=request_id,
             )
+        return follow_up_needed
 
     async def _save_follow_up_question_overrides(
         self,
         db: AsyncSession,
         request: AiRequestModel,
         manual_check_points: list[str],
-    ) -> None:
+    ) -> bool:
         overrides = await self.eligibility_follow_up_question_agent.rewrite_questions(
             points=manual_check_points,
         )
         if not overrides:
-            return
+            return False
         parsed_query_json = {
             **(request.parsed_query_json or {}),
             "manual_question_overrides": overrides,
@@ -676,6 +690,7 @@ class AiRequestLifecycleService:
             request=request,
             parsed_query_json=parsed_query_json,
         )
+        return True
 
     async def resolve_policy_id(
         self,
@@ -1453,8 +1468,71 @@ class AiRequestLifecycleService:
         parsed_query_json = request.parsed_query_json or {}
         selected_conditions = parsed_query_json.get("selected_conditions")
         if isinstance(selected_conditions, dict):
-            return selected_conditions
+            return {
+                key: value
+                for key, value in selected_conditions.items()
+                if key not in {"manual_confirmations"}
+                and value not in (None, "", [])
+            }
         return {}
+
+    def _effective_selected_conditions(
+        self,
+        request_type: str,
+        request: AiRequestModel,
+        selected_conditions: Any,
+        profile_snapshot: dict[str, Any] | None,
+    ) -> dict[str, Any] | None:
+        if not isinstance(selected_conditions, dict):
+            return selected_conditions
+        if (
+            request_type != "eligibility"
+            or request.source_type != POLICY_DETAIL_SOURCE_TYPE
+        ):
+            return selected_conditions
+        if not profile_snapshot:
+            return selected_conditions
+
+        profile_fields = self._profile_condition_fields(profile_snapshot)
+        result: dict[str, Any] = {}
+        for key, value in selected_conditions.items():
+            if value in (None, "", []):
+                continue
+            normalized_key = self._condition_field_alias(key)
+            if key == "manual_confirmations":
+                result[key] = value
+                continue
+            if normalized_key in profile_fields:
+                continue
+            result[key] = value
+        return result or None
+
+    def _profile_condition_fields(self, profile_snapshot: dict[str, Any]) -> set[str]:
+        fields: set[str] = set()
+        for key, value in profile_snapshot.items():
+            if value in (None, "", []):
+                continue
+            fields.add(self._condition_field_alias(key))
+        return fields
+
+    def _condition_field_alias(self, key: Any) -> str:
+        aliases = {
+            "life_stage": "stage",
+            "target_stage": "stage",
+            "child_age": "childAge",
+            "child_age_range": "childAge",
+            "income_level": "income",
+            "income_bracket": "income",
+            "region_code": "region",
+            "special_conditions": "special",
+            "special_flags": "special",
+            "special_condition": "special",
+            "benefit_status": "income_status",
+            "user_age": "age",
+            "household_member_ages": "household_member_age",
+            "household_ages": "household_member_age",
+        }
+        return aliases.get(str(key), str(key))
 
     def _eligibility_criteria(
         self,
