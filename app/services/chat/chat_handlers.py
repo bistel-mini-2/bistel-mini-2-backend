@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from typing import TYPE_CHECKING, Any
 
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
@@ -271,6 +272,114 @@ def _mentioned_recent_policy_targets(
     return targets
 
 
+_COMPARE_QUERY_GENERIC_TOKENS = {
+    "비교",
+    "비교해",
+    "비교해줘",
+    "알려줘",
+    "추천",
+    "정책",
+    "비슷한",
+}
+
+
+def _extract_compare_policy_name_parts(user_content: str) -> list[str]:
+    content = re.sub(
+        r"(비교해\s*줘|비교해줘|비교해|비교|차이(?:점)?|알려\s*줘|알려줘)",
+        " ",
+        user_content,
+    )
+    parts = [
+        re.sub(r"(?:을|를|은|는|이|가)$", "", part.strip(" \t\r\n'\"“”‘’.,!?？"))
+        for part in re.split(r"\s*(?:와|과|이랑|랑|하고|및|,|/)\s*", content)
+    ]
+    return [
+        part
+        for part in parts
+        if len(re.sub(r"[^0-9A-Za-z가-힣]+", "", part)) >= 2
+        and part not in _COMPARE_QUERY_GENERIC_TOKENS
+    ]
+
+
+def _policy_name_match_score(query_part: str, policy_name: str | None) -> int:
+    if not query_part or not policy_name:
+        return 0
+    normalized_query = re.sub(r"[^0-9A-Za-z가-힣]+", "", query_part).lower()
+    normalized_name = re.sub(r"[^0-9A-Za-z가-힣]+", "", policy_name).lower()
+    if not normalized_query or not normalized_name:
+        return 0
+    if _user_mentions_policy_name(query_part, policy_name):
+        return 1000 + min(len(normalized_query), len(normalized_name))
+    if normalized_query in normalized_name:
+        return 700 + len(normalized_query)
+
+    tokens = [
+        re.sub(r"[^0-9A-Za-z가-힣]+", "", token).lower()
+        for token in re.findall(r"[0-9A-Za-z가-힣]+", query_part)
+    ]
+    tokens = [
+        token
+        for token in tokens
+        if len(token) >= 2 and token not in _COMPARE_QUERY_GENERIC_TOKENS
+    ]
+    matched_tokens = [token for token in tokens if token in normalized_name]
+    if not matched_tokens:
+        return 0
+    return sum(len(token) for token in matched_tokens)
+
+
+async def _find_compare_targets_by_policy_names(
+    user_content: str,
+) -> tuple[tuple[str, str | None] | None, tuple[str, str | None] | None]:
+    parts = _extract_compare_policy_name_parts(user_content)
+    if len(parts) < 2:
+        return None, None
+
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            text(
+                """
+                SELECT policy_code AS slug, policy_name
+                FROM policy
+                WHERE is_active = TRUE
+                  AND policy_code IS NOT NULL
+                  AND policy_name IS NOT NULL
+                """
+            )
+        )
+        policies = [dict(row) for row in result.mappings().all()]
+
+    targets: list[tuple[str, str | None]] = []
+    used_slugs: set[str] = set()
+    for part in parts[:3]:
+        scored = sorted(
+            (
+                (
+                    _policy_name_match_score(part, str(policy.get("policy_name") or "")),
+                    policy,
+                )
+                for policy in policies
+                if str(policy.get("slug") or "") not in used_slugs
+            ),
+            key=lambda item: item[0],
+            reverse=True,
+        )
+        if not scored or scored[0][0] <= 0:
+            continue
+        policy = scored[0][1]
+        slug = str(policy.get("slug") or "")
+        if not slug:
+            continue
+        used_slugs.add(slug)
+        targets.append((slug, str(policy.get("policy_name") or "") or None))
+        if len(targets) >= 2:
+            break
+
+    if len(targets) < 2:
+        return None, None
+    return targets[0], targets[1]
+
+
 async def _resolve_single_policy_target(
     state: ChatGraphState,
     *,
@@ -388,6 +497,11 @@ async def _resolve_compare_targets(
         user_content=state["user_content"],
     )
     if first is None or second is None:
+        direct_first, direct_second = await _find_compare_targets_by_policy_names(
+            state["user_content"]
+        )
+        if direct_first is not None and direct_second is not None:
+            return direct_first, direct_second, evidences
         return None, None, []
     return first, second, evidences
 

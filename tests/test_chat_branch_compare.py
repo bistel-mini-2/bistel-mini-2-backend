@@ -7,7 +7,12 @@ from app.ai.nodes.chat.chat_nodes import (
     _pick_compare_targets,
 )
 from app.services import chat_handlers
-from app.services.chat_handlers import handle_compare, extract_policy_links
+from app.services.chat_handlers import (
+    _extract_compare_policy_name_parts,
+    _policy_name_match_score,
+    handle_compare,
+    extract_policy_links,
+)
 
 
 class _FakeRagResult:
@@ -92,6 +97,36 @@ def test_pick_compare_targets_uses_two_rag_policies() -> None:
     assert second == ("WLF2", "B 정책")
 
 
+def test_pick_compare_targets_uses_shortened_policy_names() -> None:
+    first, second = _pick_compare_targets(
+        [
+            {"slug": "WLF1", "policy_name": "농식품바우처 사업"},
+            {"slug": "WLF2", "policy_name": "건강보험 임신·출산 진료비 지원"},
+        ],
+        slot=None,
+        user_content="농식품바우처와 건강보험 임신출산 진료비를 비교해줘",
+    )
+
+    assert first == ("WLF1", "농식품바우처 사업")
+    assert second == ("WLF2", "건강보험 임신·출산 진료비 지원")
+
+
+def test_extract_compare_policy_name_parts_from_user_input() -> None:
+    assert _extract_compare_policy_name_parts(
+        "농식품바우처와 건강보험 임신출산 진료비를 비교해줘"
+    ) == ["농식품바우처", "건강보험 임신출산 진료비"]
+
+
+def test_policy_name_match_score_allows_shortened_official_name() -> None:
+    assert (
+        _policy_name_match_score(
+            "건강보험 임신출산 진료비",
+            "건강보험 임신·출산 진료비 지원",
+        )
+        > 0
+    )
+
+
 def test_branch_compare_runs_comparison_graph(monkeypatch) -> None:
     monkeypatch.setattr(chat_handlers, "AsyncSessionLocal", lambda: _FakeSession())
     comparison_graph = _FakeComparisonGraph()
@@ -115,6 +150,8 @@ def test_branch_compare_runs_comparison_graph(monkeypatch) -> None:
 
     comparison_graph.run.assert_awaited_once()
     assert "두 정책은 지원 대상 조건이 다릅니다" in result["branch_content"]
+    assert "주요 차이" not in result["branch_content"]
+    assert "정책 비교 화면" not in result["branch_content"]
     assert [p["slug"] for p in result["branch_policies"]] == ["WLF1", "WLF2"]
     assert len(result["branch_evidences"]) == 2
 
@@ -126,6 +163,37 @@ def test_branch_compare_runs_comparison_graph(monkeypatch) -> None:
         {"policy_slug": "WLF1", "action_type": "COMPARED"},
         {"policy_slug": "WLF2", "action_type": "COMPARED"},
     ]
+
+
+def test_branch_compare_uses_direct_policy_name_lookup_when_rag_misses(monkeypatch) -> None:
+    monkeypatch.setattr(chat_handlers, "AsyncSessionLocal", lambda: _FakeSession())
+    comparison_graph = _FakeComparisonGraph()
+    rag = _FakeRagService([])
+    monkeypatch.setattr(chat_handlers, "_RAG_SERVICE", rag)
+    monkeypatch.setattr(chat_handlers, "_COMPARISON_GRAPH", comparison_graph)
+    monkeypatch.setattr(
+        chat_handlers,
+        "_find_compare_targets_by_policy_names",
+        AsyncMock(
+            return_value=(
+                ("WLF1", "농식품바우처 사업"),
+                ("WLF2", "건강보험 임신·출산 진료비 지원"),
+            )
+        ),
+    )
+
+    state = {
+        "user_id": 7,
+        "user_content": "농식품바우처와 건강보험 임신출산 진료비를 비교해줘",
+        "history": [],
+        "supervisor_decision": {"intent": "compare", "raw": "{}"},
+    }
+
+    result = asyncio.run(handle_compare(state))
+
+    comparison_graph.run.assert_awaited_once()
+    assert "비교할 정책 2개" not in result["branch_content"]
+    assert "두 정책은 지원 대상 조건이 다릅니다" in result["branch_content"]
 
 
 def test_branch_compare_asks_for_two_targets(monkeypatch) -> None:
