@@ -986,6 +986,44 @@ async def _persist_assistant_outputs(
 _SLOT_MAX_POLICIES = 4
 
 
+def _similar_turn_base_entry(
+    existing: list[dict],
+    branch_policies: list[dict],
+    base_slug: str | None,
+) -> dict | None:
+    """유사 정책 요청 턴에서 최근 맥락 맨 앞에 둘 기준 정책 항목을 만든다.
+
+    policy_summary는 action이 없어 기준 정책이 policy_links로는 안 잡히므로,
+    1) 기존 slot에 있으면 그 항목(직전 action 보존)을, 없으면
+    2) 이번 턴 답변의 기준 정책(branch_policies)에서 자체 policy_id로 구성한다.
+    → "그 원래 정책이랑 비교해줘" 같은 후속 지시가 안정적으로 동작한다.
+    """
+    if base_slug:
+        for entry in existing:
+            if entry.get("slug") == base_slug:
+                return entry
+
+    base_src = None
+    if base_slug:
+        base_src = next(
+            (p for p in branch_policies if p.get("slug") == base_slug), None
+        )
+    if base_src is None and branch_policies:
+        base_src = branch_policies[0]
+    if not base_src or not base_src.get("slug"):
+        return None
+    try:
+        base_pid = int(base_src["policy_id"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    return {
+        "policy_id": base_pid,
+        "slug": base_src["slug"],
+        "policy_name": base_src.get("policy_name") or base_src.get("name") or "",
+        "last_action": "VIEWED",
+    }
+
+
 def _build_next_slot(
     *,
     current_slot: dict,
@@ -1055,15 +1093,13 @@ def _build_next_slot(
     if new_entries:
         existing = list(current_slot.get("recent_policies") or [])
         merged: list[dict] = []
-        # 유사 정책 요청 턴: 기준 정책(resolved)을 먼저 보존한 뒤 유사 후보로 채운다.
+        # 유사 정책 요청 턴: 기준 정책을 맨 앞에 보존한 뒤 유사 후보로 채운다.
         # 유사 정책 3개가 슬롯을 다 차지해 기준 정책이 밀려나는 것을 막는다.
-        if similar_policies and base_slug and base_slug not in seen:
-            base_entry = next(
-                (e for e in existing if e.get("slug") == base_slug), None
-            )
-            if base_entry is not None:
+        if similar_policies:
+            base_entry = _similar_turn_base_entry(existing, branch_policies, base_slug)
+            if base_entry and base_entry.get("slug") not in seen:
                 merged.append(base_entry)
-                seen.add(base_slug)
+                seen.add(base_entry["slug"])
         merged.extend(new_entries)
         for entry in existing:
             slug = entry.get("slug")
