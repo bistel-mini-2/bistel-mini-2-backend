@@ -1,8 +1,10 @@
+import logging
 from typing import Annotated, Any
 
 from fastapi import Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ai.agents.comparison_guide_agent import ComparisonGuideAgent
 from app.common.exceptions import AppException, ErrorCode
 from app.repositories.compare_repository import CompareRepository
 from app.schemas.compare_schema import (
@@ -12,6 +14,9 @@ from app.schemas.compare_schema import (
     CompareRelatedPolicy,
     PolicyCompareResponse,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 class CompareService:
@@ -25,6 +30,9 @@ class CompareService:
         ("조건 신뢰도", "condition_profile_confidence"),
         ("제출 서류", "required_documents"),
     )
+
+    def __init__(self) -> None:
+        self.guide_agent = ComparisonGuideAgent()
 
     async def compare_policies(
         self,
@@ -62,19 +70,35 @@ class CompareService:
             category=policy_a.get("category") or policy_b.get("category"),
             tags=self._combined_tags(policy_a, policy_b),
         )
+        await self._release_db_connection_before_llm(db)
+
+        diff_table = self._diff_table(policy_a, policy_b)
+        fallback_guide = self._selection_guide(policy_a, policy_b)
+        selection_guide = await self.guide_agent.rewrite_selection_guide(
+            policy_a=policy_a,
+            policy_b=policy_b,
+            diff_table=diff_table,
+            fallback_guide=fallback_guide,
+        )
+
         if user_id is not None:
             await CompareRepository.save_compare_history(
                 db,
                 user_id=user_id,
                 policy_a_id=int(policy_a["policy_id"]),
                 policy_b_id=int(policy_b["policy_id"]),
+                policy_a_slug=str(policy_a["slug"]),
+                policy_b_slug=str(policy_b["slug"]),
+                policy_a_name=str(policy_a["name"]),
+                policy_b_name=str(policy_b["name"]),
+                selection_guide=selection_guide,
             )
 
         return PolicyCompareResponse(
             policy_a=self._to_policy_summary(policy_a),
             policy_b=self._to_policy_summary(policy_b),
-            diff_table=self._diff_table(policy_a, policy_b),
-            selection_guide=self._selection_guide(policy_a, policy_b),
+            diff_table=diff_table,
+            selection_guide=selection_guide,
             related_policies=[
                 CompareRelatedPolicy(
                     policy_id=str(row["policy_id"]),
@@ -106,6 +130,7 @@ class CompareService:
                 policy_b_name=str(row["policy_b_name"]),
                 policy_a_slug=str(row["policy_a_slug"]),
                 policy_b_slug=str(row["policy_b_slug"]),
+                selection_guide=row.get("selection_guide"),
                 compared_at=row["compared_at"],
             )
             for row in rows
@@ -152,6 +177,20 @@ class CompareService:
                 message="Policy slug is required",
             )
         return normalized
+
+    @staticmethod
+    async def _release_db_connection_before_llm(db: AsyncSession) -> None:
+        commit = getattr(db, "commit", None)
+        if commit is None:
+            return
+        try:
+            await commit()
+        except Exception:
+            rollback = getattr(db, "rollback", None)
+            if rollback is not None:
+                await rollback()
+            logger.exception("정책 비교 LLM 호출 전 DB 세션 정리 실패")
+            raise
 
     @classmethod
     def _to_policy_summary(cls, row: dict[str, Any]) -> ComparePolicySummary:
@@ -204,28 +243,34 @@ class CompareService:
 
         if not (target_a or source_a or target_b or source_b):
             return (
-                "두 정책 모두 정리된 조건 정보가 부족합니다. "
-                "비교 결과는 공식 안내와 담당 기관 안내를 함께 확인하세요."
+                f"{policy_a.get('name') or '첫 번째 정책'}은 공식 안내에서 핵심 혜택을 먼저 확인해 볼 만하고, "
+                f"{policy_b.get('name') or '두 번째 정책'}은 함께 비교할 대안으로 볼 수 있습니다. "
+                "아직 정리된 조건 정보가 부족하므로 두 정책의 혜택과 신청 준비 부담을 함께 확인해 주세요."
             )
         if target_a != target_b:
             return (
-                "두 정책은 지원 대상 조건이 다릅니다. "
-                "각 정책의 조건 원문과 소득·연령·가구 조건을 먼저 비교한 뒤 "
-                "본인 상황에 더 가까운 정책을 선택하세요."
+                f"{policy_a.get('name') or '첫 번째 정책'}과 {policy_b.get('name') or '두 번째 정책'}은 "
+                "지원하는 대상과 활용 상황이 서로 다릅니다. "
+                "첫 번째 정책은 비교표에 보이는 혜택이 더 필요할 때 먼저 볼 만하고, "
+                "두 번째 정책은 다른 돌봄·지원 상황을 함께 검토할 때 좋은 대안이 될 수 있습니다."
             )
         if source_a != source_b:
             return (
-                "지원 대상 요약은 비슷하지만 세부 조건 원문이 다릅니다. "
-                "제외 조건과 추가 확인 항목을 함께 확인하세요."
+                f"{policy_a.get('name') or '첫 번째 정책'}과 {policy_b.get('name') or '두 번째 정책'}은 대상 요약은 비슷하지만 세부 기준에서 장점이 갈립니다. "
+                "한쪽은 조건이 단순하거나 준비가 쉬울 수 있고, 다른 한쪽은 더 구체적인 상황까지 다룰 수 있습니다. "
+                "비교표의 혜택, 제출 서류, 주의 조건을 함께 보며 지금 활용하기 좋은 정책을 먼저 확인해 보세요."
             )
         if review_a or review_b:
             return (
-                "두 정책 모두 조건 확인이 필요할 수 있습니다. "
-                "수동 검토가 필요한 조건과 원문 근거를 먼저 확인하세요."
+                "두 정책 모두 장점은 있지만 세부 조건 확인이 필요한 부분이 있습니다. "
+                f"{policy_a.get('name') or '첫 번째 정책'}은 조건이 맞으면 활용할 수 있는 혜택을 먼저 볼 수 있고, "
+                f"{policy_b.get('name') or '두 번째 정책'}은 함께 검토할 대안으로 가치가 있습니다. "
+                "실제 신청 전에는 제외 조건과 추가 확인 항목을 공식 안내에서 확인해 주세요."
             )
         return (
-            "두 정책의 핵심 조건이 비슷합니다. 조건 원문과 제출 서류를 함께 "
-            "확인해 준비 부담이 적은 정책부터 진행하세요."
+            "두 정책은 핵심 조건이 비슷해 보이므로 혜택의 성격과 신청 준비 부담이 선택 기준이 됩니다. "
+            f"{policy_a.get('name') or '첫 번째 정책'}은 비교표에 보이는 혜택이 더 필요할 때 먼저 볼 만하고, "
+            f"{policy_b.get('name') or '두 번째 정책'}은 제출 서류나 세부 기준이 더 잘 맞을 때 좋은 대안이 될 수 있습니다."
         )
 
     @classmethod

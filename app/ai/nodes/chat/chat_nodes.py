@@ -150,6 +150,13 @@ class _IntentDecision(BaseModel):
         default=None,
         description="사용자가 직전 거론 정책을 지시어로 가리키는 경우 그 정책의 slug. 그렇지 않으면 null.",
     )
+    similar_policy_requested: bool = Field(
+        default=False,
+        description=(
+            "사용자가 특정 정책과 '비슷한/유사한/대체' 정책을 소개해 달라고 "
+            "명시적으로 요청하면 true. 그 외에는 false."
+        ),
+    )
     extracted_profile: _ExtractedProfile | None = Field(
         default=None,
         description="이번 메시지에서 새로 드러난 사용자 조건. 없으면 null.",

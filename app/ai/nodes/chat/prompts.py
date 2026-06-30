@@ -44,6 +44,14 @@ SUPERVISOR_SYSTEM_TEMPLATE = """당신은 임신·출산·육아 정책 챗봇�
 
 새 정책을 명시했거나 슬롯 정보가 비어있거나 정책과 무관한 메시지면 resolved_policy_slug는 null입니다.
 
+[유사 정책 요청 — similar_policy_requested]
+사용자가 특정 정책을 기준으로 "그와 비슷한/유사한/대체할/같은 종류의 다른 정책"을 알려달라고 하면:
+- intent는 policy_summary로 분류하고(기준 정책을 설명),
+- similar_policy_requested를 true로 설정하세요.
+- 기준 정책이 직전 맥락의 정책이면 resolved_policy_slug도 그 slug로 채웁니다.
+예: "첫만남이용권이랑 비슷한 정책 소개해줘", "이 정책 말고 유사한 거 또 있어?", "비슷한 지원 알려줘"
+단순 정책 설명("부모급여가 뭐야?")이거나 비교/추천 요청이면 similar_policy_requested는 false입니다.
+
 [사용자 조건 추출 — extracted_profile]
 이번 메시지에서 아래 조건이 새로 드러나면 extracted_profile에 **코드값**으로 채우세요(없으면 null).
 한글로 말하면 알맞은 코드로 변환합니다. 추정하지 말고 명시된 것만 추출하세요.
