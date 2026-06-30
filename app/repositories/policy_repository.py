@@ -3,7 +3,7 @@ from typing import Any
 from sqlalchemy import bindparam, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.schemas.policy_schema import PolicySort
+from app.schemas.policy_schema import PolicySearchScope, PolicySort
 
 
 class PolicyRepository:
@@ -52,6 +52,7 @@ class PolicyRepository:
                         '[]'::jsonb
                     ) AS tags,
                     pd.easy_summary AS summary,
+                    pd.target_description,
                     pd.benefit_description AS benefit_summary,
                     p.provider_name AS agency,
                     p.benefit_type,
@@ -79,7 +80,10 @@ class PolicyRepository:
                 LEFT JOIN policy_detail pd ON pd.policy_id = p.policy_id
                 LEFT JOIN policy_condition_profile cp
                     ON cp.policy_id = p.policy_id
-                WHERE p.policy_code = :policy_slug
+                WHERE (
+                    p.policy_code = :policy_slug
+                    OR p.policy_id::text = :policy_slug
+                )
                   AND p.is_active = TRUE
                 """,
             ),
@@ -95,22 +99,26 @@ class PolicyRepository:
         *,
         query: str | None,
         query_pattern: str | None,
+        detail_query_pattern: str | None,
         category: str | None,
         tags: list[str],
         region_code: str | None,
         stage_tags: list[str],
         stage: str | None,
+        search_scope: PolicySearchScope,
         sort: PolicySort,
         page: int,
         size: int,
     ) -> tuple[list[dict[str, Any]], int]:
         where_sql, params = cls._build_filters(
             query_pattern=query_pattern,
+            detail_query_pattern=detail_query_pattern,
             category=category,
             tags=tags,
             region_code=region_code,
             stage_tags=stage_tags,
             stage=stage,
+            search_scope=search_scope,
         )
 
         count_result = await db.execute(
@@ -161,7 +169,9 @@ class PolicyRepository:
                     p.region_code,
                     p.official_url,
                     cp.condition_json AS condition_profile_json,
-                    {cls._build_relevance_sql(query=query)} AS relevance_score
+                    cp.target_summary AS condition_profile_target_summary,
+                    cp.source_text AS condition_profile_source_text,
+                    {cls._build_relevance_sql(query=query, search_scope=search_scope)} AS relevance_score
                 FROM policy p
                 LEFT JOIN policy_detail pd ON pd.policy_id = p.policy_id
                 LEFT JOIN policy_condition_profile cp
@@ -195,12 +205,17 @@ class PolicyRepository:
         }
         match_conditions: list[str] = []
         score_sql = "0"
+        category_match_sql = "FALSE"
+        region_match_sql = "FALSE"
+        stage_match_sql = "FALSE"
+        tag_match_sql = "FALSE"
 
         if category:
             params["category"] = category
             category_condition = "LOWER(p.main_category) = LOWER(:category)"
             match_conditions.append(category_condition)
             score_sql += f" + CASE WHEN {category_condition} THEN 5 ELSE 0 END"
+            category_match_sql = category_condition
 
         region_condition = cls._related_region_condition(
             region_scope,
@@ -210,16 +225,19 @@ class PolicyRepository:
         if region_condition:
             match_conditions.append(region_condition)
             score_sql += f" + CASE WHEN ({region_condition}) THEN 2 ELSE 0 END"
+            region_match_sql = region_condition
 
         stage_condition = cls._related_stage_condition(target_stages, params)
         if stage_condition:
             match_conditions.append(stage_condition)
             score_sql += f" + CASE WHEN ({stage_condition}) THEN 3 ELSE 0 END"
+            stage_match_sql = stage_condition
 
         tag_condition = cls._related_tag_condition(tags, params)
         if tag_condition:
             match_conditions.append(tag_condition)
             score_sql += f" + CASE WHEN ({tag_condition}) THEN 1 ELSE 0 END"
+            tag_match_sql = tag_condition
 
         result = await db.execute(
             text(
@@ -239,6 +257,7 @@ class PolicyRepository:
                         '[]'::jsonb
                     ) AS tags,
                     pd.easy_summary AS summary,
+                    pd.target_description,
                     pd.benefit_description AS benefit_summary,
                     p.provider_name AS agency,
                     p.benefit_type,
@@ -250,7 +269,17 @@ class PolicyRepository:
                     p.region_code,
                     p.official_url,
                     cp.condition_json AS condition_profile_json,
-                    ({score_sql}) AS related_score
+                    cp.target_summary AS condition_profile_target_summary,
+                    cp.source_text AS condition_profile_source_text,
+                    ({score_sql}) AS related_score,
+                    CASE WHEN ({category_match_sql}) THEN TRUE ELSE FALSE END
+                        AS related_match_category,
+                    CASE WHEN ({stage_match_sql}) THEN TRUE ELSE FALSE END
+                        AS related_match_stage,
+                    CASE WHEN ({region_match_sql}) THEN TRUE ELSE FALSE END
+                        AS related_match_region,
+                    CASE WHEN ({tag_match_sql}) THEN TRUE ELSE FALSE END
+                        AS related_match_tag
                 FROM policy p
                 LEFT JOIN policy_detail pd ON pd.policy_id = p.policy_id
                 LEFT JOIN policy_condition_profile cp
@@ -375,13 +404,21 @@ class PolicyRepository:
         region_code: str | None,
         stage_tags: list[str],
         stage: str | None,
+        search_scope: PolicySearchScope = PolicySearchScope.NAME,
+        detail_query_pattern: str | None = None,
     ) -> tuple[str, dict[str, Any]]:
         conditions = ["p.is_active = TRUE"]
         params: dict[str, Any] = {}
 
         if query_pattern:
-            conditions.append(cls._search_condition())
+            conditions.append(cls._search_condition(search_scope, "query_pattern"))
             params["query_pattern"] = query_pattern
+
+        if detail_query_pattern:
+            conditions.append(
+                cls._search_condition(PolicySearchScope.ALL, "detail_query_pattern")
+            )
+            params["detail_query_pattern"] = detail_query_pattern
 
         if category:
             conditions.append("LOWER(p.main_category) = LOWER(:category)")
@@ -459,24 +496,30 @@ class PolicyRepository:
         return " AND ".join(conditions), params
 
     @staticmethod
-    def _search_condition() -> str:
-        return """
+    def _search_condition(
+        search_scope: PolicySearchScope,
+        param_name: str,
+    ) -> str:
+        if search_scope != PolicySearchScope.ALL:
+            return f"p.policy_name ILIKE :{param_name} ESCAPE '\\'"
+
+        return f"""
             (
-                p.policy_name ILIKE :query_pattern ESCAPE '\\'
-                OR p.main_category ILIKE :query_pattern ESCAPE '\\'
-                OR p.sub_category ILIKE :query_pattern ESCAPE '\\'
-                OR pd.easy_summary ILIKE :query_pattern ESCAPE '\\'
-                OR pd.target_description ILIKE :query_pattern ESCAPE '\\'
-                OR pd.benefit_description ILIKE :query_pattern ESCAPE '\\'
-                OR pd.application_method ILIKE :query_pattern ESCAPE '\\'
-                OR cp.target_summary ILIKE :query_pattern ESCAPE '\\'
-                OR cp.source_text ILIKE :query_pattern ESCAPE '\\'
+                p.policy_name ILIKE :{param_name} ESCAPE '\\'
+                OR p.main_category ILIKE :{param_name} ESCAPE '\\'
+                OR p.sub_category ILIKE :{param_name} ESCAPE '\\'
+                OR pd.easy_summary ILIKE :{param_name} ESCAPE '\\'
+                OR pd.target_description ILIKE :{param_name} ESCAPE '\\'
+                OR pd.benefit_description ILIKE :{param_name} ESCAPE '\\'
+                OR pd.application_method ILIKE :{param_name} ESCAPE '\\'
+                OR cp.target_summary ILIKE :{param_name} ESCAPE '\\'
+                OR cp.source_text ILIKE :{param_name} ESCAPE '\\'
                 OR EXISTS (
                     SELECT 1
                     FROM policy_tag search_tag
                     WHERE search_tag.policy_id = p.policy_id
                       AND search_tag.tag_name
-                          ILIKE :query_pattern ESCAPE '\\'
+                          ILIKE :{param_name} ESCAPE '\\'
                 )
             )
         """
@@ -583,9 +626,18 @@ class PolicyRepository:
         """
 
     @staticmethod
-    def _build_relevance_sql(*, query: str | None) -> str:
+    def _build_relevance_sql(
+        *,
+        query: str | None,
+        search_scope: PolicySearchScope = PolicySearchScope.NAME,
+    ) -> str:
         if not query:
             return "0"
+        if search_scope != PolicySearchScope.ALL:
+            return (
+                "CASE WHEN LOWER(p.policy_name) = LOWER(:query_exact) THEN 400 ELSE 0 END + "
+                "CASE WHEN p.policy_name ILIKE :query_pattern ESCAPE '\\' THEN 200 ELSE 0 END"
+            )
         return (
             "CASE WHEN LOWER(p.policy_name) = LOWER(:query_exact) THEN 400 ELSE 0 END + "
             "CASE WHEN p.policy_name ILIKE :query_pattern ESCAPE '\\' THEN 200 ELSE 0 END + "

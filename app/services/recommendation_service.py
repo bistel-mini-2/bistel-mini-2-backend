@@ -18,6 +18,11 @@ from app.services.recommendation_result_normalizer import (
     normalize_card_evidences,
     normalize_card_text,
 )
+from app.services.policy_display_service import (
+    PolicyDisplayAgent,
+    assessment_status_display,
+    user_status_display,
+)
 
 
 PolicyChunkSearcher = Callable[..., Awaitable[list[EvidenceChunk]]]
@@ -183,15 +188,39 @@ class RecommendationService:
             limit=220,
             max_sentences=2,
         )
+        display_row = {
+            "target_description": (
+                candidate.detail.target_description if candidate.detail else None
+            ),
+            "benefit_description": (
+                candidate.detail.benefit_description if candidate.detail else None
+            ),
+            "application_method": (
+                candidate.detail.application_method if candidate.detail else None
+            ),
+            "application_status": None,
+            "application_period_text": (
+                candidate.detail.application_period_text if candidate.detail else None
+            ),
+            "contact": None,
+            "official_url": None,
+            "caution": candidate.detail.caution if candidate.detail else None,
+        }
+        target_summary = PolicyDisplayAgent.summarize_target(display_row)
+        benefit_summary_display = PolicyDisplayAgent.summarize_benefit(display_row)
+        application_guide = PolicyDisplayAgent.build_application_guide(display_row)
         item = {
             "policy_id": str(candidate.policy.policy_id),
             "policy_code": candidate.policy.policy_code,
             "slug": candidate.policy.policy_code,
             "policy_name": candidate.policy.policy_name,
             "summary": self._summary(candidate.detail, candidate.policy),
-            "benefit_summary": self._short_text(
+            "benefit_summary": benefit_summary_display
+            or self._short_text(
                 candidate.detail.benefit_description if candidate.detail else None
             ),
+            "benefit_summary_display": benefit_summary_display,
+            "target_summary": target_summary,
             "target_description": self._short_text(
                 candidate.detail.target_description if candidate.detail else None
             ),
@@ -201,6 +230,7 @@ class RecommendationService:
             "application_method": self._short_text(
                 candidate.detail.application_method if candidate.detail else None
             ),
+            "application_summary": application_guide.summary,
             "match_score": match_score,
             "retrieval_score": candidate.retrieval_score,
             # 표시용 적합도(판정 기반 신뢰도). assessment가 있으면 아래에서 정직한 값으로
@@ -224,6 +254,12 @@ class RecommendationService:
                 {
                     "user_status": assessment.user_status.value,
                     "assessment_status": assessment.assessment_status.value,
+                    "user_status_display": user_status_display(
+                        assessment.user_status.value
+                    ),
+                    "assessment_status_display": assessment_status_display(
+                        assessment.assessment_status.value
+                    ),
                     "confidence_score": assessment.confidence_score,
                     "condition_match_score": assessment.confidence_score,
                     "missing_information": assessment.missing_information,

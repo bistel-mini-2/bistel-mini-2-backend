@@ -12,6 +12,7 @@ from app.db.session import AsyncSessionLocal
 from app.schemas.policy_schema import (
     PolicyDetailResponse,
     PolicyListItemResponse,
+    PolicySearchScope,
     PolicySort,
 )
 from app.schemas.policy_summary_schema import PolicySummaryResponse
@@ -52,6 +53,12 @@ async def get_policy_list(
     service: PolicyServiceDep,
     query: Annotated[str | None, Query(max_length=200)] = None,
     q: Annotated[str | None, Query(max_length=200)] = None,
+    detail_q: Annotated[str | None, Query(max_length=200)] = None,
+    search_scope: Annotated[PolicySearchScope | None, Query()] = None,
+    search_scope_alias: Annotated[
+        PolicySearchScope | None,
+        Query(alias="searchScope"),
+    ] = None,
     category: Annotated[str | None, Query(max_length=100)] = None,
     tags: Annotated[list[str] | None, Query()] = None,
     region_code: Annotated[RegionCode | None, Query()] = None,
@@ -64,6 +71,7 @@ async def get_policy_list(
     items, total = await service.get_policy_list(
         db,
         query=query if query is not None else q,
+        detail_query=detail_q,
         category=category,
         tags=tags,
         region_code=(
@@ -75,6 +83,7 @@ async def get_policy_list(
         sort=sort,
         page=page,
         size=size,
+        search_scope=search_scope or search_scope_alias or PolicySearchScope.NAME,
     )
     return paginated_response(
         data=items,

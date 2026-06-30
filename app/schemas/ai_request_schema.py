@@ -124,8 +124,12 @@ class RecommendationResultItem(BaseModel):
     policy_id: str
     policy_name: str
     summary: str
+    target_summary: str | None = None
+    benefit_summary: str | None = None
+    benefit_summary_display: str | None = None
     target_description: str | None = None
     benefit_description: str | None = None
+    application_summary: str | None = None
     match_score: float | None = None
     raw_match_score: float | None = None
     # priority_score는 순위 정렬용 합성 점수(표시용 아님).
@@ -140,6 +144,8 @@ class RecommendationResultItem(BaseModel):
     # 최종 사용자 노출 판정. 카드 상태 배지는 user_status를 우선 사용한다.
     user_status: str | None = None
     assessment_status: str | None = None
+    user_status_display: str | None = None
+    assessment_status_display: str | None = None
     # 카드 본문/요약 사유.
     reason: str | None = None
     reason_summary: str | None = None
@@ -197,6 +203,8 @@ class EligibilityResultResponse(BaseModel):
     slug: str
     policy_name: str
     user_status: str | None = None
+    user_status_display: str | None = None
+    status_display: str | None = None
     banner_level: Literal["high", "mid", "low"] | None = None
     summary: str | None = None
     criteria: list[EligibilityCriteriaItem] = Field(default_factory=list)

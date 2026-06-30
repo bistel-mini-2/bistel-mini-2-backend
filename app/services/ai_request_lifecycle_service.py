@@ -51,6 +51,10 @@ from app.services.policy_assessment_service import (
     ASSESSMENT_TYPE_ELIGIBILITY,
     PolicyAssessmentService,
 )
+from app.services.policy_display_service import (
+    assessment_status_display,
+    user_status_display,
+)
 from app.services.policy_rule_filter_service import PolicyRuleFilterService
 from app.services.recommendation_result_normalizer import (
     normalize_recommendation_result_item,
@@ -1080,14 +1084,14 @@ class AiRequestLifecycleService:
             return EligibilityResultResponse(
                 request_id=str(request.request_id),
                 status=request_status,
-                policy_id=str(request.policy_id),
-                slug=str(policy["policy_code"]),
-                policy_name=str(policy["policy_name"]),
-                questions=parsed_questions,
-                follow_up_questions=parsed_questions,
-                input_summary=input_summary,
-                error_message=self._safe_error_message(request, request_status),
-            )
+            policy_id=str(request.policy_id),
+            slug=str(policy["policy_code"]),
+            policy_name=str(policy["policy_name"]),
+            questions=parsed_questions,
+            follow_up_questions=parsed_questions,
+            input_summary=input_summary,
+            error_message=self._safe_error_message(request, request_status),
+        )
 
         assessment_status = AssessmentStatus(str(assessment["assessment_status"]))
         user_status = map_assessment_to_user_status(assessment_status)
@@ -1154,6 +1158,8 @@ class AiRequestLifecycleService:
             slug=str(policy["policy_code"]),
             policy_name=str(policy["policy_name"]),
             user_status=user_status.value,
+            user_status_display=user_status_display(user_status.value),
+            status_display=user_status_display(user_status.value),
             banner_level=self._banner_level(user_status),
             summary=assessment.get("reason_summary"),
             criteria=self._eligibility_criteria(
@@ -1269,6 +1275,10 @@ class AiRequestLifecycleService:
                     item.get("summary") or item.get("benefit_summary") or ""
                 ),
                 "match_score": self._to_float_or_none(item.get("match_score")),
+                "user_status_display": item.get("user_status_display")
+                or user_status_display(item.get("user_status")),
+                "assessment_status_display": item.get("assessment_status_display")
+                or assessment_status_display(item.get("assessment_status")),
                 "evidence": evidences,
                 "evidences": evidences,
                 "raw_evidences": list(item.get("raw_evidences") or []),
