@@ -788,6 +788,39 @@ async def _run_follow_up_eligibility(
         return None
 
 
+async def _attach_similar_policies(db: AsyncSession, state: dict[str, Any]) -> None:
+    """답변의 기준 정책으로 유사 정책 3건을 구해 assistant_payload에 덧붙인다.
+
+    명시 요청(supervisor_decision.similar_policy_requested)일 때만 호출된다.
+    실패해도 조용히 넘어가 답변 자체는 깨지지 않게 한다.
+    """
+    payload = state.get("assistant_payload") or {}
+    primary_slug = next(
+        (str(p["slug"]) for p in payload.get("policies", []) if p.get("slug")),
+        None,
+    )
+    if not primary_slug:
+        return
+    try:
+        from app.services.similar_policy_service import SimilarPolicyService
+
+        result = await SimilarPolicyService().find_similar(
+            db, policy_slug=primary_slug, limit=3
+        )
+        payload["similar_policies"] = [
+            {
+                "policy_id": str(item.policy_id),
+                "slug": item.slug,
+                "name": item.name,
+                "category": item.category,
+                "similarity_reason": item.similarity_reason,
+            }
+            for item in result.items
+        ]
+    except Exception as exc:
+        logger.warning("similar policy attach failed for %s: %s", primary_slug, exc)
+
+
 async def _run_chat(
     *,
     db: AsyncSession,
@@ -862,6 +895,9 @@ async def _run_chat(
 
         state.update(branch_result)
         state.update(await build_assistant_payload(state))
+        # 사용자가 '유사 정책'을 명시 요청했을 때만 답변 payload에 덧붙인다.
+        if decision.get("similar_policy_requested"):
+            await _attach_similar_policies(db, state)
         return {
             **(preseed_result or {}),
             **state,
@@ -1064,6 +1100,7 @@ def _build_structured_json(decision: dict, payload: dict) -> dict:
         "sources": payload.get("sources", []),
         "policies": payload.get("policies", []),
         "actions": payload.get("actions", []),
+        "similar_policies": payload.get("similar_policies", []),
         "apply_card": payload.get("apply_card"),
         "disclaimer": payload.get("disclaimer"),
         "slot_request": payload.get("slot_request"),
@@ -1121,7 +1158,11 @@ def _build_assistant_response(
     }
     policies = [
         AssistantMessagePolicy(
-            policy_id=str(slug_to_id[p["slug"]]) if p.get("slug") in slug_to_id else p["policy_id"],
+            policy_id=(
+                str(slug_to_id[p["slug"]])
+                if p.get("slug") in slug_to_id
+                else str(p["policy_id"])
+            ),
             slug=p["slug"],
             policy_name=p["policy_name"],
             summary=p.get("summary"),
@@ -1165,6 +1206,7 @@ def _build_assistant_response(
         policies=policies,
         actions=payload.get("actions", []),
         evidences=evidences,
+        similar_policies=payload.get("similar_policies", []),
         apply_card=apply_card,
         disclaimer=payload.get("disclaimer"),
         slot_request=payload.get("slot_request"),
@@ -1234,7 +1276,13 @@ def _to_message_item(
         content=message.content,
         sequence_no=message.sequence_no,
         created_at=message.created_at,
-        policies=[AssistantMessagePolicy(**p) for p in resolved_policies],
+        # DB 정책 행은 policy_id가 정수라 str로 강제 변환(스키마는 str 요구).
+        policies=[
+            AssistantMessagePolicy(
+                **{**p, "policy_id": str(p.get("policy_id", ""))}
+            )
+            for p in resolved_policies
+        ],
         evidences=[AssistantMessageEvidence(**e) for e in evidences],
         **meta,
     )
@@ -1252,6 +1300,7 @@ def _unwrap_message_meta(structured_json: dict | None) -> dict:
         "sources": structured_json.get("sources", []),
         "policies": structured_json.get("policies", []),
         "actions": structured_json.get("actions", []),
+        "similar_policies": structured_json.get("similar_policies", []),
         "apply_card": apply_card,
         "disclaimer": structured_json.get("disclaimer"),
         "slot_request": structured_json.get("slot_request"),

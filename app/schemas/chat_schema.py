@@ -111,6 +111,16 @@ class ApplyCard(BaseModel):
     caution: str | None = None
 
 
+class SimilarPolicyChatItem(BaseModel):
+    """명시적 '유사 정책' 요청 답변에 함께 내려보내는 비슷한 정책 1건."""
+
+    policy_id: str
+    slug: str
+    name: str
+    category: str | None = None
+    similarity_reason: str | None = None
+
+
 class AssistantMessage(BaseModel):
     chat_message_id: str
     content: str
@@ -121,6 +131,7 @@ class AssistantMessage(BaseModel):
     policies: list[AssistantMessagePolicy] = Field(default_factory=list)
     actions: list[str] = Field(default_factory=list)
     evidences: list[AssistantMessageEvidence] = Field(default_factory=list)
+    similar_policies: list[SimilarPolicyChatItem] = Field(default_factory=list)
     apply_card: ApplyCard | None = None
     disclaimer: bool | None = None
     slot_request: dict | None = None
@@ -152,6 +163,7 @@ class ChatMessageItem(BaseModel):
     policies: list[AssistantMessagePolicy] = Field(default_factory=list)
     actions: list[str] = Field(default_factory=list)
     evidences: list[AssistantMessageEvidence] = Field(default_factory=list)
+    similar_policies: list[SimilarPolicyChatItem] = Field(default_factory=list)
     apply_card: ApplyCard | None = None
     disclaimer: bool | None = None
     slot_request: dict | None = None
