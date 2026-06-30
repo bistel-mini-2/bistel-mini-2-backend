@@ -450,6 +450,7 @@ async def classify_intent(
         candidate = decision.resolved_policy_slug
         if candidate and _find_slot_policy_by_slug(slot_state, candidate):
             resolved_slug = candidate
+        similar_requested = bool(decision.similar_policy_requested)
         if decision.extracted_profile is not None:
             extracted = decision.extracted_profile.model_dump(exclude_none=True)
     except Exception as exc:
@@ -532,6 +533,7 @@ async def classify_intent(
             "intent": intent,
             "raw": raw,
             "resolved_policy_slug": resolved_slug,
+            "similar_policy_requested": similar_requested,
         },
     }
 
