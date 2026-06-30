@@ -31,6 +31,7 @@ class EligibilityRequestCreate(BaseModel):
     policy_id: int | str
     source_type: str = "POLICY_DETAIL"
     source_ref_id: str | None = None
+    chat_session_id: int | str | None = None
     raw_query: str | None = None
     selected_conditions: dict[str, Any] | None = None
     user_conditions: dict[str, Any] | None = None

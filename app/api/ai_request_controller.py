@@ -17,7 +17,9 @@ from app.schemas.ai_request_schema import (
     RecommendationPollingResponse,
     RecommendationRequestCreate,
 )
+from app.schemas.ai_contract import RequestStatus
 from app.services.ai_request_lifecycle_service import AiRequestLifecycleService
+from app.services.chat.chat_service import ChatService
 
 
 # AI 단계(파싱·판정·리랭크)가 충분히 생각할 수 있도록 넉넉하게 둔다.
@@ -61,6 +63,18 @@ def _eligibility_result_meta(
         "request_id": response.request_id,
         "follow_up_required": bool(response.follow_up_questions),
     }
+
+
+def _eligibility_source_ref(
+    chat_session_id: int | str | None,
+    source_ref_id: str | None,
+) -> str | None:
+    if not chat_session_id:
+        return source_ref_id
+    chat_ref = f"chat_session:{chat_session_id}"
+    if source_ref_id:
+        return f"{chat_ref};source:{source_ref_id}"
+    return chat_ref
 
 
 async def process_ai_condition_request(request_type: str, request_id: int) -> None:
@@ -246,12 +260,21 @@ async def create_eligibility_request(
     current_user: CurrentUserDep,
 ) -> JSONResponse:
     service = AiRequestLifecycleService()
+    if payload.chat_session_id is not None:
+        await ChatService.ensure_owned_session(
+            db,
+            user_id=current_user.user_id,
+            chat_session_id=int(payload.chat_session_id),
+        )
     snapshot = await service.create_eligibility_request(
         db=db,
         user_id=current_user.user_id,
         policy_identifier=payload.policy_id,
         source_type=payload.source_type,
-        source_ref_id=payload.source_ref_id,
+        source_ref_id=_eligibility_source_ref(
+            payload.chat_session_id,
+            payload.source_ref_id,
+        ),
         raw_query=payload.raw_query,
         selected_conditions=payload.selected_conditions,
     )
@@ -285,4 +308,26 @@ async def get_eligibility_request(
         request_id=request_id,
         user_id=current_user.user_id,
     )
+    if response.status not in {RequestStatus.READY, RequestStatus.PROCESSING}:
+        try:
+            request = await service.repository.find_by_id(
+                db,
+                request_type="eligibility",
+                request_id=request_id,
+            )
+            if request is not None:
+                await ChatService.persist_eligibility_result_message(
+                    db,
+                    user_id=current_user.user_id,
+                    request=request,
+                    result_json=response.model_dump(mode="json"),
+                )
+                await db.commit()
+        except Exception:
+            if hasattr(db, "rollback"):
+                await db.rollback()
+            logger.exception(
+                "Failed to persist eligibility result to chat session: request_id=%s",
+                request_id,
+            )
     return success_response(data=response, meta=_eligibility_result_meta(response))
