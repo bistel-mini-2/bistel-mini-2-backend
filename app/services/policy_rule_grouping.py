@@ -333,6 +333,27 @@ def partition_or_groups(
     return flat, or_groups
 
 
+def is_income_status_denied(condition_value: Any) -> bool:
+    """사용자가 수급 자격을 명시적으로 부정한 경우(income_status='none')."""
+    if isinstance(condition_value, (list, tuple, set)):
+        return any(str(v).strip().lower() == "none" for v in condition_value)
+    return str(condition_value).strip().lower() == "none"
+
+
+def is_denied_income_mismatch(
+    field_name: str, condition_value: Any, rule_value: Any
+) -> bool:
+    """수급 자격을 '없다'고 명시(income_status='none')했는데 정책이 특정 수급 자격을
+    요구(rule_value에 none 미포함)하면, hard filter 여부와 무관하게 명확한 미충족이다.
+
+    flat rule 경로(candidate/filter)와 OR 그룹 평가(evaluate_member)가 같은 판정을
+    공유하도록 한 곳에 둔다.
+    """
+    if field_name != "income_status" or not is_income_status_denied(condition_value):
+        return False
+    return "none" not in {str(v).strip().lower() for v in rule_values(rule_value)}
+
+
 def evaluate_member(
     rule: dict[str, Any],
     condition: dict[str, Any],
@@ -352,6 +373,10 @@ def evaluate_member(
             return VERDICT_MISSING, condition_value, rule_value
         # soft 조건 + 입력 없음 = 불확정(평가 불가). soft 미일치(SKIP)와 구분한다.
         return VERDICT_INDETERMINATE, condition_value, rule_value
+
+    # 수급 자격 명시적 부정 → 수급-필요 정책은 hard filter 아니어도 확정 미충족.
+    if is_denied_income_mismatch(field_name, condition_value, rule_value):
+        return VERDICT_FAIL, condition_value, rule_value
 
     matched = rule_matches_fn(operator, condition_value, rule_value)
     if matched is True:

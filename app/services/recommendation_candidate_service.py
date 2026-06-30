@@ -22,6 +22,7 @@ from app.services.policy_rule_grouping import (
     OUTCOME_MATCH,
     VERDICT_MATCH,
     evaluate_or_group,
+    is_denied_income_mismatch,
     partition_or_groups,
     rule_matches,
     rule_values,
@@ -940,6 +941,21 @@ class RecommendationCandidateService:
                             **self._rule_meta(rule),
                         }
                     )
+                continue
+            # 사용자가 수급 자격이 "없다"고 명시(income_status="none")했는데, 정책이
+            # 특정 수급 자격을 요구하면 hard filter가 아니어도 명확한 미충족으로 제외한다.
+            # ("차상위 확인" 같은 모순 안내도 막는다.) 공유 술어로 OR 그룹과 동일 판정.
+            if is_denied_income_mismatch(field_name, condition_value, rule_value):
+                excluded_rules.append(
+                    {
+                        "field": field_name,
+                        "condition_value": condition_value,
+                        "policy_value": rule_value,
+                        "result": "income_status_denied",
+                        "reason": "기초생활·차상위 등 수급 자격이 없다고 하셔서 이 정책의 지원 대상이 아닙니다.",
+                        **self._rule_meta(rule),
+                    }
+                )
                 continue
             match_result = self._rule_matches(operator, condition_value, rule_value)
             if match_result is True:
