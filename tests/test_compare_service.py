@@ -162,6 +162,45 @@ def test_compare_policies_uses_guide_agent(monkeypatch) -> None:
     assert response.selection_guide.startswith("A 정책은 현재 조건")
 
 
+def test_compare_policies_releases_db_before_guide_agent(monkeypatch) -> None:
+    policy_a = make_policy(policy_id=1, slug="WLF00000001", name="A 정책")
+    policy_b = make_policy(policy_id=2, slug="WLF00000002", name="B 정책")
+    events: list[str] = []
+
+    class FakeDb:
+        async def commit(self) -> None:
+            events.append("commit")
+
+    class FakeGuideAgent:
+        async def rewrite_selection_guide(self, **kwargs):
+            events.append("guide")
+            return kwargs["fallback_guide"]
+
+    monkeypatch.setattr(
+        CompareRepository,
+        "find_policies_by_slugs",
+        AsyncMock(return_value=[policy_a, policy_b]),
+    )
+    monkeypatch.setattr(
+        CompareRepository,
+        "find_related_policies",
+        AsyncMock(return_value=[]),
+    )
+
+    service = CompareService()
+    service.guide_agent = FakeGuideAgent()
+
+    asyncio.run(
+        service.compare_policies(
+            FakeDb(),  # type: ignore[arg-type]
+            slug_a="WLF00000001",
+            slug_b="WLF00000002",
+        )
+    )
+
+    assert events == ["commit", "guide"]
+
+
 def test_to_policy_summary_keeps_benefit_meaning() -> None:
     policy = make_policy(policy_id=1, slug="WLF00000001", name="A 정책")
 

@@ -23,7 +23,7 @@ class ComparisonGuideAgent:
     def __init__(
         self,
         model: str = "gpt-4o-mini",
-        timeout_seconds: float = 25,
+        timeout_seconds: float = 10,
     ) -> None:
         self.model = model
         self.timeout_seconds = timeout_seconds
@@ -66,12 +66,12 @@ class ComparisonGuideAgent:
                             json.dumps(
                                 self._json_safe(
                                     {
-                                    "policy_a": self._policy_payload(policy_a),
-                                    "policy_b": self._policy_payload(policy_b),
-                                    "diff_table": [
-                                        item.model_dump() for item in diff_table
-                                    ],
-                                    "fallback_guide": fallback_guide,
+                                        "policy_a": self._policy_payload(policy_a),
+                                        "policy_b": self._policy_payload(policy_b),
+                                        "diff_table": [
+                                            item.model_dump() for item in diff_table
+                                        ],
+                                        "fallback_guide": fallback_guide,
                                     }
                                 ),
                                 ensure_ascii=False,
@@ -111,7 +111,6 @@ class ComparisonGuideAgent:
             "review_required": policy.get("condition_profile_review_required"),
             "confidence": policy.get("condition_profile_confidence"),
             "required_documents": policy.get("required_documents") or [],
-            "condition_json": policy.get("condition_profile_json") or {},
         }
 
     def _json_safe(self, value: Any) -> Any:

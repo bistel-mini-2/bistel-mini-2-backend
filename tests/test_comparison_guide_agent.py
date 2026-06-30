@@ -34,3 +34,17 @@ def test_comparison_guide_agent_json_safe_converts_decimal() -> None:
 
     assert payload == {"confidence": 0.92, "nested": [{"score": 1.5}]}
     json.dumps(payload, ensure_ascii=False)
+
+
+def test_comparison_guide_agent_policy_payload_excludes_condition_json() -> None:
+    payload = ComparisonGuideAgent()._policy_payload(
+        {
+            "name": "A 정책",
+            "condition_profile_target_summary": "대상 요약",
+            "condition_profile_json": {"condition_tree": {"operator": "AND"}},
+        }
+    )
+
+    assert payload["name"] == "A 정책"
+    assert payload["target_summary"] == "대상 요약"
+    assert "condition_json" not in payload

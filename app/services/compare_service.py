@@ -1,3 +1,4 @@
+import logging
 from typing import Annotated, Any
 
 from fastapi import Depends, status
@@ -13,6 +14,9 @@ from app.schemas.compare_schema import (
     CompareRelatedPolicy,
     PolicyCompareResponse,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 class CompareService:
@@ -66,6 +70,8 @@ class CompareService:
             category=policy_a.get("category") or policy_b.get("category"),
             tags=self._combined_tags(policy_a, policy_b),
         )
+        await self._release_db_connection_before_llm(db)
+
         diff_table = self._diff_table(policy_a, policy_b)
         fallback_guide = self._selection_guide(policy_a, policy_b)
         selection_guide = await self.guide_agent.rewrite_selection_guide(
@@ -171,6 +177,20 @@ class CompareService:
                 message="Policy slug is required",
             )
         return normalized
+
+    @staticmethod
+    async def _release_db_connection_before_llm(db: AsyncSession) -> None:
+        commit = getattr(db, "commit", None)
+        if commit is None:
+            return
+        try:
+            await commit()
+        except Exception:
+            rollback = getattr(db, "rollback", None)
+            if rollback is not None:
+                await rollback()
+            logger.exception("정책 비교 LLM 호출 전 DB 세션 정리 실패")
+            raise
 
     @classmethod
     def _to_policy_summary(cls, row: dict[str, Any]) -> ComparePolicySummary:
