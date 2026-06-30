@@ -60,6 +60,7 @@ from app.services.recommendation_service import RecommendationService
 
 
 RECOMMENDATION_RESULT_SOURCE_TYPE = "RECOMMENDATION_RESULT"
+POLICY_DETAIL_SOURCE_TYPE = "POLICY_DETAIL"
 AI_REQUEST_USER_ERROR_MESSAGE = (
     "분석 처리 중 일시적인 문제가 발생했어요. 잠시 후 다시 시도해 주세요."
 )
