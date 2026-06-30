@@ -92,7 +92,7 @@ class EligibilityEvidenceAgent:
             from langchain_openai import ChatOpenAI
 
             structured_llm = ChatOpenAI(
-                model="gpt-4o-mini",
+                model="gpt-5.4-mini",
                 temperature=0,
                 max_completion_tokens=1500,
                 timeout=timeout_seconds,

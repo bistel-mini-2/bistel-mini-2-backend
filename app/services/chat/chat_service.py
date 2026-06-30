@@ -666,7 +666,7 @@ class _FollowUpIntent(BaseModel):
 
 
 def _make_follow_up_llm() -> ChatOpenAI:
-    kwargs: dict = {"model": "gpt-4o-mini", "temperature": 0}
+    kwargs: dict = {"model": "gpt-5.4-mini", "temperature": 0}
     if settings.openai_api_key:
         kwargs["api_key"] = settings.openai_api_key
     return ChatOpenAI(**kwargs)
