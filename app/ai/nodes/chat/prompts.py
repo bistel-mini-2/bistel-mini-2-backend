@@ -115,6 +115,23 @@ BRANCH_SYSTEM_PROMPTS: dict[Intent, str] = {
     for intent, prompt in BASE_BRANCH_PROMPTS.items()
 }
 
+CLARIFICATION_PROMPTS: dict[str, str] = {
+    "compare": (
+        "사용자가 정책 비교를 요청했지만 비교 대상 정책을 특정하지 못했습니다. "
+        "대화 맥락을 고려해 어떤 정책 2개를 비교하길 원하는지 자연스럽게 되물어보세요. "
+        "예시 질문 형식을 1개 제안해도 좋습니다. 한국어 1~2문장."
+    ),
+    "eligibility": (
+        "사용자가 지원 가능 여부를 물었지만 대상 정책을 특정하지 못했습니다. "
+        "대화 맥락을 고려해 어떤 정책인지 자연스럽게 되물어보세요. 한국어 1~2문장."
+    ),
+    "apply": (
+        "사용자가 신청 방법을 물었지만 대상 정책을 특정하지 못했습니다. "
+        "대화 맥락을 고려해 어떤 정책인지 자연스럽게 되물어보세요. 한국어 1~2문장."
+    ),
+}
+
+
 ASSERTIVE_PHRASES: tuple[str, ...] = (
     "받을 수 있습니다",
     "받을 수 있어요",

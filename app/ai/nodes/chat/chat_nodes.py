@@ -41,8 +41,9 @@ from app.ai.nodes.chat.profile_helpers import (
 from app.ai.nodes.chat.prompts import (
     APPLICATION_PERIOD_CONTEXT_RULES as _APPLICATION_PERIOD_CONTEXT_RULES,
     ASSERTIVE_PHRASES as _ASSERTIVE_PHRASES,
-    COMMON_SAFETY_RULES as _COMMON_SAFETY_RULES,
     BRANCH_SYSTEM_PROMPTS as _BRANCH_SYSTEM_PROMPTS,
+    CLARIFICATION_PROMPTS as _CLARIFICATION_PROMPTS,
+    COMMON_SAFETY_RULES as _COMMON_SAFETY_RULES,
 )
 from app.ai.nodes.chat.constants import (
     APPLY_CHECKLIST_PREVIEW as _APPLY_CHECKLIST_PREVIEW,
@@ -531,6 +532,22 @@ async def _generate_branch_answer(
     except Exception:
         logger.exception("Branch answer generation failed; using fallback")
         return "죄송합니다. 답변을 생성하는 중 문제가 발생했어요. 잠시 후 다시 시도해 주세요."
+
+
+async def _generate_clarification_answer(intent: str, state: ChatGraphState) -> str:
+    system = _CLARIFICATION_PROMPTS.get(intent, "")
+    if not system:
+        return "조금 더 구체적으로 말씀해 주시겠어요?"
+    messages: list[BaseMessage] = [SystemMessage(content=system)]
+    messages.extend(_history_to_lc_messages(state["history"]))
+    messages.append(HumanMessage(content=state["user_content"]))
+    try:
+        response = await _llm().ainvoke(messages, config=_BRANCH_LLM_CONFIG)
+        content = response.content
+        return content if isinstance(content, str) else str(content)
+    except Exception:
+        logger.exception("Clarification answer generation failed")
+        return "조금 더 구체적으로 말씀해 주시겠어요?"
 
 
 async def _generate_apply_answer(
