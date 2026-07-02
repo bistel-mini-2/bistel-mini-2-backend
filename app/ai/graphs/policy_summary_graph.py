@@ -7,6 +7,7 @@ from app.ai.agents.policy_summary_agent import PolicySummaryAgent
 from app.ai.states.policy_summary_state import PolicySummaryGraphState
 from app.ai.tools.policy_chunk_search_tool import search_policy_chunks
 from app.ai.utils.policy_summary_utils import build_policy_summary_key_points
+from app.ai.utils.progress import progress_node
 from app.schemas.ai_contract import EvidenceChunk
 
 
@@ -35,6 +36,7 @@ class PolicySummaryGraphRunner:
             "evidence_chunks": list(final_state.get("evidence_chunks") or []),
         }
 
+    @progress_node("policy_summary", "summary_evidence_search")
     async def summary_evidence_search(
         self,
         state: PolicySummaryGraphState,
@@ -53,6 +55,7 @@ class PolicySummaryGraphRunner:
                 chunks = []
         return {**state, "evidence_chunks": chunks}
 
+    @progress_node("policy_summary", "policy_summary")
     async def policy_summary(
         self,
         state: PolicySummaryGraphState,

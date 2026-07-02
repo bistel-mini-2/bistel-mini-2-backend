@@ -1,4 +1,5 @@
 from app.ai.states.recommendation_state import RecommendationGraphState
+from app.ai.utils.progress import progress_node
 from app.repositories.policy_assessment_repository import PolicyAssessmentRepository
 from app.services.recommendation_assessment_service import RecommendationAssessmentService
 from app.services.recommendation_candidate_service import RecommendationCandidateService
@@ -25,6 +26,7 @@ class RecommendationGraphNodes:
         )
         self.rerank_service = rerank_service or RecommendationRerankService()
 
+    @progress_node("recommendation", "candidate_search")
     async def candidate_search(
         self,
         state: RecommendationGraphState,
@@ -40,6 +42,7 @@ class RecommendationGraphNodes:
             "query_terms": query_terms,
         }
 
+    @progress_node("recommendation", "rule_filter")
     async def rule_filter(
         self,
         state: RecommendationGraphState,
@@ -55,6 +58,7 @@ class RecommendationGraphNodes:
             "candidates": candidates,
         }
 
+    @progress_node("recommendation", "candidate_save")
     async def candidate_save(
         self,
         state: RecommendationGraphState,
@@ -66,6 +70,7 @@ class RecommendationGraphNodes:
         )
         return state
 
+    @progress_node("recommendation", "policy_assessment")
     async def policy_assessment(
         self,
         state: RecommendationGraphState,
@@ -83,6 +88,7 @@ class RecommendationGraphNodes:
             "assessments": assessments,
         }
 
+    @progress_node("recommendation", "assessment_save")
     async def assessment_save(
         self,
         state: RecommendationGraphState,
@@ -94,6 +100,7 @@ class RecommendationGraphNodes:
         )
         return state
 
+    @progress_node("recommendation", "build_result")
     async def build_result(
         self,
         state: RecommendationGraphState,
@@ -116,6 +123,7 @@ class RecommendationGraphNodes:
             "result_json": result_json,
         }
 
+    @progress_node("recommendation", "llm_rerank")
     async def llm_rerank(
         self,
         state: RecommendationGraphState,
@@ -142,6 +150,7 @@ class RecommendationGraphNodes:
             "result_json": rerank_result.result_json,
         }
 
+    @progress_node("recommendation", "rerank_save")
     async def rerank_save(
         self,
         state: RecommendationGraphState,
@@ -155,6 +164,7 @@ class RecommendationGraphNodes:
             )
         return state
 
+    @progress_node("recommendation", "finalize_result")
     async def finalize_result(
         self,
         state: RecommendationGraphState,
