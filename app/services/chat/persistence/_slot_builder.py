@@ -50,6 +50,9 @@ def build_next_slot(
     eligibility_slot_update: dict | None = None,
     similar_policies: list[dict] | None = None,
     base_slug: str | None = None,
+    last_intent: str | None = None,
+    last_result_type: str | None = None,
+    suggested_actions: list[str] | None = None,
 ) -> dict | None:
     slug_to_action: dict[str, str] = {}
     for link in policy_links:
@@ -98,7 +101,18 @@ def build_next_slot(
             "last_action": "SIMILAR_POLICY",
         })
 
-    if not new_entries and profile is None and pending is None and not eligibility_slot_update:
+    has_context_updates = (
+        last_intent is not None
+        or last_result_type is not None
+        or suggested_actions is not None
+    )
+    if (
+        not new_entries
+        and profile is None
+        and pending is None
+        and not eligibility_slot_update
+        and not has_context_updates
+    ):
         return None
 
     if new_entries:
@@ -145,9 +159,20 @@ def build_next_slot(
         profile if profile is not None else current_slot.get("profile") or {}
     )
 
-    return {
+    next_slot: dict = {
         "recent_policies": recent_policies,
         "profile": next_profile,
         "pending": pending,
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
+    # 대화 맥락 필드: 명시적으로 전달된 경우에만 갱신, 없으면 기존 값 유지
+    next_slot["last_intent"] = (
+        last_intent if last_intent is not None else current_slot.get("last_intent")
+    )
+    next_slot["last_result_type"] = (
+        last_result_type if last_result_type is not None else current_slot.get("last_result_type")
+    )
+    next_slot["suggested_actions"] = (
+        suggested_actions if suggested_actions is not None else current_slot.get("suggested_actions") or []
+    )
+    return next_slot

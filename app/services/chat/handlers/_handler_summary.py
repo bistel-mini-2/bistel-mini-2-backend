@@ -79,11 +79,15 @@ async def _run_policy_summary_target(
 async def handle_policy_summary(
     state: ChatGraphState,
 ) -> dict[str, Any]:
-    policy_slug, policy_name, fallback_evidences = await _resolve_single_policy_target(
-        state,
-        intent="policy_summary",
+    policy_slug, policy_name, fallback_evidences, candidates = (
+        await _resolve_single_policy_target(state, intent="policy_summary")
     )
     if not policy_slug:
+        if candidates:
+            from app.services.chat.chat_handlers import _build_policy_selection_response
+            return _build_policy_selection_response(
+                state, candidates, "policy_summary", fallback_evidences
+            )
         return {
             **state,
             "branch_content": _POLICY_SUMMARY_CLARIFICATION_FALLBACK,
@@ -102,11 +106,15 @@ async def handle_policy_summary(
 async def handle_summary(
     state: ChatGraphState,
 ) -> dict[str, Any]:
-    policy_slug, policy_name, fallback_evidences = await _resolve_single_policy_target(
-        state,
-        intent="summary",
+    policy_slug, policy_name, fallback_evidences, candidates = (
+        await _resolve_single_policy_target(state, intent="summary")
     )
     if not policy_slug:
+        if candidates:
+            from app.services.chat.chat_handlers import _build_policy_selection_response
+            return _build_policy_selection_response(
+                state, candidates, "summary", fallback_evidences
+            )
         return {
             **state,
             "branch_content": _POLICY_SUMMARY_CLARIFICATION_FALLBACK,

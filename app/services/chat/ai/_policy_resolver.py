@@ -101,6 +101,20 @@ def _single_recent_policy_target(
     return None, None
 
 
+def _collect_recent_policy_candidates(
+    slot: "ChatSlot | None",
+) -> list[dict[str, Any]]:
+    """슬롯에 정책이 여러 개 있어 대상이 모호할 때 선택지 목록을 반환한다."""
+    recent = recent_slot_policies(slot)
+    if len(recent) < 2:
+        return []
+    return [
+        {"slug": str(p["slug"]), "policy_name": p.get("policy_name") or ""}
+        for p in recent
+        if p.get("slug")
+    ]
+
+
 def _is_contextual_single_policy_request(intent: Intent, user_content: str) -> bool:
     if intent in ("summary", "policy_summary"):
         return any(token in user_content for token in ("요약", "정리", "뭐야", "무엇"))
@@ -241,7 +255,14 @@ async def resolve_single_policy_target(
     state: ChatGraphState,
     *,
     intent: Intent,
-) -> tuple[str | None, str | None, list[dict[str, Any]]]:
+) -> tuple[str | None, str | None, list[dict[str, Any]], list[dict[str, Any]]]:
+    """정책 대상을 결정한다.
+
+    Returns:
+        (slug, policy_name, evidences, candidates)
+        - slug=None이고 candidates가 비어있지 않으면 → 모호한 참조, 정책 선택 질문 필요
+        - slug=None이고 candidates도 비어있으면 → 정책 특정 불가, 일반 clarification 필요
+    """
     decision = state.get("supervisor_decision") or {}
     resolved_slug = decision.get("resolved_policy_slug")
     if resolved_slug:
@@ -250,7 +271,7 @@ async def resolve_single_policy_target(
             "chat_slot_resolved",
             extra={"intent": intent, "slot_used": bool(slot_policy), "rag_skipped": True},
         )
-        return str(resolved_slug), (slot_policy or {}).get("policy_name"), []
+        return str(resolved_slug), (slot_policy or {}).get("policy_name"), [], []
 
     mentioned_recent = _mentioned_recent_policy_targets(state)
     if len(mentioned_recent) == 1:
@@ -258,7 +279,7 @@ async def resolve_single_policy_target(
             "chat_slot_resolved",
             extra={"intent": intent, "slot_used": True, "rag_skipped": True},
         )
-        return mentioned_recent[0][0], mentioned_recent[0][1], []
+        return mentioned_recent[0][0], mentioned_recent[0][1], [], []
 
     is_clarification_resume = (
         (state.get("slot") or {}).get("pending", {}) or {}
@@ -283,7 +304,7 @@ async def resolve_single_policy_target(
         },
     )
     if slug is not None:
-        return slug, policy_name, evidences
+        return slug, policy_name, evidences, []
 
     slug, policy_name = _single_recent_policy_target(state)
     if slug is not None:
@@ -291,7 +312,7 @@ async def resolve_single_policy_target(
             "chat_slot_resolved",
             extra={"intent": intent, "slot_used": True, "rag_skipped": False},
         )
-        return slug, policy_name, []
+        return slug, policy_name, [], []
 
     if (
         not recent_slot_policies(state.get("slot"))
@@ -305,9 +326,20 @@ async def resolve_single_policy_target(
                 "chat_recent_assistant_policy_resolved",
                 extra={"intent": intent, "recent_policy_used": True},
             )
-            return slug, policy_name, []
+            return slug, policy_name, [], []
 
-    return None, None, []
+    # 슬롯에 후보가 여러 개 있고 is_context_dependent → 선택지 제공
+    is_context_dependent = bool(decision.get("is_context_dependent"))
+    if is_context_dependent:
+        candidates = _collect_recent_policy_candidates(state.get("slot"))
+        if candidates:
+            logger.info(
+                "chat_policy_candidates_found",
+                extra={"intent": intent, "candidate_count": len(candidates)},
+            )
+            return None, None, evidences, candidates
+
+    return None, None, [], []
 
 
 class _ComparePolicyExtraction(BaseModel):

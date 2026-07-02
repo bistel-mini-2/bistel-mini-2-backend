@@ -30,13 +30,16 @@ async def handle_apply(
     db: AsyncSession | None = None,
 ) -> dict[str, Any]:
     del db
-    slug, policy_name, evidences = await _resolve_single_policy_target(
+    slug, policy_name, evidences, candidates = await _resolve_single_policy_target(
         state,
         intent="apply",
     )
 
     async def _branch(s: ChatGraphState) -> ChatGraphState:
         if slug is None:
+            if candidates:
+                from app.services.chat.chat_handlers import _build_policy_selection_response
+                return _build_policy_selection_response(s, candidates, "apply", evidences)
             clarification = await _generate_clarification_answer("apply", s)
             return {
                 **s,

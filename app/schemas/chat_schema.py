@@ -137,6 +137,8 @@ class AssistantMessage(BaseModel):
     slot_request: dict | None = None
     profile_confirm: dict | None = None
     eligibility_result: dict | None = None
+    suggested_actions: list[str] = Field(default_factory=list)
+    policy_selection: dict | None = None
 
 
 class ChatMessageSendRequest(BaseModel):
@@ -169,6 +171,8 @@ class ChatMessageItem(BaseModel):
     slot_request: dict | None = None
     profile_confirm: dict | None = None
     eligibility_result: dict | None = None
+    suggested_actions: list[str] = Field(default_factory=list)
+    policy_selection: dict | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
