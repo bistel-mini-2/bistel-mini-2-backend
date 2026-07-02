@@ -48,14 +48,18 @@ class ComparisonGuideAgent:
                 policy_a.get("name"),
                 policy_b.get("name"),
             )
-            structured_llm = ChatOpenAI(
-                model=self.model,
-                temperature=0.2,
-                max_completion_tokens=900,
-                timeout=self.timeout_seconds,
-                max_retries=0,
-                api_key=settings.openai_api_key,
-            ).with_structured_output(ComparisonGuideResult)
+            llm_kwargs: dict[str, Any] = {
+                "model": self.model,
+                "temperature": 0.2,
+                "max_completion_tokens": 900,
+                "timeout": self.timeout_seconds,
+                "max_retries": 0,
+            }
+            if settings.openai_api_key:
+                llm_kwargs["api_key"] = settings.openai_api_key
+            structured_llm = ChatOpenAI(**llm_kwargs).with_structured_output(
+                ComparisonGuideResult
+            )
 
             result = await asyncio.wait_for(
                 structured_llm.ainvoke(
