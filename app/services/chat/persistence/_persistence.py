@@ -32,6 +32,8 @@ def fallback_payload() -> dict:
         "slot_request": None,
         "profile_confirm": None,
         "eligibility_result": None,
+        "suggested_actions": [],
+        "policy_selection": None,
     }
 
 
@@ -50,6 +52,8 @@ def build_structured_json(decision: dict, payload: dict) -> dict:
         "slot_request": payload.get("slot_request"),
         "profile_confirm": payload.get("profile_confirm"),
         "eligibility_result": payload.get("eligibility_result"),
+        "suggested_actions": payload.get("suggested_actions", []),
+        "policy_selection": payload.get("policy_selection"),
     }
 
 
@@ -165,6 +169,8 @@ def build_assistant_response(
         slot_request=payload.get("slot_request"),
         profile_confirm=payload.get("profile_confirm"),
         eligibility_result=payload.get("eligibility_result"),
+        suggested_actions=payload.get("suggested_actions", []),
+        policy_selection=payload.get("policy_selection"),
     )
 
 
@@ -213,6 +219,25 @@ async def persist_assistant_outputs(
         build_evidence_rows(assistant_message.chat_message_id, evidences_to_save),
     )
 
+    # last_result_type 결정: 응답 유형에 따라 슬롯에 기록
+    _last_result_type: str | None = None
+    if payload.get("slot_request"):
+        _last_result_type = "slot_request"
+    elif payload.get("profile_confirm"):
+        _last_result_type = "profile_confirm"
+    elif payload.get("policy_selection"):
+        _last_result_type = "policy_selection"
+    elif payload.get("eligibility_result"):
+        _last_result_type = "eligibility_result"
+    elif payload.get("apply_card"):
+        _last_result_type = "apply_card"
+    elif payload.get("policies"):
+        _last_result_type = "policy_list"
+    elif payload.get("content"):
+        _last_result_type = "text"
+
+    _last_intent: str | None = decision.get("intent") if _last_result_type else None
+
     next_slot = build_next_slot(
         current_slot=current_slot or {},
         policy_links=policy_links_to_save,
@@ -223,6 +248,9 @@ async def persist_assistant_outputs(
         eligibility_slot_update=graph_result.get("eligibility_slot_update"),
         similar_policies=payload.get("similar_policies", []),
         base_slug=decision.get("resolved_policy_slug"),
+        last_intent=_last_intent,
+        last_result_type=_last_result_type,
+        suggested_actions=payload.get("suggested_actions") or [],
     )
     if next_slot is not None:
         await ChatRepository.update_session_slot(db, session_id, next_slot)

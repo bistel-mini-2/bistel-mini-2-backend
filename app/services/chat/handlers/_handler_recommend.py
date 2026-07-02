@@ -16,9 +16,10 @@ from app.ai.nodes.chat.constants import (
     RECOMMEND_FOLLOW_UP_LIMIT_REACHED as _RECOMMEND_FOLLOW_UP_LIMIT_REACHED,
     RECOMMEND_MAX_RETRIES as _RECOMMEND_MAX_RETRIES,
 )
-from app.ai.nodes.chat.profile_helpers import _profile_to_selected_conditions
+from app.ai.nodes.chat.profile_helpers import _filled_slots, _profile_to_selected_conditions
 from app.ai.nodes.chat.result_adapters import _adapt_recommendation_result
 from app.ai.nodes.chat.slots import (
+    RECOMMEND_WIZARD_FIELDS as _RECOMMEND_WIZARD_FIELDS,
     SLOT_LABELS as _SLOT_LABELS,
     SLOT_OPTIONS as _SLOT_OPTIONS,
 )
@@ -84,9 +85,29 @@ async def handle_recommend(
                 }
             questions = snapshot.questions or []
             if questions:
-                awaiting = [
-                    str(question.get("field_name") or f"follow_up_{index + 1}")
-                    for index, question in enumerate(questions)
+                # 엔진이 요청한 질문 목록
+                engine_q_map: dict[str, dict] = {
+                    str(q.get("field_name") or f"follow_up_{i + 1}"): q
+                    for i, q in enumerate(questions)
+                }
+                # 이미 채워진 슬롯을 제외한 나머지 위저드 필드를 함께 표시 (한 번에 모아서 받기)
+                filled = _filled_slots(s.get("profile"))
+                extra_keys = [
+                    f for f in _RECOMMEND_WIZARD_FIELDS
+                    if f not in filled and f not in engine_q_map
+                ]
+                awaiting = list(engine_q_map.keys()) + extra_keys
+                fields = [
+                    {
+                        "key": key,
+                        "label": (
+                            engine_q_map[key].get("question_text")
+                            if key in engine_q_map
+                            else None
+                        ) or _SLOT_LABELS.get(key, key),
+                        "options": _SLOT_OPTIONS.get(key, []),
+                    }
+                    for key in awaiting
                 ]
                 slot_request = {
                     "flow_type": "recommend",
@@ -99,17 +120,7 @@ async def handle_recommend(
                     "current": awaiting[0] if awaiting else None,
                     "awaiting": awaiting,
                     "multi": ["special"],
-                    "fields": [
-                        {
-                            "key": key,
-                            "label": (
-                                question.get("question_text")
-                                or _SLOT_LABELS.get(key, key)
-                            ),
-                            "options": _SLOT_OPTIONS.get(key, []),
-                        }
-                        for key, question in zip(awaiting, questions, strict=False)
-                    ],
+                    "fields": fields,
                 }
                 pending: PendingState = {
                     "intent": "recommend",

@@ -311,5 +311,12 @@ def test_branch_compare_recent_three_policies_asks_user_to_choose(
     result = asyncio.run(handle_compare(state))
 
     comparison_graph.run.assert_not_awaited()
-    assert result["branch_content"] == "비교할 정책 2개를 알려주세요."
     assert result["branch_policies"] == []
+    # 3개 후보 → 구조화된 정책 선택 응답 (policy_selection)
+    candidates = result.get("branch_policy_candidates") or []
+    assert len(candidates) == 3
+    assert any(c["slug"] == "WLF1" for c in candidates)
+    assert result["pending"]["kind"] == "clarification"
+    assert result["pending"]["intent"] == "compare"
+    assert "A 정책" in result["branch_content"]
+    assert "B 정책" in result["branch_content"]
