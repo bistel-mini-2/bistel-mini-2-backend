@@ -118,17 +118,55 @@ async def classify_intent(*args: Any, **kwargs: Any) -> ChatGraphState:
     return await _intent_classifier.classify_intent(*args, **kwargs)
 
 
+def _build_policy_selection_response(
+    state: ChatGraphState,
+    candidates: list[dict],
+    intent: "Intent",
+    evidences: list[dict],
+) -> dict[str, Any]:
+    """모호한 정책 참조 시 선택지를 구조화된 응답으로 반환한다.
+
+    사용자가 다음 턴에 정책을 선택하면 clarification pending을 통해 원래 의도를 재실행한다.
+    후보가 1개면 자동 선택해 즉시 원래 intent를 실행하므로 여기까지 오지 않는다.
+    """
+    from app.ai.states.chat_state import Intent as _Intent  # noqa: F401 (type hint only)
+
+    policy_names = ", ".join(
+        p["policy_name"] for p in candidates[:3] if p.get("policy_name")
+    )
+    content = (
+        f"어떤 정책을 말씀하시는 건가요? "
+        f"현재 대화에서 {policy_names} 등을 살펴보셨어요. "
+        "확인하고 싶은 정책을 선택하거나 이름을 알려주세요."
+    )
+    return {
+        **state,
+        "branch_content": content,
+        "branch_policies": [],
+        "branch_evidences": evidences,
+        "branch_policy_candidates": candidates,
+        "pending": {
+            "intent": intent,
+            "kind": "clarification",
+            "awaiting": [],
+            "asked": [],
+        },
+    }
+
+
 async def handle_eligibility(
     state: ChatGraphState,
     db=None,
 ) -> dict[str, Any]:
     _sync_legacy_patch_points()
     del db
-    slug, policy_name, evidences = await _resolve_single_policy_target(
+    slug, policy_name, evidences, candidates = await _resolve_single_policy_target(
         state,
         intent="eligibility",
     )
     if slug is None:
+        if candidates:
+            return _build_policy_selection_response(state, candidates, "eligibility", evidences)
         return {
             **state,
             "branch_content": await _generate_clarification_answer("eligibility", state),
@@ -150,6 +188,11 @@ async def handle_compare(
     _sync_legacy_patch_points()
     first, second, evidences = await _resolve_compare_targets(state)
     if first is None or second is None:
+        # compare는 2개 정책이 필수 → 슬롯에 있는 후보 제공
+        from app.services.chat.ai._policy_resolver import _collect_recent_policy_candidates
+        candidates = _collect_recent_policy_candidates(state.get("slot"))
+        if len(candidates) >= 2:
+            return _build_policy_selection_response(state, candidates, "compare", evidences)
         return {
             **state,
             "branch_content": await _generate_clarification_answer("compare", state),
@@ -236,4 +279,5 @@ __all__ = [
     "handle_recommend",
     "handle_summary",
     "handle_unclear",
+    "_build_policy_selection_response",
 ]

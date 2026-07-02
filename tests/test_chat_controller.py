@@ -366,6 +366,46 @@ def test_to_message_item_merges_cached_policy_summary_into_joined_policy() -> No
     assert item.policies[0].tagTone == "coral"
 
 
+def test_to_message_item_preserves_suggested_actions_and_policy_selection() -> None:
+    """저장된 structured_json에서 suggested_actions·policy_selection이 복원되는지 검증."""
+    candidates = [{"slug": "WLF1", "policy_name": "A 정책"}, {"slug": "WLF2", "policy_name": "B 정책"}]
+    message = SimpleNamespace(
+        chat_message_id=99,
+        role="assistant",
+        message_type="TEXT",
+        content="어떤 정책을 말씀하시는 건가요?",
+        sequence_no=3,
+        created_at=None,
+        structured_json={
+            "suggested_actions": ["eligibility", "apply"],
+            "policy_selection": {"intent": "compare", "candidates": candidates},
+        },
+    )
+
+    item = _to_message_item(message, policies=[], evidences=[])
+
+    assert item.suggested_actions == ["eligibility", "apply"]
+    assert item.policy_selection == {"intent": "compare", "candidates": candidates}
+
+
+def test_to_message_item_defaults_suggested_actions_when_absent() -> None:
+    """structured_json에 두 필드가 없을 때 기본값이 반환되는지 검증."""
+    message = SimpleNamespace(
+        chat_message_id=100,
+        role="assistant",
+        message_type="TEXT",
+        content="안녕하세요.",
+        sequence_no=1,
+        created_at=None,
+        structured_json={"actions": ["recommend"]},
+    )
+
+    item = _to_message_item(message, policies=[], evidences=[])
+
+    assert item.suggested_actions == []
+    assert item.policy_selection is None
+
+
 # --- SSE streaming endpoint ----------------------------------------------
 
 

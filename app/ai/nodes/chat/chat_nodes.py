@@ -147,6 +147,13 @@ class _ExtractedProfile(BaseModel):
 
 class _IntentDecision(BaseModel):
     intent: Intent = Field(description="사용자 메시지의 의도 분류")
+    secondary_intents: list[Intent] = Field(
+        default_factory=list,
+        description=(
+            "복합 의도 시 primary intent 외 추가 의도. 최대 2개. "
+            "예: '자격 확인하고 신청 방법도 알려줘' → [apply]. 빈 배열이 기본."
+        ),
+    )
     resolved_policy_slug: str | None = Field(
         default=None,
         description="사용자가 직전 거론 정책을 지시어로 가리키는 경우 그 정책의 slug. 그렇지 않으면 null.",
@@ -161,6 +168,24 @@ class _IntentDecision(BaseModel):
     extracted_profile: _ExtractedProfile | None = Field(
         default=None,
         description="이번 메시지에서 새로 드러난 사용자 조건. 없으면 null.",
+    )
+    is_context_dependent: bool = Field(
+        default=False,
+        description=(
+            "'이 정책', '그거', '방금 거', '해당 정책' 같은 지시어를 사용하거나 "
+            "직전 정책 맥락의 후속 질문이면 true."
+        ),
+    )
+    confidence: float = Field(
+        default=0.8,
+        description=(
+            "의도 분류 확신도 0.0~1.0. 명확하면 0.9 이상, "
+            "약간 모호하면 0.6~0.8, 매우 모호하면 0.5 미만."
+        ),
+    )
+    ambiguity_reason: str | None = Field(
+        default=None,
+        description="confidence < 0.7이거나 모호한 경우 한 문장 이유. 명확하면 null.",
     )
 
 

@@ -55,3 +55,11 @@ def test_branch_unclear_disclaimer_is_false_in_payload(
 
     assert payload_state["assistant_payload"]["disclaimer"] is False
     assert payload_state["assistant_payload"]["actions"] == []
+
+
+def test_branch_unclear_prompt_stays_family_policy_scoped() -> None:
+    from app.ai.nodes.chat.prompts import BASE_BRANCH_PROMPTS
+
+    prompt = BASE_BRANCH_PROMPTS["unclear"]
+    assert "아동·가족 복지 정책" in prompt
+    assert "청년 지원 정책" not in prompt
