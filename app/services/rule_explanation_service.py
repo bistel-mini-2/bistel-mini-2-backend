@@ -44,7 +44,7 @@ _MAX_GROUP_ITEM_LEN = 24
 class RuleExplanationService:
     """policy_rule 판정 결과를 사용자 노출용 짧은 한국어 사유 문장으로 변환한다.
 
-    우선순위: manual_check_reason(uncertain) → source_text → note(한글 문구만)
+    우선순위: source_text → manual_check_reason(uncertain) → note(한글 문구만)
     → 기존 reason → field 라벨.
     LLM을 쓰지 않고 결정론적 템플릿/라벨 매핑으로만 생성한다.
     """
@@ -55,14 +55,14 @@ class RuleExplanationService:
         entry는 source_text/note/manual_check_reason/reason/field(또는 field_name)를
         가질 수 있는 dict(매처 rule 또는 추천 matched/uncertain/excluded 항목).
         """
+        source = self._clean(entry.get("source_text"))
+        if source and self._is_displayable(source):
+            return self._with_verdict(self._display_phrase(source, verdict), verdict)
+
         if verdict == VERDICT_UNCERTAIN:
             manual_reason = self._clean(entry.get("manual_check_reason"))
             if manual_reason:
                 return manual_reason
-
-        source = self._clean(entry.get("source_text"))
-        if source and self._is_displayable(source):
-            return self._with_verdict(self._display_phrase(source, verdict), verdict)
 
         # note는 사람이 읽는 문구일 때만 사용한다(group_key/field_name 같은 내부 토큰 제외).
         note = self._clean(entry.get("note"))

@@ -136,6 +136,48 @@ def test_policy_rule_filter_does_not_truncate_manual_check_source_text() -> None
     assert result.manual_check_points == [f"{source_text} 확인 필요"]
 
 
+def test_policy_rule_filter_prefers_manual_check_source_text() -> None:
+    source_text = "감당할 수 없는 빚으로 개인회생, 개인파산 및 면책 제도 이용을 원하는 사람"
+    result = PolicyRuleFilterService().filter(
+        condition={},
+        policy_rules=[
+            {
+                "field_name": "debt_status",
+                "operator": "IN",
+                "value_json": ["personal_bankruptcy_need"],
+                "is_hard_filter": True,
+                "manual_check_required": True,
+                "manual_check_reason": "사용자 입력에 대응 field가 없어 자동 매칭 불가",
+                "source_text": source_text,
+            }
+        ],
+    )
+
+    assert result.manual_check_points == [f"{source_text} 확인 필요"]
+
+
+def test_policy_rule_filter_excludes_review_required_manual_rule() -> None:
+    result = PolicyRuleFilterService().filter(
+        condition={},
+        policy_rules=[
+            {
+                "field_name": "target",
+                "operator": "IN",
+                "value_json": ["unknown"],
+                "is_hard_filter": True,
+                "manual_check_required": True,
+                "manual_check_reason": "수동 확인 필요",
+                "source_text": "원문 기반 추가 확인 문구",
+                "review_required": True,
+            }
+        ],
+    )
+
+    assert result.manual_check_points == []
+    assert result.missing_conditions == []
+    assert result.rule_failures == []
+
+
 def test_policy_rule_filter_merges_alternative_in_rules() -> None:
     result = PolicyRuleFilterService().filter(
         condition={"stage": "newborn"},
@@ -189,3 +231,36 @@ def test_policy_rule_filter_reports_missing_alternative_rule_once() -> None:
     )
 
     assert result.missing_conditions == ["한부모, 다자녀 확인 필요"]
+
+
+def test_policy_rule_filter_does_not_ask_manual_or_rule_when_alternative_matches() -> None:
+    result = PolicyRuleFilterService().filter(
+        condition={"region": "seoul"},
+        policy_rules=[
+            {
+                "field_name": "region",
+                "operator": "EQ",
+                "value_json": "seoul",
+                "is_hard_filter": True,
+                "manual_check_required": False,
+                "note": "서울 거주",
+                "rule_group": "target_any",
+                "group_operator": "OR",
+                "source_text": "서울 거주",
+            },
+            {
+                "field_name": "special",
+                "operator": "IN",
+                "value_json": ["multi"],
+                "is_hard_filter": True,
+                "manual_check_required": True,
+                "manual_check_reason": "다자녀 여부 확인 필요",
+                "source_text": "다자녀 가구",
+                "rule_group": "target_any",
+                "group_operator": "OR",
+            },
+        ],
+    )
+
+    assert result.matched_conditions == ["서울 거주 충족"]
+    assert result.manual_check_points == []
