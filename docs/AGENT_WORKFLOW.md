@@ -775,13 +775,21 @@ Node 흐름:
 -> Graph 진입
    START
    -> Supervisor Node
+      - profile_confirm pending이면 yes/no fast-path 우선 처리
+      - LLM structured intent 분류 후 confidence 기반 Python 보정
+      - clarification pending이면 이전 intent 강제 resume
+      - slot 수집 중 명확한 새 의도는 topic switch 허용
    -> Graph Router Node
       -> recommend: Recommendation Branch Node → Recommendation Graph 호출
-      -> eligibility: Eligibility Branch Node → Eligibility Graph 호출
-      -> compare: Comparison Branch Node → Comparison Graph 호출
+      -> eligibility: Eligibility Branch Node → Eligibility Graph 호출 또는 policy_selection 응답
+      -> compare: Comparison Branch Node → Comparison Graph 호출 또는 policy_selection 응답
       -> apply: Apply Branch Node → DB-backed Apply Preparation API 호출
       -> policy_summary: Policy Summary Branch Node → Policy Summary Graph 호출
       -> unclear: Clarification Response Node
+   -> Quality Validation Node
+      - 빈 응답 fallback 보정
+      - eligibility 구조화 결과 없이 단정 표현 시 경고
+      - suggested_actions에서 primary intent 중복 제거
    -> Assistant Payload Build Node
    -> Evidence Extract Node    # chat_message_evidence에 저장할 데이터 준비
    -> Policy Link Extract Node # chat_message_policy에 저장할 데이터 준비 (policy_summary intent는 빈 배열)
@@ -790,19 +798,27 @@ Node 흐름:
    - Assistant Message Save (chat_message + structured_json은 supervisor_decision 등 메타만 보존)
    - Chat Evidence Save (chat_message_evidence)
    - Chat Policy Link Save (chat_message_policy)
-   - Chat Session Update (last_message_at, latest_request_id)
+   - Chat Session Update (last_message_at, latest_request_id, slot.last_intent, slot.last_result_type, slot.suggested_actions)
 ```
 
 Graph 출력 state:
 
 ```text
 {
-    "assistant_payload": {...},        # content, user_status, sources, actions, disclaimer
+    "assistant_payload": {...},        # content, user_status, sources, actions, disclaimer, suggested_actions, policy_selection
     "evidences_to_save": [...],        # chunk_id, snippet, evidence_role
     "policy_links_to_save": [...],     # policy_id, action_type
-    "supervisor_decision": {...}       # intent, raw (structured_json에 보존)
+    "supervisor_decision": {...}       # intent, raw, resolved_policy_slug, secondary_intents, is_context_dependent, confidence, ambiguity_reason
 }
 ```
+
+추가 상태 규칙:
+
+- `actions[]`는 현재 턴의 primary intent만 담는다.
+- `suggested_actions[]`는 복합 의도 문장에서 파생된 secondary intent 후속 액션 목록이다.
+- `policy_selection`은 최근 대화에 후보 정책이 2개 이상 있고 사용자가 "이 정책", "그거"처럼 모호하게 지칭했을 때 내려가는 구조화 응답이다.
+- `pending.kind = clarification`이면 다음 턴에서 사용자가 정책명을 고르는 즉시 원래 intent를 재실행한다.
+- `slot.last_result_type`은 `slot_request | profile_confirm | policy_selection | eligibility_result | apply_card | policy_list | text` 중 하나를 기록한다.
 
 `action_type` 매핑 규칙 (intent → DB `action_type`):
 

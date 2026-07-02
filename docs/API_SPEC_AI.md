@@ -948,6 +948,10 @@ type PolicyAiSummaryResponse = {
         chat_message_id: "string"
         content: "string"
         user_status: "UserStatus?"
+        easy_summary: "string?"
+        key_points:
+          - label: "string"
+            content: "string"
         sources: "string[]"
         policies:
           - policy_id: "string"
@@ -965,10 +969,22 @@ type PolicyAiSummaryResponse = {
             source_url: "string?"
             evidence_role: "summary | target | benefit | application | caution?"
         disclaimer: "boolean?"
+        slot_request: "object?"
+        profile_confirm: "object?"
+        eligibility_result: "object?"
+        suggested_actions: "recommend | eligibility | compare | apply []"
+        policy_selection:
+          intent: "eligibility | compare | apply | summary?"
+          candidates:
+            - slug: "string"
+              policy_name: "string"
     meta:
       chat_session_id: "string"
   notes: |
     supervisor routing 결과를 리치 답변 카드 구조로 변환해 응답. assistant_message 저장은 ChatService가 graph 종료 후 한 트랜잭션에서 chat_message + chat_message_policy + chat_message_evidence + chat_session 갱신을 함께 처리한다.
+    `actions[]`는 현재 턴의 primary intent를 의미한다. 복합 의도 문장은 `suggested_actions[]`에 secondary intent를 후속 액션으로 분리해 내려준다. 품질 검증 단계에서 primary intent와 중복되는 suggested action은 제거한다.
+    policy가 모호한 eligibility/compare 요청은 일반 텍스트만 주지 않고 `policy_selection` 구조를 함께 내려준다. 다음 턴에서 사용자가 정책을 고르면 세션 slot의 clarification pending을 통해 원래 intent를 재실행한다.
+    `structured_json._supervisor`에는 intent/raw 외에도 `resolved_policy_slug`, `secondary_intents`, `is_context_dependent`, `confidence`, `ambiguity_reason`가 저장될 수 있다.
     policies[]는 chat_message_policy row로 정규화 저장하며, intent별 action_type 매핑은 다음과 같다:
       recommend → RECOMMENDED
       compare → COMPARED
@@ -999,9 +1015,22 @@ type PolicyAiSummaryResponse = {
           sequence_no: "integer"
           created_at: "string (iso8601)?"
           user_status: "UserStatus?"
+          easy_summary: "string?"
+          key_points:
+            - label: "string"
+              content: "string"
           sources: "string[]"
           actions: "recommend | eligibility | compare | apply | chat []"
           disclaimer: "boolean?"
+          slot_request: "object?"
+          profile_confirm: "object?"
+          eligibility_result: "object?"
+          suggested_actions: "recommend | eligibility | compare | apply []"
+          policy_selection:
+            intent: "eligibility | compare | apply | summary?"
+            candidates:
+              - slug: "string"
+                policy_name: "string"
           policies:
             - policy_id: "string"
               slug: "string"
@@ -1019,6 +1048,7 @@ type PolicyAiSummaryResponse = {
   notes: |
     대화 맥락 복원용. 정렬 sequence_no ASC. 본인 세션이 아니거나 존재하지 않는 chat_session_id 접근 시 404 NOT_FOUND.
     assistant 메시지의 policies / evidences는 chat_message_policy / chat_message_evidence를 join해 채운다. user/system 메시지에서는 빈 배열로 반환한다.
+    assistant 메시지의 `suggested_actions`와 `policy_selection`도 structured_json에서 복원해 그대로 반환한다.
     policy_summary intent로 응답된 메시지는 chat_message_policy row가 없으므로 policies[]가 빈 배열이며, 거론된 정책은 evidences[].chunk_id → policy_document_chunk → policy_document → policy 역추적으로 조회한다.
 ```
 
@@ -1131,7 +1161,7 @@ type PolicyAiSummaryResponse = {
   owner: "챗봇/신청"
   request: "chat_session_id, user_id, content"
   response: "assistant_message, linked_policies, evidences, user_status"
-  notes: "채팅 메시지 저장 후 Supervisor Graph 실행"
+  notes: "채팅 메시지 저장 후 Supervisor Graph 실행. graph 종료 후 assistant message / 정책 link / evidence 저장과 session slot 갱신(last_intent, last_result_type, suggested_actions 포함)을 한 트랜잭션으로 처리한다. profile_confirm fast-path, clarification pending resume, confidence 기반 intent 보정, 복합 의도 suggested_actions 생성이 이 계층에서 연결된다."
 
 - id: apply_preparation_service_create
   type: "service contract"

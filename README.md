@@ -1,15 +1,19 @@
 # Bistelligence Mini 2 Backend
 
-복지 정책 추천 및 RAG 기반 질의응답을 위한 FastAPI 백엔드 서버입니다.  
-2차 미니프로젝트의 백엔드 레포로, 정책 데이터 조회, 사용자 조건 기반 추천, 문서 기반 질의응답 기능을 단계적으로 구현합니다.
+복지 정책 추천, 지원 가능성 분석, 비교, 신청 안내, 챗봇 질의응답을 제공하는 FastAPI 백엔드 서버입니다.  
+2차 미니프로젝트의 백엔드 레포로, 정책 데이터 조회부터 AI 기반 추천/분석/대화 흐름까지 한 서버에서 제공합니다.
 
-## 주요 기능 예정
+## 주요 기능
 
 - 정책 목록 조회
 - 정책 상세 조회
+- 사용자 가족 프로필 저장/조회
 - 사용자 조건 기반 정책 추천
+- 정책별 지원 가능성 분석
+- 정책 비교 및 선택 가이드
+- 정책 신청 정보/체크리스트 조회
 - RAG 기반 정책 질의응답
-- 정책 요약 및 비교 기능
+- 챗봇 의도 분류, 슬롯 이어받기, 정책 선택 유도, SSE 스트리밍
 
 ## 기술 스택
 
@@ -20,6 +24,7 @@
 - OpenAI API
 - Uvicorn
 - PostgreSQL
+- SQLAlchemy
 
 ## 프로젝트 구조
 
@@ -35,7 +40,7 @@ bistel-mini-2-backend/
 │   ├── schemas/          # Pydantic 요청/응답 스키마
 │   ├── services/         # 비즈니스 로직
 │   └── static/           # 정적 리소스
-├── docs/                 # 온보딩, 협업 규칙, 코드 컨벤션 문서
+├── docs/                 # 온보딩, 협업 규칙, API/DB/AI 워크플로우 문서
 ├── app/main.py           # FastAPI 앱 진입점
 └── requirements.txt      # Python 패키지 목록
 ```
@@ -175,6 +180,7 @@ fix: CORS 설정 오류 수정
 - [GitHub 협업 규칙](docs/CONVENTION.md)
 - [백엔드 코드 작성 규칙](docs/CODE_CONVENTION.md)
 - [AI/API 명세서](docs/API_SPEC_AI.md)
+- [AI 워크플로우](docs/AGENT_WORKFLOW.md)
 - [필드 매핑 및 AI 상태 규칙](docs/FIELD_MAPPING.md)
 - [데이터베이스 스키마 적용 가이드](docs/DB_SETUP.md)
 
