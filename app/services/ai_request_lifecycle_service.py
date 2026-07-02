@@ -56,6 +56,7 @@ from app.services.policy_display_service import (
     user_status_display,
 )
 from app.services.policy_rule_filter_service import PolicyRuleFilterService
+from app.services.rule_explanation_service import VERDICT_UNCERTAIN
 from app.services.recommendation_result_normalizer import (
     normalize_recommendation_result_item,
     normalize_recommendation_result_json,
@@ -752,6 +753,9 @@ class AiRequestLifecycleService:
             "profile_conflicts": profile_conflict_json,
         }
         policy_rules = await self._find_policy_rules(db, policy_id)
+        policy_additional_check_points = self._policy_additional_check_points(
+            policy_rules
+        )
         rule_filter = self.rule_filter_service.filter(
             condition=assessment_condition,
             policy_rules=policy_rules,
@@ -759,6 +763,10 @@ class AiRequestLifecycleService:
         assessment_condition = self._merge_rule_filter_result(
             assessment_condition,
             rule_filter,
+        )
+        assessment_condition["manual_check_points"] = self._merge_string_values(
+            assessment_condition.get("manual_check_points"),
+            policy_additional_check_points,
         )
         assessment_condition = self._apply_manual_confirmations(
             assessment_condition,
@@ -993,6 +1001,38 @@ class AiRequestLifecycleService:
                 rule_filter.manual_check_points,
             ),
         }
+
+    def _policy_additional_check_points(
+        self,
+        policy_rules: list[dict[str, Any]],
+    ) -> list[str]:
+        points: list[str] = []
+        explanation = getattr(self.rule_filter_service, "explanation", None)
+        for rule in policy_rules:
+            if rule.get("manual_check_required") is not True:
+                continue
+            text = self._manual_rule_display_text(rule, explanation)
+            text = self._clean_user_condition_text(text)
+            if text and not self._is_internal_condition_text(text):
+                points.append(text)
+        return self._deduplicate_strings(points)
+
+    def _manual_rule_display_text(
+        self,
+        rule: dict[str, Any],
+        explanation: Any,
+    ) -> str:
+        source = self._clean_user_condition_text(rule.get("source_text"))
+        if source and not self._is_internal_condition_text(source):
+            return source if source.endswith("확인 필요") else f"{source} 확인 필요"
+        if explanation is not None:
+            return explanation.explain(rule, VERDICT_UNCERTAIN)
+        return str(
+            rule.get("manual_check_reason")
+            or rule.get("note")
+            or rule.get("field_name")
+            or ""
+        )
 
     def _apply_manual_confirmations(
         self,

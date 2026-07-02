@@ -901,6 +901,43 @@ def test_manual_confirmations_are_applied_to_assessment_condition() -> None:
     assert condition["manual_check_points"] == ["SERVICE_FIELD_NOT_SUPPORTED"]
 
 
+def test_policy_additional_check_points_use_manual_policy_rules() -> None:
+    service = AiRequestLifecycleService()
+
+    points = service._policy_additional_check_points(
+        [
+            {
+                "field_name": "debt_status",
+                "operator": "IN",
+                "value_json": ["personal_bankruptcy_need"],
+                "manual_check_required": True,
+                "manual_check_reason": "사용자 입력에 대응 field가 없어 자동 매칭 불가",
+                "source_text": (
+                    "감당할 수 없는 빚으로 개인회생, 개인파산 및 면책 제도 이용을 원하는 사람"
+                ),
+            },
+            {
+                "field_name": "region",
+                "operator": "EQ",
+                "value_json": "seoul",
+                "manual_check_required": False,
+                "source_text": "서울 거주",
+            },
+            {
+                "field_name": "unsupported",
+                "operator": "UNKNOWN",
+                "value_json": {},
+                "manual_check_required": True,
+                "manual_check_reason": "SERVICE_FIELD_NOT_SUPPORTED",
+            },
+        ]
+    )
+
+    assert points == [
+        "감당할 수 없는 빚으로 개인회생, 개인파산 및 면책 제도 이용을 원하는 사람 확인 필요"
+    ]
+
+
 def test_manual_confirmation_matches_rewritten_question_text() -> None:
     service = AiRequestLifecycleService()
 
