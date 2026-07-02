@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.ai.states.comparison_state import ComparisonGraphState
+from app.ai.utils.progress import progress_node
 from app.services.compare_service import CompareService
 
 
@@ -10,6 +11,7 @@ class ComparisonGraphNodes:
     def __init__(self, compare_service: CompareService | None = None) -> None:
         self.compare_service = compare_service or CompareService()
 
+    @progress_node("comparison", "compare_policies")
     async def compare_policies(
         self,
         state: ComparisonGraphState,
@@ -22,6 +24,7 @@ class ComparisonGraphNodes:
         )
         return {**state, "compare_result": result}
 
+    @progress_node("comparison", "build_result")
     async def build_result(
         self,
         state: ComparisonGraphState,

@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from app.ai.states.eligibility_state import EligibilityGraphState
+from app.ai.utils.progress import progress_node
 
 if TYPE_CHECKING:
     from app.services.ai_request_lifecycle_service import AiRequestLifecycleService
@@ -24,6 +25,7 @@ class EligibilityGraphNodes:
     def _lifecycle(self) -> AiRequestLifecycleService:
         return self.lifecycle_service or _lifecycle_service_class()()
 
+    @progress_node("eligibility", "create_request")
     async def create_request(
         self,
         state: EligibilityGraphState,
@@ -40,6 +42,7 @@ class EligibilityGraphNodes:
         )
         return {**state, "request_id": int(snapshot.request_id)}
 
+    @progress_node("eligibility", "mark_processing")
     async def mark_processing(
         self,
         state: EligibilityGraphState,
@@ -51,6 +54,7 @@ class EligibilityGraphNodes:
         )
         return state
 
+    @progress_node("eligibility", "assess_policy")
     async def assess_policy(
         self,
         state: EligibilityGraphState,
@@ -62,6 +66,7 @@ class EligibilityGraphNodes:
         )
         return state
 
+    @progress_node("eligibility", "build_result")
     async def build_result(
         self,
         state: EligibilityGraphState,

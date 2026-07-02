@@ -569,6 +569,20 @@ class ChatService:
             async def _queue_token(delta: str) -> None:
                 await stream_queue.put({"type": "token", "delta": delta})
 
+            async def _queue_progress(
+                flow: str, node: str, status: str, step: int, total: int
+            ) -> None:
+                from app.ai.utils.progress import get_node_label
+                await stream_queue.put({
+                    "type": "progress",
+                    "flow": flow,
+                    "node": node,
+                    "status": status,
+                    "step": step,
+                    "total_steps": total,
+                    "label": get_node_label(flow, node, status),
+                })
+
             intent_already_emitted = (
                 follow_up_policy is not None
                 and follow_up_intent != "other_intent"  # type: ignore[possibly-undefined]
@@ -586,6 +600,7 @@ class ChatService:
                         emit_intent=not intent_already_emitted,
                         on_intent=_queue_intent,
                         on_token=_queue_token,
+                        on_progress=_queue_progress,
                         preseed_result=preseed_result,
                     )
                 finally:

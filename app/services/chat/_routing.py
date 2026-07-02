@@ -9,7 +9,12 @@ from app.services.chat.persistence._persistence import fallback_payload
 
 logger = logging.getLogger(__name__)
 
-_INTENT_TO_SSE: dict[str, str] = {"recommend": "recommendation"}
+_INTENT_TO_SSE: dict[str, str] = {
+    "recommend": "recommendation",
+    "eligibility": "eligibility",
+    "compare": "comparison",
+    "policy_summary": "policy_summary",
+}
 
 
 async def run_chat(
@@ -23,12 +28,14 @@ async def run_chat(
     emit_intent: bool = False,
     on_intent: Callable[[str], Awaitable[None]] | None = None,
     on_token: Callable[[str], Awaitable[None]] | None = None,
+    on_progress: Callable[..., Awaitable[None]] | None = None,
     preseed_result: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     from app.ai.nodes.chat.chat_nodes import (
         reset_branch_token_callback,
         set_branch_token_callback,
     )
+    from app.ai.utils.progress import reset_progress_callback, set_progress_callback
     from app.services.chat.chat_handlers import (
         build_assistant_payload,
         classify_intent,
@@ -60,6 +67,7 @@ async def run_chat(
             await on_intent(_INTENT_TO_SSE.get(intent, "general"))
 
         token = set_branch_token_callback(on_token)
+        progress_token = set_progress_callback(on_progress)
         try:
             if state.get("profile_confirm"):
                 branch_result = await handle_confirm_profile(state)
@@ -83,6 +91,7 @@ async def run_chat(
                         branch_result = await handle_unclear(state)
         finally:
             reset_branch_token_callback(token)
+            reset_progress_callback(progress_token)
 
         state.update(branch_result)
         state.update(await build_assistant_payload(state))

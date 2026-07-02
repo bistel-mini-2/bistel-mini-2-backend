@@ -1,10 +1,12 @@
 from collections.abc import AsyncGenerator
+import json
 from types import SimpleNamespace
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 import app.api.ai_request_controller as ai_request_controller
+from app.ai.utils.progress import emit_progress
 from app.api.ai_request_controller import eligibility_router
 from app.common.exceptions import register_exception_handlers
 from app.core.dependencies import get_current_user
@@ -355,6 +357,151 @@ def test_create_eligibility_request_rejects_non_numeric_chat_session_id() -> Non
         )
 
     assert response.status_code == 422
+
+
+def test_stream_eligibility_request_checks_chat_session_ownership(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    async def fake_db() -> AsyncGenerator[object, None]:
+        yield SimpleNamespace()
+
+    async def fake_current_user() -> object:
+        return SimpleNamespace(user_id=7)
+
+    async def fake_ensure_owned_session(db, *, user_id, chat_session_id):
+        captured["ensure_session"] = {
+            "user_id": user_id,
+            "chat_session_id": chat_session_id,
+        }
+
+    async def fake_stream(db, user_id, payload):
+        yield ai_request_controller._sse_event(
+            {"type": "done", "payload": {"request_id": "123"}}
+        )
+
+    monkeypatch.setattr(
+        ai_request_controller.ChatService,
+        "ensure_owned_session",
+        fake_ensure_owned_session,
+    )
+    monkeypatch.setattr(
+        ai_request_controller,
+        "_eligibility_sse_stream",
+        fake_stream,
+    )
+
+    app = FastAPI()
+    app.include_router(eligibility_router)
+    app.dependency_overrides[get_db_session] = fake_db
+    app.dependency_overrides[get_current_user] = fake_current_user
+    register_exception_handlers(app)
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/eligibility/requests/stream",
+            json={
+                "policy_id": "WLF00000024",
+                "chat_session_id": "82",
+                "source_ref_id": "recommendation:123",
+                "user_conditions": {"income": "low"},
+            },
+        )
+
+    assert response.status_code == 200
+    assert captured["ensure_session"] == {
+        "user_id": 7,
+        "chat_session_id": 82,
+    }
+
+
+def test_stream_eligibility_request_emits_progress_and_done(monkeypatch) -> None:
+    events: list[dict[str, object]] = []
+
+    async def fake_db() -> AsyncGenerator[object, None]:
+        yield SimpleNamespace()
+
+    async def fake_current_user() -> object:
+        return SimpleNamespace(user_id=7)
+
+    class FakeInnerDb:
+        def __init__(self) -> None:
+            self.committed = False
+            self.rolled_back = False
+
+        async def commit(self):
+            self.committed = True
+
+        async def rollback(self):
+            self.rolled_back = True
+
+    class FakeSessionContext:
+        def __init__(self) -> None:
+            self.db = FakeInnerDb()
+
+        async def __aenter__(self):
+            return self.db
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    async def fake_run(
+        *,
+        db,
+        user_id,
+        policy_identifier,
+        raw_query=None,
+        selected_conditions=None,
+        source_type="CHAT",
+        source_ref_id=None,
+        follow_up_resolved=False,
+    ):
+        await emit_progress("eligibility", "create_request", "started", 1, 4)
+        await emit_progress("eligibility", "create_request", "completed", 1, 4)
+        await emit_progress("eligibility", "assess_policy", "started", 3, 4)
+        return {
+            "request_id": "123",
+            "status": "COMPLETED",
+            "policy_id": str(policy_identifier),
+            "user_status": "LIKELY_MATCH",
+        }
+
+    monkeypatch.setattr(ai_request_controller, "AsyncSessionLocal", FakeSessionContext)
+    monkeypatch.setattr(
+        ai_request_controller.eligibility_graph_runner,
+        "run",
+        fake_run,
+    )
+
+    app = FastAPI()
+    app.include_router(eligibility_router)
+    app.dependency_overrides[get_db_session] = fake_db
+    app.dependency_overrides[get_current_user] = fake_current_user
+    register_exception_handlers(app)
+
+    with TestClient(app) as client:
+        with client.stream(
+            "POST",
+            "/api/v1/eligibility/requests/stream",
+            json={
+                "policy_id": "24",
+                "source_ref_id": "WLF00000024",
+                "user_conditions": {"income": "low"},
+            },
+        ) as response:
+            assert response.status_code == 200
+            for line in response.iter_lines():
+                if line.startswith("data: "):
+                    events.append(json.loads(line[6:]))
+
+    assert [event["type"] for event in events] == [
+        "progress",
+        "progress",
+        "progress",
+        "done",
+    ]
+    assert events[0]["flow"] == "eligibility"
+    assert events[0]["node"] == "create_request"
+    assert events[-1]["payload"]["request_id"] == "123"
 
 
 def test_get_eligibility_request_returns_result_response(monkeypatch) -> None:
