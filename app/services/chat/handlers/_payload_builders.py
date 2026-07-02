@@ -36,6 +36,20 @@ async def build_assistant_payload(
                 extra={"intent": intent, "phrases": assertive},
             )
             disclaimer = True
+    # suggested_actions: secondary_intents에서 파생된 후속 행동 목록
+    suggested_actions = list(state.get("branch_suggested_actions") or [])
+
+    # policy_selection: 모호한 정책 참조 시 사용자가 선택할 수 있는 후보 목록
+    policy_candidates = state.get("branch_policy_candidates") or []
+    policy_selection: dict | None = (
+        {
+            "intent": intent,
+            "candidates": policy_candidates,
+        }
+        if policy_candidates
+        else None
+    )
+
     payload = {
         "content": content,
         "user_status": state.get("branch_user_status"),
@@ -50,6 +64,8 @@ async def build_assistant_payload(
         "slot_request": slot_request,
         "profile_confirm": profile_confirm,
         "eligibility_result": state.get("branch_eligibility_result"),
+        "suggested_actions": suggested_actions,
+        "policy_selection": policy_selection,
     }
     return {"assistant_payload": payload}
 

@@ -44,6 +44,26 @@ SUPERVISOR_SYSTEM_TEMPLATE = """당신은 임신·출산·육아 정책 챗봇�
 
 새 정책을 명시했거나 슬롯 정보가 비어있거나 정책과 무관한 메시지면 resolved_policy_slug는 null입니다.
 
+[맥락 의존 여부 — is_context_dependent]
+다음 경우에 is_context_dependent를 true로 설정하세요:
+- "이 정책", "그거", "방금 거", "해당 정책", "이거" 같은 지시어가 있으면 true
+- 주어가 생략된 후속 질문이 직전 정책을 가리킴이 자연스러우면 true
+- 정책명 없이 "자격 돼?", "어떻게 신청해?", "서류 뭐야?" 처럼 물으면 true
+- 새 정책을 명시했거나 정책과 무관한 질문이면 false
+
+[복합 의도 — secondary_intents]
+한 메시지에 여러 의도가 섞이면:
+- 가장 핵심인 최종 목적 또는 선행 작업을 intent로 선택
+- 나머지 의도를 secondary_intents에 최대 2개까지 추가 (빈 배열이 기본)
+- 예: "부모급여 자격 확인하고 신청 방법도 알려줘" → intent: eligibility, secondary_intents: [apply]
+- 예: "추천해주고 비교도 해줘" → intent: recommend, secondary_intents: [compare]
+
+[확신도 — confidence / ambiguity_reason]
+- 메시지가 명확하고 의도가 분명하면 confidence: 0.9 이상
+- 의도가 약간 모호하거나 복수 해석 가능하면 confidence: 0.6~0.8
+- 매우 모호하거나 정보가 부족하면 confidence: 0.5 미만
+- confidence < 0.7 이면 ambiguity_reason에 이유를 한 문장으로 설명. 그 외에는 null.
+
 [유사 정책 요청 — similar_policy_requested]
 사용자가 특정 정책을 기준으로 "그와 비슷한/유사한/대체할/같은 종류의 다른 정책"을 알려달라고 하면:
 - intent는 policy_summary로 분류하고(기준 정책을 설명),
@@ -101,7 +121,7 @@ BASE_BRANCH_PROMPTS: dict[Intent, str] = {
 참고 자료의 정책 신청 정보를 근거로 답하고, 단계별 안내는 '신청 준비' 화면을 안내하세요.
 - 한국어 3~5문장.""",
     "unclear": """사용자 질문을 정확히 이해하기 어렵습니다.
-- 챗봇이 도울 수 있는 주제(정책 추천 / 지원가능성 / 비교 / 신청 / 정책 정보)를 짧게 안내하세요.
+- 챗봇이 도울 수 있는 주제(아동·가족 복지 정책 추천 / 지원가능성 / 비교 / 신청 / 정책 정보)를 짧게 안내하세요.
 - 예시 질문 1~2개를 제안하세요.
 - 한국어 2~3문장.
 - 정책 자료는 사용하지 마세요.""",

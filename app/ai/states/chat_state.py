@@ -44,7 +44,7 @@ class PendingState(TypedDict, total=False):
     intent: Intent
     awaiting: list[str]
     asked: list[str]
-    kind: str  # "slot"(조건 칩 폼) | "confirm"(회원 프로필 확인)
+    kind: str  # "slot"(조건 칩 폼) | "confirm"(회원 프로필 확인) | "clarification"(정책 명확화)
 
 
 class ChatSlot(TypedDict, total=False):
@@ -52,6 +52,9 @@ class ChatSlot(TypedDict, total=False):
     profile: ProfileSlot
     pending: PendingState | None
     updated_at: str
+    last_intent: Intent | None       # 마지막으로 완료된 의도
+    last_result_type: str | None     # 마지막 응답 유형: "policy_list" | "eligibility_result" | "apply_card" | ...
+    suggested_actions: list[str]     # Handler가 제안한 후속 액션 목록
 
 
 class RecentAssistantPolicy(TypedDict):
@@ -65,6 +68,10 @@ class SupervisorDecision(TypedDict):
     intent: Intent
     raw: str
     resolved_policy_slug: NotRequired[str | None]
+    secondary_intents: NotRequired[list[Intent]]     # 복합 의도 시 보조 의도 목록
+    is_context_dependent: NotRequired[bool]          # 지시어("이 정책", "그거") 사용 여부
+    confidence: NotRequired[float]                   # 의도 분류 확신도 0.0~1.0
+    ambiguity_reason: NotRequired[str | None]        # 확신도 < 0.7일 때 모호성 이유
 
 
 class ChatGraphState(TypedDict):
@@ -88,6 +95,8 @@ class ChatGraphState(TypedDict):
     branch_policies: NotRequired[list[dict[str, Any]]]
     branch_evidences: NotRequired[list[dict[str, Any]]]
     branch_apply_card: NotRequired[dict[str, Any] | None]
+    branch_suggested_actions: NotRequired[list[str]]         # secondary_intents → 후속 액션
+    branch_policy_candidates: NotRequired[list[dict[str, Any]]]  # 정책 선택지 (모호한 참조 시)
     assistant_payload: NotRequired[dict[str, Any]]
     evidences_to_save: NotRequired[list[dict[str, Any]]]
     policy_links_to_save: NotRequired[list[dict[str, Any]]]
