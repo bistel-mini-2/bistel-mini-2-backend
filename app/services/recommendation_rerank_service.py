@@ -42,7 +42,7 @@ class RecommendationRerankOutput:
 class RecommendationRerankService:
     def __init__(
         self,
-        model: str = "gpt-4o-mini",
+        model: str = "gpt-5.4-mini",
         timeout_seconds: float = 180,
     ) -> None:
         self.model = model

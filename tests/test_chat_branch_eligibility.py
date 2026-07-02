@@ -7,6 +7,8 @@ import pytest
 
 from app.services import chat_handlers
 from app.services.chat_handlers import handle_eligibility
+from app.services.chat.ai import _graph_clients, _lifecycle_runners
+from app.ai.nodes.chat import chat_nodes
 from app.common.ai_status import RequestStatus
 
 
@@ -92,7 +94,15 @@ def _state(*, resolved_slug: str | None = None) -> dict[str, Any]:
 
 @pytest.fixture
 def patched_session(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(chat_handlers, "AsyncSessionLocal", lambda: _FakeSession())
+    monkeypatch.setattr(_lifecycle_runners, "AsyncSessionLocal", lambda: _FakeSession())
+
+
+@pytest.fixture
+def patched_llm(monkeypatch: pytest.MonkeyPatch) -> AsyncMock:
+    llm = AsyncMock()
+    llm.ainvoke = AsyncMock(return_value=SimpleNamespace(content="어떤 정책인지 알려주세요."))
+    monkeypatch.setattr(chat_nodes, "_llm", lambda: llm)
+    return llm
 
 
 def _make_eligibility_graph(result: dict | None) -> MagicMock:
@@ -110,8 +120,8 @@ def test_branch_eligibility_resolved_slug_skips_rag(
 ) -> None:
     rag = _FakeRagService([])
     graph = _make_eligibility_graph(_eligibility_result())
-    monkeypatch.setattr(chat_handlers, "_RAG_SERVICE", rag)
-    monkeypatch.setattr(chat_handlers, "_ELIGIBILITY_GRAPH", graph)
+    monkeypatch.setattr(_graph_clients, "_RAG_SERVICE", rag)
+    monkeypatch.setattr(_graph_clients, "_ELIGIBILITY_GRAPH", graph)
 
     result = asyncio.run(handle_eligibility(_state(resolved_slug="WLF1")))
 
@@ -126,8 +136,8 @@ def test_branch_eligibility_passes_chat_profile_conditions(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     graph = _make_eligibility_graph(_eligibility_result())
-    monkeypatch.setattr(chat_handlers, "_RAG_SERVICE", _FakeRagService([]))
-    monkeypatch.setattr(chat_handlers, "_ELIGIBILITY_GRAPH", graph)
+    monkeypatch.setattr(_graph_clients, "_RAG_SERVICE", _FakeRagService([]))
+    monkeypatch.setattr(_graph_clients, "_ELIGIBILITY_GRAPH", graph)
 
     state = {
         **_state(resolved_slug="WLF1"),
@@ -156,8 +166,8 @@ def test_branch_eligibility_rag_finds_policy_runs_lifecycle(
         [_rag_chunk(chunk_id=1, policy_code="WLF1", policy_name="임신·출산 진료비")]
     )
     graph = _make_eligibility_graph(_eligibility_result())
-    monkeypatch.setattr(chat_handlers, "_RAG_SERVICE", rag)
-    monkeypatch.setattr(chat_handlers, "_ELIGIBILITY_GRAPH", graph)
+    monkeypatch.setattr(_graph_clients, "_RAG_SERVICE", rag)
+    monkeypatch.setattr(_graph_clients, "_ELIGIBILITY_GRAPH", graph)
 
     state = {
         "user_id": 7,
@@ -174,12 +184,13 @@ def test_branch_eligibility_rag_finds_policy_runs_lifecycle(
 
 def test_branch_eligibility_no_policy_found_returns_clarification(
     patched_session: None,
+    patched_llm: AsyncMock,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     rag = _FakeRagService([])
     graph = _make_eligibility_graph(_eligibility_result())
-    monkeypatch.setattr(chat_handlers, "_RAG_SERVICE", rag)
-    monkeypatch.setattr(chat_handlers, "_ELIGIBILITY_GRAPH", graph)
+    monkeypatch.setattr(_graph_clients, "_RAG_SERVICE", rag)
+    monkeypatch.setattr(_graph_clients, "_ELIGIBILITY_GRAPH", graph)
 
     state = {
         "user_id": 7,
@@ -191,7 +202,7 @@ def test_branch_eligibility_no_policy_found_returns_clarification(
 
     graph.run.assert_not_awaited()
     assert result["branch_policies"] == []
-    assert "정책" in result["branch_content"]
+    assert result["branch_content"] == "어떤 정책인지 알려주세요."
 
 
 def test_branch_eligibility_recent_single_policy_runs_lifecycle(
@@ -200,8 +211,8 @@ def test_branch_eligibility_recent_single_policy_runs_lifecycle(
 ) -> None:
     rag = _FakeRagService([])
     graph = _make_eligibility_graph(_eligibility_result())
-    monkeypatch.setattr(chat_handlers, "_RAG_SERVICE", rag)
-    monkeypatch.setattr(chat_handlers, "_ELIGIBILITY_GRAPH", graph)
+    monkeypatch.setattr(_graph_clients, "_RAG_SERVICE", rag)
+    monkeypatch.setattr(_graph_clients, "_ELIGIBILITY_GRAPH", graph)
 
     result = asyncio.run(handle_eligibility({
         **_state(),
@@ -215,12 +226,13 @@ def test_branch_eligibility_recent_single_policy_runs_lifecycle(
 
 def test_branch_eligibility_recent_multiple_policies_asks_target(
     patched_session: None,
+    patched_llm: AsyncMock,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     rag = _FakeRagService([])
     graph = _make_eligibility_graph(_eligibility_result())
-    monkeypatch.setattr(chat_handlers, "_RAG_SERVICE", rag)
-    monkeypatch.setattr(chat_handlers, "_ELIGIBILITY_GRAPH", graph)
+    monkeypatch.setattr(_graph_clients, "_RAG_SERVICE", rag)
+    monkeypatch.setattr(_graph_clients, "_ELIGIBILITY_GRAPH", graph)
 
     result = asyncio.run(handle_eligibility({
         **_state(),
@@ -235,7 +247,7 @@ def test_branch_eligibility_recent_multiple_policies_asks_target(
     }))
 
     graph.run.assert_not_awaited()
-    assert "어떤 정책" in result["branch_content"]
+    assert result["branch_content"] == "어떤 정책인지 알려주세요."
     assert result["branch_policies"] == []
 
 
@@ -248,8 +260,8 @@ def test_branch_eligibility_follow_up_required_saves_slot(
         "follow_up_questions": [{"field_name": "region", "question_text": "어디 사세요?"}],
     }
     graph = _make_eligibility_graph(follow_up_result)
-    monkeypatch.setattr(chat_handlers, "_RAG_SERVICE", _FakeRagService([]))
-    monkeypatch.setattr(chat_handlers, "_ELIGIBILITY_GRAPH", graph)
+    monkeypatch.setattr(_graph_clients, "_RAG_SERVICE", _FakeRagService([]))
+    monkeypatch.setattr(_graph_clients, "_ELIGIBILITY_GRAPH", graph)
 
     result = asyncio.run(handle_eligibility(_state(resolved_slug="WLF1")))
 
@@ -265,8 +277,8 @@ def test_branch_eligibility_lifecycle_failure_returns_fallback(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     graph = _make_eligibility_graph(None)
-    monkeypatch.setattr(chat_handlers, "_RAG_SERVICE", _FakeRagService([]))
-    monkeypatch.setattr(chat_handlers, "_ELIGIBILITY_GRAPH", graph)
+    monkeypatch.setattr(_graph_clients, "_RAG_SERVICE", _FakeRagService([]))
+    monkeypatch.setattr(_graph_clients, "_ELIGIBILITY_GRAPH", graph)
 
     result = asyncio.run(handle_eligibility(_state(resolved_slug="WLF1")))
 

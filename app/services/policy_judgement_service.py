@@ -100,7 +100,7 @@ class PolicyJudgementService:
         if settings.openai_api_key:
             kwargs["api_key"] = settings.openai_api_key
         return ChatOpenAI(
-            model="gpt-4o-mini",
+            model="gpt-5.4-mini",
             temperature=0,
             **kwargs,
         )

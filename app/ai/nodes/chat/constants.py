@@ -23,7 +23,7 @@ INTENT_TO_ACTION_TYPE: dict[Intent, str | None] = {
     "unclear": None,
 }
 
-LLM_MODEL = "gpt-4o-mini"
+LLM_MODEL = "gpt-5.4-mini"
 RAG_TOP_K = 5
 POLICIES_MAX = 3
 EVIDENCES_MAX = 5
