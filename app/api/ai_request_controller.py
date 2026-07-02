@@ -8,6 +8,7 @@ from fastapi import APIRouter, BackgroundTasks, Query, status
 from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy import text
 
+from app.ai.graphs.eligibility_graph import eligibility_graph_runner
 from app.ai.utils.progress import get_node_label, reset_progress_callback, set_progress_callback
 from app.common.response import success_response
 from app.core.dependencies import CurrentUserDep, DbSessionDep
@@ -454,6 +455,12 @@ async def stream_eligibility_request(
     db: DbSessionDep,
     current_user: CurrentUserDep,
 ) -> StreamingResponse:
+    if payload.chat_session_id is not None:
+        await ChatService.ensure_owned_session(
+            db,
+            user_id=current_user.user_id,
+            chat_session_id=payload.chat_session_id,
+        )
     return StreamingResponse(
         _eligibility_sse_stream(db, current_user.user_id, payload),
         media_type="text/event-stream",
@@ -480,44 +487,27 @@ async def _eligibility_sse_stream(
         })
 
     async def _run() -> None:
-        service = AiRequestLifecycleService()
         progress_token = set_progress_callback(_on_progress)
         try:
             async with AsyncSessionLocal() as inner_db:
                 try:
-                    snapshot = await service.create_eligibility_request(
-                        db=inner_db,
-                        user_id=user_id,
-                        policy_identifier=payload.policy_id,
-                        source_type=payload.source_type,
-                        source_ref_id=_eligibility_source_ref(
-                            payload.chat_session_id,
-                            payload.source_ref_id,
-                        ),
-                        raw_query=payload.raw_query,
-                        selected_conditions=payload.selected_conditions,
-                    )
-                    snapshot = await service.mark_processing(
-                        db=inner_db,
-                        request_type="eligibility",
-                        request_id=int(snapshot.request_id),
-                    )
-                    await inner_db.commit()
-                    await asyncio.wait_for(
-                        service.process_condition_request(
+                    result = await asyncio.wait_for(
+                        eligibility_graph_runner.run(
                             db=inner_db,
-                            request_type="eligibility",
-                            request_id=int(snapshot.request_id),
+                            user_id=user_id,
+                            policy_identifier=payload.policy_id,
+                            raw_query=payload.raw_query,
+                            selected_conditions=payload.selected_conditions,
+                            source_type=payload.source_type,
+                            source_ref_id=_eligibility_source_ref(
+                                payload.chat_session_id,
+                                payload.source_ref_id,
+                            ),
                         ),
                         timeout=AI_BACKGROUND_TIMEOUT_SECONDS,
                     )
                     await inner_db.commit()
-                    result = await service.get_eligibility_result(
-                        db=inner_db,
-                        request_id=int(snapshot.request_id),
-                        user_id=user_id,
-                    )
-                    await queue.put({"type": "done", "payload": result.model_dump(mode="json")})
+                    await queue.put({"type": "done", "payload": result})
                 except Exception as exc:
                     await inner_db.rollback()
                     logger.exception("Eligibility SSE stream failed")
