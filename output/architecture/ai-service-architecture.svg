@@ -1,0 +1,138 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2400" height="1500" viewBox="0 0 2400 1500">
+<defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#D9826B"/></marker></defs>
+<rect width="2400" height="1500" fill="#FFF9F3"/>
+<text x="70" y="82" font-family="Apple SD Gothic Neo, sans-serif" font-size="24" font-weight="700" fill="#D94F5C" text-anchor="start">ARCHITECTURE</text>
+<text x="70" y="150" font-family="Apple SD Gothic Neo, sans-serif" font-size="54" font-weight="700" fill="#403836" text-anchor="start">전체 AI 서비스 아키텍처</text>
+<text x="70" y="202" font-family="Apple SD Gothic Neo, sans-serif" font-size="27" font-weight="400" fill="#796D69" text-anchor="start">정책 데이터 구축부터 실시간 AI 실행, 근거 기반 응답과 저장까지</text>
+<rect x="1510" y="92" width="815" height="74" rx="37" fill="#F36B72"/>
+<text x="1917" y="140" font-family="Apple SD Gothic Neo, sans-serif" font-size="23" font-weight="700" fill="#FFFFFF" text-anchor="middle">Offline Data  →  Runtime AI  →  Evidence &amp; Persistence</text>
+<path d="M 340 465 L 390 465" fill="none" stroke="#D9826B" stroke-width="3" marker-end="url(#arrow)" opacity="0.85"/>
+<text x="390" y="455" font-family="Apple SD Gothic Neo, sans-serif" font-size="18" font-weight="600" fill="#796D69" text-anchor="middle">입력</text>
+<path d="M 730 465 L 780 465" fill="none" stroke="#D9826B" stroke-width="3" marker-end="url(#arrow)" opacity="0.85"/>
+<text x="780" y="455" font-family="Apple SD Gothic Neo, sans-serif" font-size="18" font-weight="600" fill="#796D69" text-anchor="middle">API 요청</text>
+<path d="M 1120 465 L 1145 465 L 1145 350 L 1170 350" fill="none" stroke="#D9826B" stroke-width="3" marker-end="url(#arrow)" opacity="0.85"/>
+<text x="1145" y="340" font-family="Apple SD Gothic Neo, sans-serif" font-size="18" font-weight="600" fill="#796D69" text-anchor="middle">채팅 요청</text>
+<path d="M 1440 455 L 1440 485" fill="none" stroke="#D9826B" stroke-width="3" marker-end="url(#arrow)" opacity="0.85"/>
+<text x="1440" y="475" font-family="Apple SD Gothic Neo, sans-serif" font-size="18" font-weight="600" fill="#796D69" text-anchor="middle">상태 우선</text>
+<path d="M 1710 350 L 1740 350 L 1740 465 L 1770 465" fill="none" stroke="#D9826B" stroke-width="3" marker-end="url(#arrow)" opacity="0.85"/>
+<text x="1740" y="455" font-family="Apple SD Gothic Neo, sans-serif" font-size="18" font-weight="600" fill="#796D69" text-anchor="middle">의도 분류 · 생성</text>
+<path d="M 780 465 L 800 465 L 800 902 L 820 902" fill="none" stroke="#D9826B" stroke-width="3" marker-end="url(#arrow)" opacity="0.85"/>
+<text x="800" y="892" font-family="Apple SD Gothic Neo, sans-serif" font-size="18" font-weight="600" fill="#796D69" text-anchor="middle">기능별 실행</text>
+<path d="M 1120 465 L 985 465 L 985 902 L 850 902" fill="none" stroke="#D9826B" stroke-width="3" marker-end="url(#arrow)" opacity="0.85"/>
+<path d="M 1120 465 L 1205 465 L 1205 902 L 1290 902" fill="none" stroke="#D9826B" stroke-width="3" marker-end="url(#arrow)" opacity="0.85"/>
+<path d="M 1120 465 L 1425 465 L 1425 902 L 1730 902" fill="none" stroke="#D9826B" stroke-width="3" marker-end="url(#arrow)" opacity="0.85"/>
+<path d="M 1770 465 L 1955 465 L 1955 902 L 2140 902" fill="none" stroke="#D9826B" stroke-width="3" marker-end="url(#arrow)" opacity="0.85"/>
+<text x="1955" y="892" font-family="Apple SD Gothic Neo, sans-serif" font-size="18" font-weight="600" fill="#796D69" text-anchor="middle">모델 호출</text>
+<path d="M 530 1255 L 1410 1255" fill="none" stroke="#D9826B" stroke-width="3" stroke-dasharray="12 10" marker-end="url(#arrow)" opacity="0.85"/>
+<text x="1410" y="1245" font-family="Apple SD Gothic Neo, sans-serif" font-size="18" font-weight="600" fill="#796D69" text-anchor="middle">chunk · embedding</text>
+<path d="M 1370 1255 L 1410 1255" fill="none" stroke="#D9826B" stroke-width="5" marker-end="url(#arrow)" opacity="0.85"/>
+<text x="1410" y="1245" font-family="Apple SD Gothic Neo, sans-serif" font-size="18" font-weight="600" fill="#796D69" text-anchor="middle">검색 · 저장</text>
+<path d="M 1885 1255 L 1925 1255" fill="none" stroke="#D9826B" stroke-width="5" marker-end="url(#arrow)" opacity="0.85"/>
+<text x="1925" y="1245" font-family="Apple SD Gothic Neo, sans-serif" font-size="18" font-weight="600" fill="#796D69" text-anchor="middle">결과 조회</text>
+<rect x="370" y="735" width="1790" height="325" rx="34" fill="none" stroke="#D94F5C" stroke-width="3" stroke-dasharray="10 8"/>
+<text x="400" y="775" font-family="Apple SD Gothic Neo, sans-serif" font-size="20" font-weight="700" fill="#D94F5C" text-anchor="start">INDEPENDENT LANGGRAPH WORKFLOWS</text>
+<rect x="70" y="260" width="270" height="410" rx="28" fill="#FFE4E8" stroke="#F2C9BA" stroke-width="2"/>
+<rect x="70" y="260" width="9" height="410" rx="5" fill="#D94F5C"/>
+<text x="104" y="312" font-family="Apple SD Gothic Neo, sans-serif" font-size="29" font-weight="700" fill="#403836" text-anchor="start">사용자</text>
+<text x="104" y="347" font-family="Apple SD Gothic Neo, sans-serif" font-size="20" font-weight="500" fill="#796D69" text-anchor="start">정책 탐색과 AI 요청</text>
+<text x="108" y="389" font-family="Apple SD Gothic Neo, sans-serif" font-size="19" font-weight="500" fill="#403836" text-anchor="start">• 맞춤 추천</text>
+<text x="108" y="423" font-family="Apple SD Gothic Neo, sans-serif" font-size="19" font-weight="500" fill="#403836" text-anchor="start">• 지원 가능성</text>
+<text x="108" y="457" font-family="Apple SD Gothic Neo, sans-serif" font-size="19" font-weight="500" fill="#403836" text-anchor="start">• 정책 비교</text>
+<text x="108" y="491" font-family="Apple SD Gothic Neo, sans-serif" font-size="19" font-weight="500" fill="#403836" text-anchor="start">• AI 채팅</text>
+<rect x="390" y="260" width="340" height="410" rx="28" fill="#FFF1E7" stroke="#F2C9BA" stroke-width="2"/>
+<rect x="390" y="260" width="9" height="410" rx="5" fill="#FF8C7A"/>
+<text x="424" y="312" font-family="Apple SD Gothic Neo, sans-serif" font-size="29" font-weight="700" fill="#403836" text-anchor="start">Frontend</text>
+<text x="424" y="347" font-family="Apple SD Gothic Neo, sans-serif" font-size="20" font-weight="500" fill="#796D69" text-anchor="start">Next.js 화면 · API Client</text>
+<text x="428" y="389" font-family="Apple SD Gothic Neo, sans-serif" font-size="19" font-weight="500" fill="#403836" text-anchor="start">• Recommend / Eligibility</text>
+<text x="428" y="423" font-family="Apple SD Gothic Neo, sans-serif" font-size="19" font-weight="500" fill="#403836" text-anchor="start">• Compare / Policy</text>
+<text x="428" y="457" font-family="Apple SD Gothic Neo, sans-serif" font-size="19" font-weight="500" fill="#403836" text-anchor="start">• Chat</text>
+<text x="428" y="491" font-family="Apple SD Gothic Neo, sans-serif" font-size="19" font-weight="500" fill="#403836" text-anchor="start">• SSE · Polling</text>
+<rect x="780" y="260" width="340" height="410" rx="28" fill="#FFD4BE" stroke="#F2C9BA" stroke-width="2"/>
+<rect x="780" y="260" width="9" height="410" rx="5" fill="#FF8C7A"/>
+<text x="814" y="312" font-family="Apple SD Gothic Neo, sans-serif" font-size="29" font-weight="700" fill="#403836" text-anchor="start">FastAPI</text>
+<text x="814" y="347" font-family="Apple SD Gothic Neo, sans-serif" font-size="20" font-weight="500" fill="#796D69" text-anchor="start">API · Service Boundary</text>
+<text x="818" y="389" font-family="Apple SD Gothic Neo, sans-serif" font-size="19" font-weight="500" fill="#403836" text-anchor="start">• Controllers · Schemas</text>
+<text x="818" y="423" font-family="Apple SD Gothic Neo, sans-serif" font-size="19" font-weight="500" fill="#403836" text-anchor="start">• Services · Repositories</text>
+<text x="818" y="457" font-family="Apple SD Gothic Neo, sans-serif" font-size="19" font-weight="500" fill="#403836" text-anchor="start">• Auth / JWT</text>
+<text x="818" y="491" font-family="Apple SD Gothic Neo, sans-serif" font-size="19" font-weight="500" fill="#403836" text-anchor="start">• Request Lifecycle</text>
+<rect x="1170" y="245" width="540" height="210" rx="28" fill="#F36B72" stroke="#F2C9BA" stroke-width="2"/>
+<rect x="1170" y="245" width="9" height="210" rx="5" fill="#FFFFFF"/>
+<text x="1204" y="297" font-family="Apple SD Gothic Neo, sans-serif" font-size="29" font-weight="700" fill="#FFFFFF" text-anchor="start">Chat Orchestration</text>
+<text x="1204" y="332" font-family="Apple SD Gothic Neo, sans-serif" font-size="20" font-weight="500" fill="#FFFFFF" text-anchor="start">Python Handler 기반 직접 라우팅</text>
+<text x="1208" y="374" font-family="Apple SD Gothic Neo, sans-serif" font-size="19" font-weight="500" fill="#FFFFFF" text-anchor="start">• ChatService</text>
+<text x="1208" y="408" font-family="Apple SD Gothic Neo, sans-serif" font-size="19" font-weight="500" fill="#FFFFFF" text-anchor="start">• Intent Classifier → Handler Router</text>
+<rect x="1170" y="485" width="540" height="185" rx="28" fill="#FFE4E8" stroke="#F2C9BA" stroke-width="2"/>
+<rect x="1170" y="485" width="9" height="185" rx="5" fill="#D94F5C"/>
+<text x="1204" y="537" font-family="Apple SD Gothic Neo, sans-serif" font-size="29" font-weight="700" fill="#403836" text-anchor="start">Conversation State</text>
+<text x="1204" y="572" font-family="Apple SD Gothic Neo, sans-serif" font-size="20" font-weight="500" fill="#796D69" text-anchor="start">의도보다 진행 상태를 먼저 처리</text>
+<text x="1208" y="614" font-family="Apple SD Gothic Neo, sans-serif" font-size="19" font-weight="500" fill="#403836" text-anchor="start">• 프로필 확인</text>
+<text x="1208" y="648" font-family="Apple SD Gothic Neo, sans-serif" font-size="19" font-weight="500" fill="#403836" text-anchor="start">• 필수 조건 수집</text>
+<text x="1208" y="682" font-family="Apple SD Gothic Neo, sans-serif" font-size="19" font-weight="500" fill="#403836" text-anchor="start">• Follow-Up · slot_json</text>
+<rect x="1770" y="260" width="555" height="410" rx="28" fill="#FFF1E7" stroke="#F2C9BA" stroke-width="2"/>
+<rect x="1770" y="260" width="9" height="410" rx="5" fill="#D94F5C"/>
+<text x="1804" y="312" font-family="Apple SD Gothic Neo, sans-serif" font-size="29" font-weight="700" fill="#403836" text-anchor="start">OpenAI</text>
+<text x="1804" y="347" font-family="Apple SD Gothic Neo, sans-serif" font-size="20" font-weight="500" fill="#796D69" text-anchor="start">구조화 출력 · 생성 · 임베딩</text>
+<text x="1808" y="389" font-family="Apple SD Gothic Neo, sans-serif" font-size="19" font-weight="500" fill="#403836" text-anchor="start">• gpt-5.4-mini</text>
+<text x="1808" y="423" font-family="Apple SD Gothic Neo, sans-serif" font-size="19" font-weight="500" fill="#403836" text-anchor="start">• gpt-4o · Vision</text>
+<text x="1808" y="457" font-family="Apple SD Gothic Neo, sans-serif" font-size="19" font-weight="500" fill="#403836" text-anchor="start">• text-embedding-3-large</text>
+<rect x="410" y="790" width="410" height="225" rx="28" fill="#FFE4E8" stroke="#F2C9BA" stroke-width="2"/>
+<rect x="410" y="790" width="9" height="225" rx="5" fill="#D94F5C"/>
+<text x="444" y="842" font-family="Apple SD Gothic Neo, sans-serif" font-size="29" font-weight="700" fill="#403836" text-anchor="start">Recommendation Graph</text>
+<text x="444" y="877" font-family="Apple SD Gothic Neo, sans-serif" font-size="20" font-weight="500" fill="#796D69" text-anchor="start">맞춤 정책 추천</text>
+<text x="448" y="919" font-family="Apple SD Gothic Neo, sans-serif" font-size="19" font-weight="500" fill="#403836" text-anchor="start">• 조건 추출 · 프로필 병합</text>
+<text x="448" y="953" font-family="Apple SD Gothic Neo, sans-serif" font-size="19" font-weight="500" fill="#403836" text-anchor="start">• 규칙 필터 · 후보 생성</text>
+<text x="448" y="987" font-family="Apple SD Gothic Neo, sans-serif" font-size="19" font-weight="500" fill="#403836" text-anchor="start">• LLM 재정렬</text>
+<rect x="850" y="790" width="410" height="225" rx="28" fill="#FFD4BE" stroke="#F2C9BA" stroke-width="2"/>
+<rect x="850" y="790" width="9" height="225" rx="5" fill="#D94F5C"/>
+<text x="884" y="842" font-family="Apple SD Gothic Neo, sans-serif" font-size="29" font-weight="700" fill="#403836" text-anchor="start">Eligibility Graph</text>
+<text x="884" y="877" font-family="Apple SD Gothic Neo, sans-serif" font-size="20" font-weight="500" fill="#796D69" text-anchor="start">정책별 지원 가능성</text>
+<text x="888" y="919" font-family="Apple SD Gothic Neo, sans-serif" font-size="19" font-weight="500" fill="#403836" text-anchor="start">• 조건·근거 수집</text>
+<text x="888" y="953" font-family="Apple SD Gothic Neo, sans-serif" font-size="19" font-weight="500" fill="#403836" text-anchor="start">• 규칙 판정 + LLM 보조</text>
+<text x="888" y="987" font-family="Apple SD Gothic Neo, sans-serif" font-size="19" font-weight="500" fill="#403836" text-anchor="start">• 추가 질문 생성</text>
+<rect x="1290" y="790" width="410" height="225" rx="28" fill="#FFF1E7" stroke="#F2C9BA" stroke-width="2"/>
+<rect x="1290" y="790" width="9" height="225" rx="5" fill="#D94F5C"/>
+<text x="1324" y="842" font-family="Apple SD Gothic Neo, sans-serif" font-size="29" font-weight="700" fill="#403836" text-anchor="start">Comparison Graph</text>
+<text x="1324" y="877" font-family="Apple SD Gothic Neo, sans-serif" font-size="20" font-weight="500" fill="#796D69" text-anchor="start">정책 비교</text>
+<text x="1328" y="919" font-family="Apple SD Gothic Neo, sans-serif" font-size="19" font-weight="500" fill="#403836" text-anchor="start">• 비교 대상 해석</text>
+<text x="1328" y="953" font-family="Apple SD Gothic Neo, sans-serif" font-size="19" font-weight="500" fill="#403836" text-anchor="start">• 항목 정규화</text>
+<text x="1328" y="987" font-family="Apple SD Gothic Neo, sans-serif" font-size="19" font-weight="500" fill="#403836" text-anchor="start">• 비교 가이드 생성</text>
+<rect x="1730" y="790" width="410" height="225" rx="28" fill="#FFE4E8" stroke="#F2C9BA" stroke-width="2"/>
+<rect x="1730" y="790" width="9" height="225" rx="5" fill="#D94F5C"/>
+<text x="1764" y="842" font-family="Apple SD Gothic Neo, sans-serif" font-size="29" font-weight="700" fill="#403836" text-anchor="start">Policy Summary Graph</text>
+<text x="1764" y="877" font-family="Apple SD Gothic Neo, sans-serif" font-size="20" font-weight="500" fill="#796D69" text-anchor="start">정책 핵심 요약</text>
+<text x="1768" y="919" font-family="Apple SD Gothic Neo, sans-serif" font-size="19" font-weight="500" fill="#403836" text-anchor="start">• 정책 chunk 검색</text>
+<text x="1768" y="953" font-family="Apple SD Gothic Neo, sans-serif" font-size="19" font-weight="500" fill="#403836" text-anchor="start">• 근거 기반 요약</text>
+<text x="1768" y="987" font-family="Apple SD Gothic Neo, sans-serif" font-size="19" font-weight="500" fill="#403836" text-anchor="start">• 정책 링크 연결</text>
+<rect x="70" y="1110" width="460" height="290" rx="28" fill="#FFFDFB" stroke="#F2C9BA" stroke-width="2"/>
+<rect x="70" y="1110" width="9" height="290" rx="5" fill="#FF8C7A"/>
+<text x="104" y="1162" font-family="Apple SD Gothic Neo, sans-serif" font-size="29" font-weight="700" fill="#403836" text-anchor="start">Policy Data Ingestion</text>
+<text x="104" y="1197" font-family="Apple SD Gothic Neo, sans-serif" font-size="20" font-weight="500" fill="#796D69" text-anchor="start">사전 데이터 구축 · Offline</text>
+<text x="108" y="1239" font-family="Apple SD Gothic Neo, sans-serif" font-size="19" font-weight="500" fill="#403836" text-anchor="start">• 공공데이터 · 복지로</text>
+<text x="108" y="1273" font-family="Apple SD Gothic Neo, sans-serif" font-size="19" font-weight="500" fill="#403836" text-anchor="start">• PDF / HTML 원문 수집</text>
+<text x="108" y="1307" font-family="Apple SD Gothic Neo, sans-serif" font-size="19" font-weight="500" fill="#403836" text-anchor="start">• 텍스트 추출 · chunk</text>
+<text x="108" y="1341" font-family="Apple SD Gothic Neo, sans-serif" font-size="19" font-weight="500" fill="#403836" text-anchor="start">• Vision 보완 · embedding</text>
+<rect x="570" y="1110" width="800" height="290" rx="28" fill="#FFB38A" stroke="#F2C9BA" stroke-width="2"/>
+<rect x="570" y="1110" width="9" height="290" rx="5" fill="#D94F5C"/>
+<text x="604" y="1162" font-family="Apple SD Gothic Neo, sans-serif" font-size="29" font-weight="700" fill="#403836" text-anchor="start">Shared AI Capabilities</text>
+<text x="604" y="1197" font-family="Apple SD Gothic Neo, sans-serif" font-size="20" font-weight="500" fill="#796D69" text-anchor="start">모든 워크플로우가 공유</text>
+<text x="608" y="1239" font-family="Apple SD Gothic Neo, sans-serif" font-size="19" font-weight="500" fill="#403836" text-anchor="start">• RAG Search</text>
+<text x="608" y="1273" font-family="Apple SD Gothic Neo, sans-serif" font-size="19" font-weight="500" fill="#403836" text-anchor="start">• Rule Filter</text>
+<text x="608" y="1307" font-family="Apple SD Gothic Neo, sans-serif" font-size="19" font-weight="500" fill="#403836" text-anchor="start">• LLM Judgement · Rerank</text>
+<text x="608" y="1341" font-family="Apple SD Gothic Neo, sans-serif" font-size="19" font-weight="500" fill="#403836" text-anchor="start">• Evidence · Quality Validation</text>
+<rect x="1410" y="1110" width="475" height="290" rx="28" fill="#FFD4BE" stroke="#F2C9BA" stroke-width="2"/>
+<rect x="1410" y="1110" width="9" height="290" rx="5" fill="#D94F5C"/>
+<text x="1444" y="1162" font-family="Apple SD Gothic Neo, sans-serif" font-size="29" font-weight="700" fill="#403836" text-anchor="start">PostgreSQL + pgvector</text>
+<text x="1444" y="1197" font-family="Apple SD Gothic Neo, sans-serif" font-size="20" font-weight="500" fill="#796D69" text-anchor="start">업무 데이터 · Vector Search</text>
+<text x="1448" y="1239" font-family="Apple SD Gothic Neo, sans-serif" font-size="19" font-weight="500" fill="#403836" text-anchor="start">• 정책 · 사용자 · 가족 프로필</text>
+<text x="1448" y="1273" font-family="Apple SD Gothic Neo, sans-serif" font-size="19" font-weight="500" fill="#403836" text-anchor="start">• 대화 · 요청 · slot_json</text>
+<text x="1448" y="1307" font-family="Apple SD Gothic Neo, sans-serif" font-size="19" font-weight="500" fill="#403836" text-anchor="start">• 추천 후보 · assessment</text>
+<text x="1448" y="1341" font-family="Apple SD Gothic Neo, sans-serif" font-size="19" font-weight="500" fill="#403836" text-anchor="start">• chunk embedding · evidence</text>
+<rect x="1925" y="1110" width="400" height="290" rx="28" fill="#FFE4E8" stroke="#F2C9BA" stroke-width="2"/>
+<rect x="1925" y="1110" width="9" height="290" rx="5" fill="#D94F5C"/>
+<text x="1959" y="1162" font-family="Apple SD Gothic Neo, sans-serif" font-size="29" font-weight="700" fill="#403836" text-anchor="start">Response &amp; Persistence</text>
+<text x="1959" y="1197" font-family="Apple SD Gothic Neo, sans-serif" font-size="20" font-weight="500" fill="#796D69" text-anchor="start">저장 완료 후 화면 반환</text>
+<text x="1963" y="1239" font-family="Apple SD Gothic Neo, sans-serif" font-size="19" font-weight="500" fill="#403836" text-anchor="start">• 구조화 응답 · 정책 카드</text>
+<text x="1963" y="1273" font-family="Apple SD Gothic Neo, sans-serif" font-size="19" font-weight="500" fill="#403836" text-anchor="start">• 근거 · 링크</text>
+<text x="1963" y="1307" font-family="Apple SD Gothic Neo, sans-serif" font-size="19" font-weight="500" fill="#403836" text-anchor="start">• SSE done · Polling</text>
+<text x="1963" y="1341" font-family="Apple SD Gothic Neo, sans-serif" font-size="19" font-weight="500" fill="#403836" text-anchor="start">• failed · recovery</text>
+</svg>
