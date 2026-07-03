@@ -61,81 +61,104 @@ class _FakeDb:
         pass
 
 
-_STUB_RECOMMEND_RESULT = (
-    {
-        "status": "COMPLETED",
-        "policies": [],
-        "content": "[stub] 추천 결과가 없습니다.",
-    },
-    None,
-)
+def _make_stub_recommend_result() -> tuple[Any, None]:
+    # AiRequestSnapshot 필드를 SimpleNamespace로 모사
+    from types import SimpleNamespace
+    from app.common.ai_status import RequestStatus
+    snapshot = SimpleNamespace(
+        status=RequestStatus.COMPLETED.value,
+        request_id=0,
+        questions=[],
+        result_json={"policies": [], "content": "[stub] 추천 stub 결과"},
+        merged_condition_json=None,
+    )
+    return snapshot, None
 
-_STUB_ELIGIBILITY_RESULT: dict[str, Any] = {
-    "status": "INELIGIBLE",
-    "user_status": "ineligible",
-    "assessment_status": "COMPLETED",
-    "follow_up_questions": [],
-    "summary": "[stub] 자격 확인 stub 결과입니다.",
-    "request_id": 0,
-    "criteria": [],
-}
 
-_STUB_COMPARISON_RESULT: dict[str, Any] = {
-    "content": "[stub] 비교 stub 결과입니다.",
-    "policies": [],
-}
+def _make_stub_eligibility_result() -> dict[str, Any]:
+    return {
+        "status": "INELIGIBLE",
+        "user_status": "ineligible",
+        "assessment_status": "COMPLETED",
+        "follow_up_questions": [],
+        "summary": "[stub] 자격 확인 stub 결과입니다.",
+        "request_id": 0,
+        "criteria": [],
+    }
 
-_STUB_APPLY_RESULT = (
-    {
-        "apply_url": "https://example.com",
-        "method": "온라인",
-        "required_docs": [],
-        "period": "",
-    },
-    None,
-)
 
-_STUB_POLICY_SUMMARY_RESULT: dict[str, Any] = {
-    "content": "[stub] 정책 요약 stub 결과입니다.",
-    "policies": [],
-}
+def _make_stub_comparison_state(state: dict[str, Any]) -> dict[str, Any]:
+    return {
+        **state,
+        "branch_content": "[stub] 비교 stub 결과입니다.",
+        "branch_policies": [],
+        "branch_evidences": [],
+    }
+
+
+def _make_stub_apply_result() -> tuple[Any, None]:
+    from app.schemas.apply_schema import ApplyPreparationResponse
+    response = ApplyPreparationResponse(
+        apply_id=None,
+        saved=False,
+        policy_id="stub-policy",
+        how_to_apply="온라인 신청",
+        contact=None,
+        official_url="https://example.com",
+        checklist=[],
+        caution=None,
+        progress_percent=0,
+    )
+    return response, None
 
 
 def _patch_lifecycle_runners(monkeypatch_dict: dict[str, Any]) -> None:
-    """생명주기 runner를 stub으로 교체해 DB·외부 API 호출을 차단한다."""
+    """생명주기 runner를 stub으로 교체해 DB·외부 API 호출을 차단한다.
+
+    패치 전략:
+    - recommend: _handler_recommend가 로컬 임포트 → _handler_recommend 모듈 직접 패치
+    - eligibility: chat_handlers._sync_legacy_patch_points()가 _chat_handlers._run_eligibility_lifecycle을
+                   감지해 _lifecycle_runners.run_eligibility_lifecycle를 덮어쓰므로
+                   chat_handlers 모듈 수준 변수를 패치해야 _sync_legacy_patch_points가 stub을 선택함
+    - compare: _lifecycle_runners.run_comparison_branch를 직접 패치 (_sync_legacy_patch_points 미관여)
+    - apply: _handler_apply가 로컬 임포트 → _handler_apply 모듈 직접 패치
+    """
     import app.services.chat.ai._lifecycle_runners as _lr
+    import app.services.chat.chat_handlers as _ch
     import app.services.chat.handlers._handler_apply as _ha
     import app.services.chat.handlers._handler_recommend as _hr
 
-    monkeypatch_dict["_lr.run_recommendation_lifecycle"] = _lr.run_recommendation_lifecycle
-    monkeypatch_dict["_lr.run_eligibility_lifecycle"] = _lr.run_eligibility_lifecycle
+    monkeypatch_dict["_hr._run_recommendation_lifecycle"] = _hr._run_recommendation_lifecycle
+    monkeypatch_dict["_ch._run_eligibility_lifecycle"] = _ch._run_eligibility_lifecycle
     monkeypatch_dict["_lr.run_comparison_branch"] = _lr.run_comparison_branch
     monkeypatch_dict["_ha._run_apply_preparation"] = _ha._run_apply_preparation
 
     async def _stub_recommend(*a: Any, **kw: Any) -> Any:
-        return _STUB_RECOMMEND_RESULT
+        return _make_stub_recommend_result()
 
     async def _stub_eligibility(*a: Any, **kw: Any) -> Any:
-        return _STUB_ELIGIBILITY_RESULT
+        return _make_stub_eligibility_result()
 
-    async def _stub_comparison(*a: Any, **kw: Any) -> Any:
-        return _STUB_COMPARISON_RESULT
+    async def _stub_comparison(**kw: Any) -> Any:
+        return _make_stub_comparison_state(kw.get("state") or {})
 
     async def _stub_apply(*a: Any, **kw: Any) -> Any:
-        return _STUB_APPLY_RESULT
+        return _make_stub_apply_result()
 
-    _lr.run_recommendation_lifecycle = _stub_recommend  # type: ignore[assignment]
-    _lr.run_eligibility_lifecycle = _stub_eligibility   # type: ignore[assignment]
-    _lr.run_comparison_branch = _stub_comparison        # type: ignore[assignment]
-    _ha._run_apply_preparation = _stub_apply            # type: ignore[assignment]
+    _hr._run_recommendation_lifecycle = _stub_recommend  # type: ignore[assignment]
+    _ch._run_eligibility_lifecycle = _stub_eligibility   # type: ignore[assignment]
+    _lr.run_comparison_branch = _stub_comparison         # type: ignore[assignment]
+    _ha._run_apply_preparation = _stub_apply             # type: ignore[assignment]
 
 
 def _restore_lifecycle_runners(monkeypatch_dict: dict[str, Any]) -> None:
     import app.services.chat.ai._lifecycle_runners as _lr
+    import app.services.chat.chat_handlers as _ch
     import app.services.chat.handlers._handler_apply as _ha
+    import app.services.chat.handlers._handler_recommend as _hr
 
-    _lr.run_recommendation_lifecycle = monkeypatch_dict["_lr.run_recommendation_lifecycle"]
-    _lr.run_eligibility_lifecycle = monkeypatch_dict["_lr.run_eligibility_lifecycle"]
+    _hr._run_recommendation_lifecycle = monkeypatch_dict["_hr._run_recommendation_lifecycle"]
+    _ch._run_eligibility_lifecycle = monkeypatch_dict["_ch._run_eligibility_lifecycle"]
     _lr.run_comparison_branch = monkeypatch_dict["_lr.run_comparison_branch"]
     _ha._run_apply_preparation = monkeypatch_dict["_ha._run_apply_preparation"]
 
@@ -319,10 +342,12 @@ def _print_individual_results(
             print(f"  run{i}: ERROR — {r['error']}")
             continue
         match = "✓" if r.get("actual_intent") == expected else "✗"
+        conf = r.get("actual_confidence")
+        conf_str = f"{conf:.2f}" if conf is not None else "?"
         print(
             f"  run{i}: {match} intent={r['actual_intent']} "
             f"rt={r['actual_response_type']} "
-            f"conf={r.get('actual_confidence', '?'):.2f} "
+            f"conf={conf_str} "
             f"elapsed={r['elapsed_ms']:.0f}ms"
         )
         if r.get("extracted_profile"):
@@ -372,6 +397,8 @@ def _print_failure_analysis(
 # ─── 메인 ────────────────────────────────────────────────────────────────────
 
 async def _main(scenario_ids: list[str] | None, runs: int) -> None:
+    import sys, pathlib
+    sys.path.insert(0, str(pathlib.Path(__file__).parent.parent.parent))
     from tests.eval.scenarios import LIVE_SCENARIOS
 
     scenarios = LIVE_SCENARIOS
