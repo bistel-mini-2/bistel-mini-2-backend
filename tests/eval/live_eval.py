@@ -69,7 +69,17 @@ def _make_stub_recommend_result() -> tuple[Any, None]:
         status=RequestStatus.COMPLETED.value,
         request_id=0,
         questions=[],
-        result_json={"policies": [], "content": "[stub] 추천 stub 결과"},
+        result_json={
+            "results": [
+                {
+                    "policy_id": "stub-policy-001",
+                    "slug": "stub-policy-001",
+                    "policy_name": "[stub] 추천 정책",
+                    "summary": "stub 추천 결과입니다.",
+                    "evidence": [],
+                }
+            ]
+        },
         merged_condition_json=None,
     )
     return snapshot, None
@@ -91,7 +101,14 @@ def _make_stub_comparison_state(state: dict[str, Any]) -> dict[str, Any]:
     return {
         **state,
         "branch_content": "[stub] 비교 stub 결과입니다.",
-        "branch_policies": [],
+        "branch_policies": [
+            {
+                "policy_id": "stub-compare-001",
+                "slug": "stub-compare-001",
+                "policy_name": "[stub] 비교 정책 A",
+                "summary": "stub 비교 결과입니다.",
+            },
+        ],
         "branch_evidences": [],
     }
 
