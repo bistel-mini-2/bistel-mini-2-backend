@@ -1081,7 +1081,7 @@ LIVE_SCENARIOS: list[dict[str, Any]] = [
         "expected_response_type": "text",
         "expected_slot_changes": {},
         "expected_clarification": True,
-        "description": "[LLM] '아까 그 정책' + 슬롯 없음 → clarification 기대",
+        "description": "[LLM] '아까 그 정책' + 슬롯 없음 → apply 의도는 명확, 대상 정책 clarification 기대",
     },
 
     # ── 복합 의도 (2) ─────────────────────────────────────────────────────────
