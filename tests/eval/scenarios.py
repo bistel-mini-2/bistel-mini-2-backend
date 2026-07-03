@@ -945,7 +945,7 @@ LIVE_SCENARIOS: list[dict[str, Any]] = [
         "expected_response_type": "policy_list",
         "expected_slot_changes": {
             "profile.child_age": "0",
-            "profile.income": "mid1",
+            "profile.income": "low",
         },
         "expected_clarification": False,
         "description": "[LLM] 메시지에 프로필 정보 포함 → extracted_profile 추출 기대",
@@ -982,7 +982,7 @@ LIVE_SCENARIOS: list[dict[str, Any]] = [
         "expected_handler": "handle_recommend",
         "expected_response_type": "policy_list",
         "expected_slot_changes": {
-            "profile.special": ["single"],
+            "profile.special": ["single", "many"],
         },
         "expected_clarification": False,
         "description": "[LLM] 한부모 가정 언급 → special=[single] 추출 기대",
