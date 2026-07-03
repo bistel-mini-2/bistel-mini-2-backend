@@ -143,6 +143,15 @@ class AssistantMessage(BaseModel):
 
 class ChatMessageSendRequest(BaseModel):
     content: str = Field(..., min_length=1)
+    idempotency_key: str | None = Field(default=None, max_length=120)
+
+    @field_validator("idempotency_key")
+    @classmethod
+    def _strip_idempotency_key(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        stripped = value.strip()
+        return stripped or None
 
 
 class ChatMessageSendResponse(BaseModel):
@@ -180,3 +189,20 @@ class ChatMessageItem(BaseModel):
 class ChatMessageListResponse(BaseModel):
     chat_session_id: str
     messages: list[ChatMessageItem]
+
+
+class ChatRequestStatusResponse(BaseModel):
+    request_id: str
+    chat_session_id: str
+    user_message_id: str
+    idempotency_key: str | None = None
+    status: str
+    intent: str | None = None
+    error_code: str | None = None
+    error_message: str | None = None
+    assistant_message_id: str | None = None
+    retryable: bool = False
+    payload: dict[str, Any] | None = None
+    created_at: datetime | None = None
+    completed_at: datetime | None = None
+    updated_at: datetime | None = None

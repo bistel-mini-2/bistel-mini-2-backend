@@ -9,7 +9,9 @@ from fastapi import status
 
 from app.common.exceptions import AppException
 from app.db.models.chat_message import ChatMessage
+from app.db.models.chat_request import ChatRequest
 from app.db.models.chat_session import ChatSession
+from app.repositories.chat_request_repository import ChatRequestRepository
 from app.repositories.chat_repository import ChatRepository
 from app.repositories.policy_repository import PolicyRepository
 from app.services import chat_service as chat_service_module
@@ -100,11 +102,32 @@ def _graph_result(
 
 def _patch_repo_for_send(monkeypatch, *, session: ChatSession) -> dict[str, AsyncMock]:
     saved_messages: list[ChatMessage] = []
+    saved_requests: list[ChatRequest] = []
 
     async def fake_save_message(db, message: ChatMessage) -> ChatMessage:
         message.chat_message_id = 100 + len(saved_messages)
         saved_messages.append(message)
         return message
+
+    async def fake_create_processing(
+        db,
+        *,
+        chat_session_id: int,
+        user_message_id: int,
+        idempotency_key: str | None,
+    ) -> ChatRequest:
+        request = ChatRequest(
+            request_id=200 + len(saved_requests),
+            chat_session_id=chat_session_id,
+            user_message_id=user_message_id,
+            idempotency_key=idempotency_key,
+            status="processing",
+        )
+        saved_requests.append(request)
+        return request
+
+    async def fake_find_request_by_id(db, request_id: int) -> ChatRequest | None:
+        return next((req for req in saved_requests if req.request_id == request_id), None)
 
     mocks = {
         "find_session_by_id": AsyncMock(return_value=session),
@@ -120,7 +143,20 @@ def _patch_repo_for_send(monkeypatch, *, session: ChatSession) -> dict[str, Asyn
     }
     for name, mock in mocks.items():
         monkeypatch.setattr(ChatRepository, name, mock)
+    request_mocks = {
+        "find_by_idempotency_key": AsyncMock(return_value=None),
+        "create_processing": AsyncMock(side_effect=fake_create_processing),
+        "find_by_id": AsyncMock(side_effect=fake_find_request_by_id),
+        "lock_session_for_slot_update": AsyncMock(return_value=session),
+        "mark_completed": AsyncMock(),
+        "mark_failed": AsyncMock(),
+        "mark_cancelled": AsyncMock(),
+    }
+    for name, mock in request_mocks.items():
+        monkeypatch.setattr(ChatRequestRepository, name, mock)
+        mocks[f"request_{name}"] = mock
     mocks["_saved_messages"] = saved_messages
+    mocks["_saved_requests"] = saved_requests
     return mocks
 
 
@@ -760,15 +796,17 @@ def test_send_message_stream_emits_tokens_then_done(monkeypatch) -> None:
     ))
     events = _parse_sse_chunks(chunks)
 
-    # intent, token, token, done 순서 (버퍼링: supervisor_decision 확정 후 intent 먼저, 이후 토큰 flush)
-    assert [e["type"] for e in events] == ["intent", "token", "token", "done"]
-    assert events[0]["intent"] == "recommendation"
-    assert events[1]["delta"] == "안녕"
-    assert events[2]["delta"] == "하세요"
+    assert [e["type"] for e in events] == ["accepted", "intent", "token", "token", "done"]
+    assert events[0]["request_id"] == "200"
+    assert events[1]["intent"] == "recommendation"
+    assert events[2]["delta"] == "안녕"
+    assert events[3]["delta"] == "하세요"
+    assert events[4]["request_id"] == "200"
 
     # done payload에 ChatMessageSendResponse 구조 포함
-    payload = events[3]["payload"]
+    payload = events[4]["payload"]
     assert payload["chat_session_id"] == "10"
+    assert payload["user_message_id"] == "100"
     assert payload["assistant_message"]["content"] == "테스트 답변"
     assert payload["assistant_message"]["policies"][0]["action_type"] == "RECOMMENDED"
     assert run_chat_calls[0]["recent_assistant_policy"] == recent_policy
@@ -777,6 +815,8 @@ def test_send_message_stream_emits_tokens_then_done(monkeypatch) -> None:
     mocks["bulk_save_message_policies"].assert_awaited_once()
     mocks["bulk_save_message_evidences"].assert_awaited_once()
     mocks["update_last_message_at"].assert_awaited_once()
+    mocks["request_create_processing"].assert_awaited_once()
+    mocks["request_mark_completed"].assert_awaited_once()
 
 
 def test_send_message_stream_error_event_when_graph_raises(monkeypatch) -> None:
@@ -797,16 +837,19 @@ def test_send_message_stream_error_event_when_graph_raises(monkeypatch) -> None:
     ))
     events = _parse_sse_chunks(chunks)
 
-    assert [e["type"] for e in events] == ["error"]
-    assert events[0]["code"] == "INTERNAL_SERVER_ERROR"
+    assert [e["type"] for e in events] == ["accepted", "error"]
+    assert events[0]["request_id"] == "200"
+    assert events[1]["request_id"] == "200"
+    assert events[1]["code"] == "INTERNAL_SERVER_ERROR"
 
-    # 유저 메시지·assistant 메시지·정규화 row가 모두 저장되지 않아야 함
-    # (P1-1 수정: 그래프 실패 시 user message도 남지 않도록 commit을 함께 묶음)
-    mocks["save_message"].assert_not_awaited()
+    # 요구사항: 요청 시작 시 user message와 processing 상태는 먼저 저장된다.
+    assert len(mocks["_saved_messages"]) == 1
+    assert mocks["_saved_messages"][0].role == "user"
     mocks["bulk_save_message_policies"].assert_not_awaited()
     mocks["bulk_save_message_evidences"].assert_not_awaited()
     mocks["update_last_message_at"].assert_not_awaited()
-    db.commit.assert_not_awaited()
+    mocks["request_mark_failed"].assert_awaited_once()
+    assert db.commit.await_count >= 2
 
 
 def test_send_message_stream_cancelled_before_persist_saves_nothing(monkeypatch) -> None:
@@ -838,13 +881,116 @@ def test_send_message_stream_cancelled_before_persist_saves_nothing(monkeypatch)
     ))
     events = _parse_sse_chunks(chunks)
 
-    assert [e["type"] for e in events] == ["error"]
-    assert events[0]["code"] == "NOT_FOUND"
-    mocks["save_message"].assert_not_awaited()
+    assert [e["type"] for e in events] == ["accepted", "cancelled"]
+    assert events[1]["request_id"] == "200"
+    assert len(mocks["_saved_messages"]) == 1
+    assert mocks["_saved_messages"][0].role == "user"
     mocks["bulk_save_message_policies"].assert_not_awaited()
     mocks["bulk_save_message_evidences"].assert_not_awaited()
-    db.commit.assert_not_awaited()
+    mocks["request_mark_cancelled"].assert_awaited_once()
     unregister_mock.assert_called_once_with(10, cancel_event)
+
+
+def test_send_message_stream_idempotency_completed_returns_saved_payload(monkeypatch) -> None:
+    session = _session()
+    db = AsyncMock()
+    mocks = _patch_repo_for_send(monkeypatch, session=session)
+    completed_payload = {
+        "chat_session_id": "10",
+        "user_message_id": "77",
+        "assistant_message": {
+            "chat_message_id": "78",
+            "content": "저장된 답변",
+            "actions": [],
+            "policies": [],
+            "evidences": [],
+            "similar_policies": [],
+            "key_points": [],
+            "sources": [],
+            "suggested_actions": [],
+        },
+    }
+    existing_request = ChatRequest(
+        request_id=300,
+        chat_session_id=10,
+        user_message_id=77,
+        idempotency_key="same-key",
+        status="completed",
+        response_payload_json=completed_payload,
+    )
+    mocks["request_find_by_idempotency_key"].return_value = existing_request
+    run_chat = AsyncMock(return_value=_graph_result())
+    monkeypatch.setattr(chat_service_module, "_run_chat", run_chat)
+
+    chunks = asyncio.run(_collect(
+        ChatService.send_message_stream(
+            db=db,
+            session=session,
+            content="추천해줘",
+            idempotency_key="same-key",
+        )
+    ))
+    events = _parse_sse_chunks(chunks)
+
+    assert [event["type"] for event in events] == ["done"]
+    assert events[0]["request_id"] == "300"
+    assert events[0]["payload"]["assistant_message"]["content"] == "저장된 답변"
+    run_chat.assert_not_awaited()
+    mocks["save_message"].assert_not_awaited()
+    mocks["request_create_processing"].assert_not_awaited()
+
+
+def test_send_message_stream_final_persist_failure_does_not_emit_done(monkeypatch) -> None:
+    session = _session()
+    db = AsyncMock()
+    mocks = _patch_repo_for_send(monkeypatch, session=session)
+    saved_messages = mocks["_saved_messages"]
+
+    async def fail_assistant_save(db, message: ChatMessage) -> ChatMessage:
+        if message.role == "assistant":
+            raise Exception("저장 실패")
+        message.chat_message_id = 100 + len(saved_messages)
+        saved_messages.append(message)
+        return message
+
+    mocks["save_message"].side_effect = fail_assistant_save
+    _patch_run_chat_for_stream(monkeypatch, _graph_result(), tokens=["생성중"])
+
+    chunks = asyncio.run(_collect(
+        ChatService.send_message_stream(db=db, session=session, content="추천해줘")
+    ))
+    events = _parse_sse_chunks(chunks)
+
+    assert [event["type"] for event in events] == ["accepted", "intent", "token", "error"]
+    assert all(event["type"] != "done" for event in events)
+    mocks["request_mark_completed"].assert_not_awaited()
+    mocks["request_mark_failed"].assert_awaited_once()
+
+
+def test_get_request_status_blocks_other_user(monkeypatch) -> None:
+    request = ChatRequest(
+        request_id=300,
+        chat_session_id=10,
+        user_message_id=77,
+        status="completed",
+    )
+    monkeypatch.setattr(ChatRequestRepository, "find_by_id", AsyncMock(return_value=request))
+    monkeypatch.setattr(
+        ChatRepository,
+        "find_session_by_id",
+        AsyncMock(return_value=_session(user_id=2, chat_session_id=10)),
+    )
+
+    with pytest.raises(AppException) as exc_info:
+        asyncio.run(
+            ChatService.get_request_status(
+                db=AsyncMock(),
+                user_id=1,
+                request_id=300,
+            )
+        )
+
+    assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
 
 
 # --- FOLLOW_UP 시나리오 -------------------------------------------------------
@@ -890,8 +1036,9 @@ def test_follow_up_recommendation_clears_eligibility_slot(monkeypatch) -> None:
     ))
     events = _parse_sse_chunks(chunks)
 
-    assert events[0]["type"] == "intent"
-    assert events[0]["intent"] == "recommendation"
+    assert events[0]["type"] == "accepted"
+    assert events[1]["type"] == "intent"
+    assert events[1]["intent"] == "recommendation"
     assert events[-1]["type"] == "done"
     assert run_chat_calls[0]["emit_intent"] is False
 
@@ -909,8 +1056,16 @@ def test_follow_up_general_uses_outer_db_and_rollback_on_failure(monkeypatch) ->
     session = _follow_up_session()
     db = AsyncMock()
     mocks = _patch_repo_for_send(monkeypatch, session=session)
-    # 저장 단계에서 실패 시뮬레이션
-    mocks["save_message"].side_effect = Exception("저장 실패")
+    saved_messages = mocks["_saved_messages"]
+
+    async def fail_assistant_save(db, message: ChatMessage) -> ChatMessage:
+        if message.role == "assistant":
+            raise Exception("저장 실패")
+        message.chat_message_id = 100 + len(saved_messages)
+        saved_messages.append(message)
+        return message
+
+    mocks["save_message"].side_effect = fail_assistant_save
 
     monkeypatch.setattr(
         chat_service_module,
@@ -945,8 +1100,7 @@ def test_follow_up_general_uses_outer_db_and_rollback_on_failure(monkeypatch) ->
     ))
     events = _parse_sse_chunks(chunks)
 
-    # 저장 실패 → error SSE
-    assert events[-1]["type"] == "error"
+    assert [event["type"] for event in events][-2:] == ["token", "error"]
     # 외부 db에 rollback 호출됨 (eligibility 분석도 함께 롤백)
     db.rollback.assert_awaited()
     # 핵심: _run_follow_up_eligibility 첫 번째 인자가 외부 db (트랜잭션 통합 검증)

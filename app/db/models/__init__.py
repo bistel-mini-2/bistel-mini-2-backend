@@ -1,6 +1,7 @@
 from app.db.models.chat_message import ChatMessage
 from app.db.models.chat_message_evidence import ChatMessageEvidence
 from app.db.models.chat_message_policy import ChatMessagePolicy
+from app.db.models.chat_request import ChatRequest
 from app.db.models.chat_session import ChatSession
 from app.db.models.eligibility_request import EligibilityRequest
 from app.db.models.policy import Policy
@@ -25,6 +26,7 @@ __all__ = [
     "ChatMessage",
     "ChatMessageEvidence",
     "ChatMessagePolicy",
+    "ChatRequest",
     "ChatSession",
     "EligibilityRequest",
     "FamilyMember",
