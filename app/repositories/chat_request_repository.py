@@ -15,48 +15,6 @@ STALE_PROCESSING_MINUTES = 5
 
 class ChatRequestRepository:
     @staticmethod
-    async def ensure_schema(db: AsyncSession) -> None:
-        await db.execute(
-            text(
-                """
-                CREATE TABLE IF NOT EXISTS chat_request (
-                    request_id bigserial PRIMARY KEY,
-                    chat_session_id bigint NOT NULL
-                        REFERENCES chat_session(chat_session_id) ON DELETE CASCADE,
-                    user_message_id bigint NOT NULL
-                        REFERENCES chat_message(chat_message_id) ON DELETE CASCADE,
-                    idempotency_key varchar(120),
-                    status varchar(30) NOT NULL DEFAULT 'processing',
-                    intent varchar(50),
-                    error_code varchar(80),
-                    error_message text,
-                    assistant_message_id bigint
-                        REFERENCES chat_message(chat_message_id) ON DELETE SET NULL,
-                    response_payload_json jsonb,
-                    created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    completed_at timestamp,
-                    updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    CONSTRAINT chat_request_status_check
-                        CHECK (status IN ('processing', 'completed', 'failed', 'cancelled')),
-                    CONSTRAINT chat_request_session_idempotency_key_uk
-                        UNIQUE (chat_session_id, idempotency_key)
-                )
-                """
-            )
-        )
-        for statement in [
-            "ALTER TABLE chat_request ADD COLUMN IF NOT EXISTS intent varchar(50)",
-            "ALTER TABLE chat_request ADD COLUMN IF NOT EXISTS error_code varchar(80)",
-            "ALTER TABLE chat_request ADD COLUMN IF NOT EXISTS error_message text",
-            "ALTER TABLE chat_request ADD COLUMN IF NOT EXISTS assistant_message_id bigint",
-            "ALTER TABLE chat_request ADD COLUMN IF NOT EXISTS response_payload_json jsonb",
-            "ALTER TABLE chat_request ADD COLUMN IF NOT EXISTS completed_at timestamp",
-            "CREATE INDEX IF NOT EXISTS chat_request_session_status_idx ON chat_request (chat_session_id, status, created_at DESC)",
-            "CREATE INDEX IF NOT EXISTS chat_request_updated_at_idx ON chat_request (updated_at)",
-        ]:
-            await db.execute(text(statement))
-
-    @staticmethod
     async def create_processing(
         db: AsyncSession,
         *,
@@ -64,7 +22,6 @@ class ChatRequestRepository:
         user_message_id: int,
         idempotency_key: str | None,
     ) -> ChatRequest:
-        await ChatRequestRepository.ensure_schema(db)
         request = ChatRequest(
             chat_session_id=chat_session_id,
             user_message_id=user_message_id,
@@ -81,7 +38,6 @@ class ChatRequestRepository:
         db: AsyncSession,
         request_id: int,
     ) -> ChatRequest | None:
-        await ChatRequestRepository.ensure_schema(db)
         result = await db.execute(
             select(ChatRequest).where(ChatRequest.request_id == request_id)
         )
@@ -94,7 +50,6 @@ class ChatRequestRepository:
         chat_session_id: int,
         idempotency_key: str,
     ) -> ChatRequest | None:
-        await ChatRequestRepository.ensure_schema(db)
         result = await db.execute(
             select(ChatRequest)
             .where(ChatRequest.chat_session_id == chat_session_id)
@@ -107,7 +62,6 @@ class ChatRequestRepository:
         db: AsyncSession,
         chat_session_id: int,
     ) -> ChatRequest | None:
-        await ChatRequestRepository.ensure_schema(db)
         result = await db.execute(
             select(ChatRequest)
             .where(ChatRequest.chat_session_id == chat_session_id)
@@ -135,7 +89,7 @@ class ChatRequestRepository:
         assistant_message_id: int,
         response_payload_json: dict[str, Any],
     ) -> ChatRequest:
-        now = datetime.now(timezone.utc)
+        now = _utc_now_naive()
         request.status = "completed"
         request.intent = intent
         request.error_code = None
@@ -158,7 +112,7 @@ class ChatRequestRepository:
         request.status = "failed"
         request.error_code = error_code
         request.error_message = error_message
-        request.completed_at = datetime.now(timezone.utc)
+        request.completed_at = _utc_now_naive()
         await db.flush()
         await db.refresh(request)
         return request
@@ -166,15 +120,14 @@ class ChatRequestRepository:
     @staticmethod
     async def mark_cancelled(db: AsyncSession, request: ChatRequest) -> ChatRequest:
         request.status = "cancelled"
-        request.completed_at = datetime.now(timezone.utc)
+        request.completed_at = _utc_now_naive()
         await db.flush()
         await db.refresh(request)
         return request
 
     @staticmethod
     async def mark_stale_processing_failed(db: AsyncSession) -> int:
-        await ChatRequestRepository.ensure_schema(db)
-        cutoff = datetime.now(timezone.utc) - timedelta(minutes=STALE_PROCESSING_MINUTES)
+        cutoff = _utc_now_naive() - timedelta(minutes=STALE_PROCESSING_MINUTES)
         result = await db.execute(
             text(
                 """
@@ -191,3 +144,7 @@ class ChatRequestRepository:
             {"cutoff": cutoff},
         )
         return int(result.rowcount or 0)
+
+
+def _utc_now_naive() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
