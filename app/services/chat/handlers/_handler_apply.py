@@ -49,6 +49,7 @@ async def handle_apply(
                 "branch_policies": [],
                 "branch_evidences": [],
                 "branch_apply_card": None,
+                "pending": {"intent": "apply", "kind": "clarification"},
             }
 
         apply_response, apply_error = await _run_apply_preparation(
