@@ -41,7 +41,8 @@ from app.api.policy_rag_controller import router as policy_rag_router
 from app.common.exceptions import register_exception_handlers
 from app.common.psycopg_pool_conf import psycopg_pool
 from app.core.config import settings
-from app.db.session import engine
+from app.db.session import AsyncSessionLocal, engine
+from app.repositories.chat_request_repository import ChatRequestRepository
 from app.repositories.policy_repository import PolicyRepository
 from app.utils.logger import setup_logging
 
@@ -54,6 +55,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await psycopg_pool.open()
     async with psycopg_pool.connection() as conn:
         await PolicyRepository.ensure_search_indexes(conn)
+    async with AsyncSessionLocal() as db:
+        await ChatRequestRepository.mark_stale_processing_failed(db)
+        await db.commit()
     try:
         yield
     finally:

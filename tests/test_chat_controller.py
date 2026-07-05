@@ -17,6 +17,7 @@ from app.schemas.chat_schema import (
     AssistantMessage,
     AssistantMessageEvidence,
     AssistantMessagePolicy,
+    ChatRequestStatusResponse,
     ChatMessageItem,
     ChatMessageListResponse,
     ChatMessageSendResponse,
@@ -440,7 +441,7 @@ def test_stream_chat_message_returns_sse_token_and_done(monkeypatch) -> None:
         AsyncMock(return_value=ChatSession(chat_session_id=9, user_id=5)),
     )
 
-    async def fake_stream(db, *, session, content):
+    async def fake_stream(db, *, session, content, idempotency_key=None):
         yield 'data: {"type":"token","delta":"안녕"}\n\n'
         yield 'data: {"type":"token","delta":"하세요"}\n\n'
         yield (
@@ -495,3 +496,41 @@ def test_stream_chat_message_returns_404_for_unknown_session(monkeypatch) -> Non
     assert body["success"] is False
     assert body["error"]["code"] == "NOT_FOUND"
     stream_mock.assert_not_called()
+
+
+def test_get_chat_request_status_returns_payload(monkeypatch) -> None:
+    status_mock = AsyncMock(return_value=ChatRequestStatusResponse(
+        request_id="300",
+        chat_session_id="9",
+        user_message_id="11",
+        status="completed",
+        assistant_message_id="12",
+        retryable=False,
+        payload=_stream_response().model_dump(mode="json"),
+    ))
+    monkeypatch.setattr(ChatService, "get_request_status", status_mock)
+
+    with TestClient(_build_app()) as client:
+        resp = client.get("/api/v1/chat/requests/300")
+
+    assert resp.status_code == 200
+    body = resp.json()["data"]
+    assert body["request_id"] == "300"
+    assert body["status"] == "completed"
+    assert body["payload"]["assistant_message"]["content"] == "안녕하세요"
+    status_mock.assert_awaited_once()
+    assert status_mock.await_args.kwargs["user_id"] == 5
+    assert status_mock.await_args.kwargs["request_id"] == 300
+
+
+def test_get_latest_incomplete_chat_request_returns_null(monkeypatch) -> None:
+    latest_mock = AsyncMock(return_value=None)
+    monkeypatch.setattr(ChatService, "get_latest_incomplete_request", latest_mock)
+
+    with TestClient(_build_app()) as client:
+        resp = client.get("/api/v1/chat/sessions/9/requests/incomplete/latest")
+
+    assert resp.status_code == 200
+    assert resp.json()["data"] is None
+    latest_mock.assert_awaited_once()
+    assert latest_mock.await_args.kwargs["chat_session_id"] == 9

@@ -118,8 +118,37 @@ async def send_chat_message(
         user_id=current_user.user_id,
         chat_session_id=chat_session_id,
         content=payload.content,
+        idempotency_key=payload.idempotency_key,
     )
     return success_response(data=response, status_code=status.HTTP_201_CREATED)
+
+
+@router.get("/requests/{request_id}")
+async def get_chat_request_status(
+    request_id: int,
+    db: DbSessionDep,
+    current_user: CurrentUserDep,
+) -> JSONResponse:
+    response = await ChatService.get_request_status(
+        db,
+        user_id=current_user.user_id,
+        request_id=request_id,
+    )
+    return success_response(data=response)
+
+
+@router.get("/sessions/{chat_session_id}/requests/incomplete/latest")
+async def get_latest_incomplete_chat_request(
+    chat_session_id: int,
+    db: DbSessionDep,
+    current_user: CurrentUserDep,
+) -> JSONResponse:
+    response = await ChatService.get_latest_incomplete_request(
+        db,
+        user_id=current_user.user_id,
+        chat_session_id=chat_session_id,
+    )
+    return success_response(data=response)
 
 
 @router.post("/sessions/{chat_session_id}/messages/stream")
@@ -133,7 +162,12 @@ async def stream_chat_message(
         db, user_id=current_user.user_id, chat_session_id=chat_session_id
     )
     return StreamingResponse(
-        ChatService.send_message_stream(db, session=session, content=payload.content),
+        ChatService.send_message_stream(
+            db,
+            session=session,
+            content=payload.content,
+            idempotency_key=payload.idempotency_key,
+        ),
         media_type="text/event-stream",
         headers=_SSE_HEADERS,
     )

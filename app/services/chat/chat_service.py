@@ -8,14 +8,19 @@ from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.nodes.chat.result_adapters import _adapt_eligibility_result
 from app.common.exceptions import AppException, ErrorCode
 from app.db.models.eligibility_request import EligibilityRequest
+from app.db.models.chat_request import ChatRequest
 from app.db.models.chat_session import ChatSession
+from app.db.session import AsyncSessionLocal
+from app.repositories.chat_request_repository import ChatRequestRepository
 from app.repositories.chat_repository import ChatRepository
 from app.schemas.chat_schema import (
+    ChatRequestStatusResponse,
     ChatSessionBulkDeleteResponse,
     ChatMessageListResponse,
     ChatMessageSendResponse,
@@ -79,12 +84,37 @@ def _sse_event(payload: dict[str, Any]) -> str:
     return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
-def _cancelled_event_payload() -> dict[str, str]:
-    return {
-        "type": "error",
-        "code": ErrorCode.NOT_FOUND.value,
-        "message": "삭제된 채팅 세션입니다.",
-    }
+def _retryable_chat_request(status_value: str, error_code: str | None) -> bool:
+    return status_value == "failed" and error_code != ErrorCode.INVALID_INPUT.value
+
+
+def _chat_request_response(request: ChatRequest) -> ChatRequestStatusResponse:
+    return ChatRequestStatusResponse(
+        request_id=str(request.request_id),
+        chat_session_id=str(request.chat_session_id),
+        user_message_id=str(request.user_message_id),
+        idempotency_key=request.idempotency_key,
+        status=request.status,
+        intent=request.intent,
+        error_code=request.error_code,
+        error_message=request.error_message,
+        assistant_message_id=(
+            str(request.assistant_message_id)
+            if request.assistant_message_id is not None
+            else None
+        ),
+        retryable=_retryable_chat_request(request.status, request.error_code),
+        payload=request.response_payload_json,
+        created_at=request.created_at,
+        completed_at=request.completed_at,
+        updated_at=request.updated_at,
+    )
+
+
+def _intent_from_graph_result(graph_result: dict[str, Any]) -> str | None:
+    decision = graph_result.get("supervisor_decision") or {}
+    intent = decision.get("intent")
+    return str(intent) if intent else None
 
 
 class ChatService:
@@ -205,6 +235,7 @@ class ChatService:
         user_id: int,
         chat_session_id: int,
         content: str,
+        idempotency_key: str | None = None,
     ) -> ChatMessageSendResponse:
         cancel_event = chat_cancel_registry.register(chat_session_id)
         try:
@@ -267,6 +298,42 @@ class ChatService:
         db: AsyncSession, user_id: int, chat_session_id: int
     ) -> ChatSession:
         return await _get_owned_session_or_raise(db, user_id, chat_session_id)
+
+    @staticmethod
+    async def get_request_status(
+        db: AsyncSession,
+        *,
+        user_id: int,
+        request_id: int,
+    ) -> ChatRequestStatusResponse:
+        request = await ChatRequestRepository.find_by_id(db, request_id)
+        if request is None:
+            raise AppException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                code=ErrorCode.NOT_FOUND,
+                message="Chat request not found",
+            )
+        session = await ChatRepository.find_session_by_id(db, request.chat_session_id)
+        if session is None or session.user_id != user_id:
+            raise AppException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                code=ErrorCode.NOT_FOUND,
+                message="Chat request not found",
+            )
+        return _chat_request_response(request)
+
+    @staticmethod
+    async def get_latest_incomplete_request(
+        db: AsyncSession,
+        *,
+        user_id: int,
+        chat_session_id: int,
+    ) -> ChatRequestStatusResponse | None:
+        session = await _get_owned_session_or_raise(db, user_id, chat_session_id)
+        request = await ChatRequestRepository.find_latest_incomplete(
+            db, session.chat_session_id
+        )
+        return _chat_request_response(request) if request else None
 
     @staticmethod
     async def persist_eligibility_result_message(
@@ -382,8 +449,197 @@ class ChatService:
         db: AsyncSession,
         session: ChatSession,
         content: str,
+        idempotency_key: str | None = None,
     ) -> AsyncIterator[str]:
         cancel_event = chat_cancel_registry.register(session.chat_session_id)
+        chat_request: ChatRequest | None = None
+        stream_task: asyncio.Task[dict[str, Any]] | None = None
+        history: list[dict[str, Any]] = []
+        slot: dict[str, Any] = session.slot_json or {}
+        recent_assistant_policy: dict[str, Any] | None = None
+
+        async def _run_disconnect_recovery(
+            *,
+            request_id: int,
+            user_message_id: int,
+            history_snapshot: list[dict[str, Any]],
+            slot_snapshot: dict[str, Any],
+            recent_policy_snapshot: dict[str, Any] | None,
+        ) -> None:
+            async with AsyncSessionLocal() as task_db:
+                try:
+                    final_state = await _run_chat(
+                        db=task_db,
+                        user_id=session.user_id,
+                        user_content=content,
+                        history=history_snapshot,
+                        slot=slot_snapshot,
+                        recent_assistant_policy=recent_policy_snapshot,
+                    )
+                    request = await ChatRequestRepository.find_by_id(task_db, request_id)
+                    if request is None or request.status != "processing":
+                        await task_db.rollback()
+                        return
+                    locked_session = await ChatRequestRepository.lock_session_for_slot_update(
+                        task_db,
+                        session.chat_session_id,
+                    )
+                    if locked_session is None:
+                        await ChatRequestRepository.mark_failed(
+                            task_db,
+                            request,
+                            error_code=ErrorCode.NOT_FOUND.value,
+                            error_message="Chat session not found",
+                        )
+                        await task_db.commit()
+                        return
+                    assistant_message, assistant_response = await _persist_assistant_outputs(
+                        task_db,
+                        session_id=session.chat_session_id,
+                        user_message_id=user_message_id,
+                        graph_result=final_state,
+                        current_slot=locked_session.slot_json or {},
+                    )
+                    await ChatRepository.update_last_message_at(
+                        task_db,
+                        session.chat_session_id,
+                        datetime.now(timezone.utc),
+                    )
+                    response = ChatMessageSendResponse(
+                        chat_session_id=str(session.chat_session_id),
+                        user_message_id=str(user_message_id),
+                        assistant_message=assistant_response,
+                    )
+                    await ChatRequestRepository.mark_completed(
+                        task_db,
+                        request,
+                        intent=_intent_from_graph_result(final_state),
+                        assistant_message_id=assistant_message.chat_message_id,
+                        response_payload_json=response.model_dump(mode="json"),
+                    )
+                    await task_db.commit()
+                except Exception:
+                    await task_db.rollback()
+                    logger.exception(
+                        "Chat disconnect recovery failed: request_id=%s",
+                        request_id,
+                    )
+                    try:
+                        request = await ChatRequestRepository.find_by_id(task_db, request_id)
+                        if request is not None and request.status == "processing":
+                            await ChatRequestRepository.mark_failed(
+                                task_db,
+                                request,
+                                error_code=ErrorCode.INTERNAL_SERVER_ERROR.value,
+                                error_message="답변을 생성하는 중 문제가 발생했어요. 잠시 후 다시 시도해 주세요.",
+                            )
+                            await task_db.commit()
+                    except Exception:
+                        await task_db.rollback()
+                        logger.exception(
+                            "Failed to mark disconnect recovery failed: request_id=%s",
+                            request_id,
+                        )
+
+        async def _yield_existing_request(request: ChatRequest) -> AsyncIterator[str]:
+            if request.status == "completed" and request.response_payload_json:
+                yield _sse_event({
+                    "type": "done",
+                    "request_id": str(request.request_id),
+                    "payload": request.response_payload_json,
+                })
+                return
+            if request.status == "processing":
+                yield _sse_event({
+                    "type": "accepted",
+                    "request_id": str(request.request_id),
+                    "status": request.status,
+                })
+                return
+            if request.status == "cancelled":
+                yield _sse_event({
+                    "type": "cancelled",
+                    "request_id": str(request.request_id),
+                    "status": request.status,
+                })
+                return
+            yield _sse_event({
+                "type": "error",
+                "request_id": str(request.request_id),
+                "code": request.error_code or ErrorCode.INTERNAL_SERVER_ERROR.value,
+                "message": request.error_message or "답변을 생성하는 중 문제가 발생했어요. 잠시 후 다시 시도해 주세요.",
+            })
+
+        async def _mark_failed(
+            request_id: int,
+            *,
+            error_code: str,
+            error_message: str,
+        ) -> None:
+            await db.rollback()
+            try:
+                request = await ChatRequestRepository.find_by_id(db, request_id)
+                if request is not None and request.status == "processing":
+                    await ChatRequestRepository.mark_failed(
+                        db,
+                        request,
+                        error_code=error_code,
+                        error_message=error_message,
+                    )
+                await db.commit()
+            except Exception:
+                await db.rollback()
+                logger.exception("Failed to persist chat_request failure: %s", request_id)
+
+        async def _mark_cancelled(request_id: int) -> None:
+            await db.rollback()
+            try:
+                request = await ChatRequestRepository.find_by_id(db, request_id)
+                if request is not None and request.status == "processing":
+                    await ChatRequestRepository.mark_cancelled(db, request)
+                await db.commit()
+            except Exception:
+                await db.rollback()
+                logger.exception("Failed to persist chat_request cancellation: %s", request_id)
+
+        async def _persist_success(final_state: dict[str, Any]) -> ChatMessageSendResponse:
+            if chat_request is None:
+                raise RuntimeError("chat_request is not initialized")
+            locked_session = await ChatRequestRepository.lock_session_for_slot_update(
+                db,
+                session.chat_session_id,
+            )
+            if locked_session is None:
+                raise AppException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    code=ErrorCode.NOT_FOUND,
+                    message="Chat session not found",
+                )
+            assistant_message, assistant_response = await _persist_assistant_outputs(
+                db,
+                session_id=session.chat_session_id,
+                user_message_id=chat_request.user_message_id,
+                graph_result=final_state,
+                current_slot=locked_session.slot_json or {},
+            )
+            await ChatRepository.update_last_message_at(
+                db, session.chat_session_id, datetime.now(timezone.utc)
+            )
+            response = ChatMessageSendResponse(
+                chat_session_id=str(session.chat_session_id),
+                user_message_id=str(chat_request.user_message_id),
+                assistant_message=assistant_response,
+            )
+            await ChatRequestRepository.mark_completed(
+                db,
+                chat_request,
+                intent=_intent_from_graph_result(final_state),
+                assistant_message_id=assistant_message.chat_message_id,
+                response_payload_json=response.model_dump(mode="json"),
+            )
+            await db.commit()
+            return response
+
         try:
             history = await _load_history(db, session.chat_session_id)
             is_first_message = not history and not session.title
@@ -391,6 +647,47 @@ class ChatService:
                 db, session.chat_session_id
             )
             slot = session.slot_json or {}
+            if idempotency_key:
+                existing_request = await ChatRequestRepository.find_by_idempotency_key(
+                    db,
+                    chat_session_id=session.chat_session_id,
+                    idempotency_key=idempotency_key,
+                )
+                if existing_request is not None:
+                    async for event in _yield_existing_request(existing_request):
+                        yield event
+                    return
+
+            try:
+                user_message = await _save_user_message(
+                    db, session.chat_session_id, content
+                )
+                chat_request = await ChatRequestRepository.create_processing(
+                    db,
+                    chat_session_id=session.chat_session_id,
+                    user_message_id=user_message.chat_message_id,
+                    idempotency_key=idempotency_key,
+                )
+                await db.commit()
+            except IntegrityError:
+                await db.rollback()
+                if not idempotency_key:
+                    raise
+                existing_request = await ChatRequestRepository.find_by_idempotency_key(
+                    db,
+                    chat_session_id=session.chat_session_id,
+                    idempotency_key=idempotency_key,
+                )
+                if existing_request is None:
+                    raise
+                async for event in _yield_existing_request(existing_request):
+                    yield event
+                return
+            yield _sse_event({
+                "type": "accepted",
+                "request_id": str(chat_request.request_id),
+                "status": chat_request.status,
+            })
 
             follow_up_policy = _find_follow_up_policy(slot)
             if follow_up_policy:
@@ -398,7 +695,11 @@ class ChatService:
                     follow_up_policy, history, content
                 )
                 if follow_up_intent != "other_intent":
-                    yield _sse_event({"type": "intent", "intent": follow_up_intent})
+                    yield _sse_event({
+                        "type": "intent",
+                        "intent": follow_up_intent,
+                        "request_id": str(chat_request.request_id),
+                    })
 
                 if follow_up_intent == "general":
                     manual_confirmations = await _map_follow_up_answers(follow_up_policy, content)
@@ -406,8 +707,14 @@ class ChatService:
                         db, session.user_id, content, follow_up_policy, manual_confirmations
                     )
                     if result_json is None:
+                        await _mark_failed(
+                            chat_request.request_id,
+                            error_code=ErrorCode.INTERNAL_SERVER_ERROR.value,
+                            error_message="답변을 분석하는 중 문제가 발생했어요. 잠시 후 다시 시도해 주세요.",
+                        )
                         yield _sse_event({
                             "type": "error",
+                            "request_id": str(chat_request.request_id),
                             "code": ErrorCode.INTERNAL_SERVER_ERROR.value,
                             "message": "답변을 분석하는 중 문제가 발생했어요. 잠시 후 다시 시도해 주세요.",
                         })
@@ -458,50 +765,46 @@ class ChatService:
                             "eligibility_status": result_status,
                         },
                     }
-                    yield _sse_event({"type": "token", "delta": content_text})
+                    yield _sse_event({
+                        "type": "token",
+                        "delta": content_text,
+                        "request_id": str(chat_request.request_id),
+                    })
                     try:
-                        user_message = await _save_user_message(
-                            db, session.chat_session_id, content
-                        )
-                        _, assistant_response = await _persist_assistant_outputs(
-                            db,
-                            session_id=session.chat_session_id,
-                            user_message_id=user_message.chat_message_id,
-                            graph_result=follow_up_graph_result,
-                            current_slot=slot,
-                        )
-                        await ChatRepository.update_last_message_at(
-                            db, session.chat_session_id, datetime.now(timezone.utc)
-                        )
-                        await db.commit()
+                        response = await _persist_success(follow_up_graph_result)
                     except Exception:
-                        await db.rollback()
+                        await _mark_failed(
+                            chat_request.request_id,
+                            error_code=ErrorCode.INTERNAL_SERVER_ERROR.value,
+                            error_message="답변을 저장하는 중 문제가 발생했어요. 잠시 후 다시 시도해 주세요.",
+                        )
                         logger.exception("Persisting follow_up eligibility answer failed")
                         yield _sse_event({
                             "type": "error",
+                            "request_id": str(chat_request.request_id),
                             "code": ErrorCode.INTERNAL_SERVER_ERROR.value,
                             "message": "답변을 저장하는 중 문제가 발생했어요. 잠시 후 다시 시도해 주세요.",
                         })
                         return
                     if is_first_message:
                         _schedule_title_generation(session.chat_session_id, content)
-                    response = ChatMessageSendResponse(
-                        chat_session_id=str(session.chat_session_id),
-                        user_message_id=str(user_message.chat_message_id),
-                        assistant_message=assistant_response,
-                    )
-                    yield _sse_event({"type": "done", "payload": response.model_dump(mode="json")})
+                    yield _sse_event({
+                        "type": "done",
+                        "request_id": str(chat_request.request_id),
+                        "payload": response.model_dump(mode="json"),
+                    })
                     return
 
                 elif follow_up_intent == "eligibility_clarification":
                     clarification_text = _build_eligibility_clarification_text(
                         follow_up_policy.get("follow_up_questions") or []
                     )
-                    yield _sse_event({"type": "token", "delta": clarification_text})
+                    yield _sse_event({
+                        "type": "token",
+                        "delta": clarification_text,
+                        "request_id": str(chat_request.request_id),
+                    })
                     try:
-                        user_message = await _save_user_message(
-                            db, session.chat_session_id, content
-                        )
                         minimal_result: dict[str, Any] = {
                             "assistant_payload": {
                                 "content": clarification_text,
@@ -515,32 +818,26 @@ class ChatService:
                                 "raw": "eligibility_clarification",
                             },
                         }
-                        _, assistant_response = await _persist_assistant_outputs(
-                            db,
-                            session_id=session.chat_session_id,
-                            user_message_id=user_message.chat_message_id,
-                            graph_result=minimal_result,
-                            current_slot=slot,
-                        )
-                        await ChatRepository.update_last_message_at(
-                            db, session.chat_session_id, datetime.now(timezone.utc)
-                        )
-                        await db.commit()
+                        response = await _persist_success(minimal_result)
                     except Exception:
-                        await db.rollback()
+                        await _mark_failed(
+                            chat_request.request_id,
+                            error_code=ErrorCode.INTERNAL_SERVER_ERROR.value,
+                            error_message="답변을 저장하는 중 문제가 발생했어요. 잠시 후 다시 시도해 주세요.",
+                        )
                         logger.exception("Persisting eligibility_clarification message failed")
                         yield _sse_event({
                             "type": "error",
+                            "request_id": str(chat_request.request_id),
                             "code": ErrorCode.INTERNAL_SERVER_ERROR.value,
                             "message": "답변을 저장하는 중 문제가 발생했어요. 잠시 후 다시 시도해 주세요.",
                         })
                         return
-                    response = ChatMessageSendResponse(
-                        chat_session_id=str(session.chat_session_id),
-                        user_message_id=str(user_message.chat_message_id),
-                        assistant_message=assistant_response,
-                    )
-                    yield _sse_event({"type": "done", "payload": response.model_dump(mode="json")})
+                    yield _sse_event({
+                        "type": "done",
+                        "request_id": str(chat_request.request_id),
+                        "payload": response.model_dump(mode="json"),
+                    })
                     return
 
             _is_follow_up_recommendation = (
@@ -564,10 +861,18 @@ class ChatService:
             stream_queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
 
             async def _queue_intent(intent: str) -> None:
-                await stream_queue.put({"type": "intent", "intent": intent})
+                await stream_queue.put({
+                    "type": "intent",
+                    "intent": intent,
+                    "request_id": str(chat_request.request_id),
+                })
 
             async def _queue_token(delta: str) -> None:
-                await stream_queue.put({"type": "token", "delta": delta})
+                await stream_queue.put({
+                    "type": "token",
+                    "delta": delta,
+                    "request_id": str(chat_request.request_id),
+                })
 
             async def _queue_progress(
                 flow: str, node: str, status: str, step: int, total: int
@@ -575,6 +880,7 @@ class ChatService:
                 from app.ai.utils.progress import get_node_label
                 await stream_queue.put({
                     "type": "progress",
+                    "request_id": str(chat_request.request_id),
                     "flow": flow,
                     "node": node,
                     "status": status,
@@ -613,8 +919,12 @@ class ChatService:
                         stream_task.cancel()
                         with contextlib.suppress(asyncio.CancelledError):
                             await stream_task
-                        await db.rollback()
-                        yield _sse_event(_cancelled_event_payload())
+                        await _mark_cancelled(chat_request.request_id)
+                        yield _sse_event({
+                            "type": "cancelled",
+                            "request_id": str(chat_request.request_id),
+                            "status": "cancelled",
+                        })
                         return
 
                     try:
@@ -630,10 +940,37 @@ class ChatService:
             except Exception:
                 stream_failed = True
                 logger.exception("Chat direct routing streaming failed")
+            except asyncio.CancelledError:
+                # Client disconnect is not an explicit user cancellation. Continue
+                # the in-flight handler and persist the final request state.
+                try:
+                    final_state = await stream_task
+                    if final_state.get("assistant_payload"):
+                        await _persist_success(final_state)
+                    else:
+                        await _mark_failed(
+                            chat_request.request_id,
+                            error_code=ErrorCode.INTERNAL_SERVER_ERROR.value,
+                            error_message="답변을 생성하는 중 문제가 발생했어요. 잠시 후 다시 시도해 주세요.",
+                        )
+                except Exception:
+                    await _mark_failed(
+                        chat_request.request_id,
+                        error_code=ErrorCode.INTERNAL_SERVER_ERROR.value,
+                        error_message="답변을 생성하는 중 문제가 발생했어요. 잠시 후 다시 시도해 주세요.",
+                    )
+                    logger.exception("Chat stream disconnected and background persist failed")
+                return
 
             if stream_failed or not final_state.get("assistant_payload"):
+                await _mark_failed(
+                    chat_request.request_id,
+                    error_code=ErrorCode.INTERNAL_SERVER_ERROR.value,
+                    error_message="답변을 생성하는 중 문제가 발생했어요. 잠시 후 다시 시도해 주세요.",
+                )
                 yield _sse_event({
                     "type": "error",
+                    "request_id": str(chat_request.request_id),
                     "code": ErrorCode.INTERNAL_SERVER_ERROR.value,
                     "message": "답변을 생성하는 중 문제가 발생했어요. 잠시 후 다시 시도해 주세요.",
                 })
@@ -642,30 +979,26 @@ class ChatService:
             if await _is_cancelled_or_deleted(
                 db, session.chat_session_id, cancel_event
             ):
-                await db.rollback()
-                yield _sse_event(_cancelled_event_payload())
+                await _mark_cancelled(chat_request.request_id)
+                yield _sse_event({
+                    "type": "cancelled",
+                    "request_id": str(chat_request.request_id),
+                    "status": "cancelled",
+                })
                 return
 
             try:
-                user_message = await _save_user_message(
-                    db, session.chat_session_id, content
-                )
-                _, assistant_response = await _persist_assistant_outputs(
-                    db,
-                    session_id=session.chat_session_id,
-                    user_message_id=user_message.chat_message_id,
-                    graph_result=final_state,
-                    current_slot=slot,
-                )
-                await ChatRepository.update_last_message_at(
-                    db, session.chat_session_id, datetime.now(timezone.utc)
-                )
-                await db.commit()
+                response = await _persist_success(final_state)
             except Exception:
-                await db.rollback()
+                await _mark_failed(
+                    chat_request.request_id,
+                    error_code=ErrorCode.INTERNAL_SERVER_ERROR.value,
+                    error_message="답변을 저장하는 중 문제가 발생했어요. 잠시 후 다시 시도해 주세요.",
+                )
                 logger.exception("Persisting chat messages failed during stream")
                 yield _sse_event({
                     "type": "error",
+                    "request_id": str(chat_request.request_id),
                     "code": ErrorCode.INTERNAL_SERVER_ERROR.value,
                     "message": "답변을 저장하는 중 문제가 발생했어요. 잠시 후 다시 시도해 주세요.",
                 })
@@ -674,14 +1007,27 @@ class ChatService:
             if is_first_message:
                 _schedule_title_generation(session.chat_session_id, content)
 
-            response = ChatMessageSendResponse(
-                chat_session_id=str(session.chat_session_id),
-                user_message_id=str(user_message.chat_message_id),
-                assistant_message=assistant_response,
-            )
             yield _sse_event({
                 "type": "done",
+                "request_id": str(chat_request.request_id),
                 "payload": response.model_dump(mode="json"),
             })
+        except asyncio.CancelledError:
+            if chat_request is not None:
+                asyncio.create_task(
+                    _run_disconnect_recovery(
+                        request_id=chat_request.request_id,
+                        user_message_id=chat_request.user_message_id,
+                        history_snapshot=list(history),
+                        slot_snapshot=dict(slot),
+                        recent_policy_snapshot=(
+                            dict(recent_assistant_policy)
+                            if recent_assistant_policy is not None
+                            else None
+                        ),
+                    )
+                )
+                return
+            raise
         finally:
             chat_cancel_registry.unregister(session.chat_session_id, cancel_event)
