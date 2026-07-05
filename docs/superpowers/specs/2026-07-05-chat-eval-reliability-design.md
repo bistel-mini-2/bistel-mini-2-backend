@@ -6,13 +6,17 @@
 
 ## Approach
 
-프로덕션 라우팅 코드는 변경하지 않는다. `tests/eval/live_eval.py`에서 실제 결과로 관측 가능한 1차 의도, 2차 의도, 응답 타입, clarification 상태, 프로필 추출 값을 각각 비교하고, 모든 필수 비교가 성공한 실행만 strict E2E 성공으로 집계한다.
+프로덕션 라우팅 코드는 원칙적으로 변경하지 않는다. 다만 실제 실행에서 apply 대상 정책이 없을 때 생성되는 재질문은 orchestration 상태에 clarification 표지가 없으므로, `handle_apply`가 `pending.kind = "clarification"`을 유지하도록 최소 변경한다. `tests/eval/live_eval.py`는 실제 결과로 관측 가능한 1차 의도, 2차 의도, 응답 타입, clarification 상태, 프로필 추출 값을 각각 비교하고, 모든 필수 비교가 성공한 실행만 strict E2E 성공으로 집계한다.
 
 `expected_handler`는 현재 live 실행 결과에 handler 이름이 노출되지 않아 직접 검증할 수 없다. intent에서 handler를 역추론하면 잘못된 확신을 만들기 때문에 strict E2E 조건에서는 제외하고 결과에 `handler_accuracy_pct: null`과 미측정 사유를 명시한다. Mock 테스트는 기존처럼 실제 패치 지점과 payload를 통해 라우팅을 검증한다.
 
 ## Clarification Detection
 
 단순 `text` 응답을 clarification으로 인정하지 않는다. 실행 상태의 `pending.kind == "clarification"`, `policy_selection`, `slot_request`, `profile_confirm` 중 하나가 존재할 때만 clarification으로 판정한다. 기대값이 false인 시나리오에서 불필요한 clarification이 발생해도 strict E2E는 실패한다.
+
+## Lifecycle Stub Boundary
+
+실제 평가에서 비교 lifecycle stub은 `_lifecycle_runners.run_comparison_branch`가 아니라 `chat_handlers._run_comparison_branch` 호출 지점을 패치해야 한다. patch와 restore 모두 같은 지점을 사용해 L05/L10이 실제 comparison graph나 DB 경로를 실행하지 않게 한다. stub이 적용됐는지는 fallback 오류 문구가 아닌 stub 비교 응답이 반환되는 테스트로 검증한다.
 
 ## Metrics
 
@@ -42,5 +46,5 @@
 ## Non-goals
 
 - 실제 LLM 품질 개선
-- 프로덕션 응답 스키마 변경
+- 외부 API 응답 스키마 변경
 - handler 추적용 런타임 계측 추가
