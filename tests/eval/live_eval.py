@@ -137,17 +137,16 @@ def _patch_lifecycle_runners(monkeypatch_dict: dict[str, Any]) -> None:
     - eligibility: chat_handlers._sync_legacy_patch_points()가 _chat_handlers._run_eligibility_lifecycle을
                    감지해 _lifecycle_runners.run_eligibility_lifecycle를 덮어쓰므로
                    chat_handlers 모듈 수준 변수를 패치해야 _sync_legacy_patch_points가 stub을 선택함
-    - compare: _lifecycle_runners.run_comparison_branch를 직접 패치 (_sync_legacy_patch_points 미관여)
+    - compare: chat_handlers.handle_compare가 참조하는 _run_comparison_branch를 직접 패치
     - apply: _handler_apply가 로컬 임포트 → _handler_apply 모듈 직접 패치
     """
-    import app.services.chat.ai._lifecycle_runners as _lr
     import app.services.chat.chat_handlers as _ch
     import app.services.chat.handlers._handler_apply as _ha
     import app.services.chat.handlers._handler_recommend as _hr
 
     monkeypatch_dict["_hr._run_recommendation_lifecycle"] = _hr._run_recommendation_lifecycle
     monkeypatch_dict["_ch._run_eligibility_lifecycle"] = _ch._run_eligibility_lifecycle
-    monkeypatch_dict["_lr.run_comparison_branch"] = _lr.run_comparison_branch
+    monkeypatch_dict["_ch._run_comparison_branch"] = _ch._run_comparison_branch
     monkeypatch_dict["_ha._run_apply_preparation"] = _ha._run_apply_preparation
 
     async def _stub_recommend(*a: Any, **kw: Any) -> Any:
@@ -164,19 +163,18 @@ def _patch_lifecycle_runners(monkeypatch_dict: dict[str, Any]) -> None:
 
     _hr._run_recommendation_lifecycle = _stub_recommend  # type: ignore[assignment]
     _ch._run_eligibility_lifecycle = _stub_eligibility   # type: ignore[assignment]
-    _lr.run_comparison_branch = _stub_comparison         # type: ignore[assignment]
+    _ch._run_comparison_branch = _stub_comparison        # type: ignore[assignment]
     _ha._run_apply_preparation = _stub_apply             # type: ignore[assignment]
 
 
 def _restore_lifecycle_runners(monkeypatch_dict: dict[str, Any]) -> None:
-    import app.services.chat.ai._lifecycle_runners as _lr
     import app.services.chat.chat_handlers as _ch
     import app.services.chat.handlers._handler_apply as _ha
     import app.services.chat.handlers._handler_recommend as _hr
 
     _hr._run_recommendation_lifecycle = monkeypatch_dict["_hr._run_recommendation_lifecycle"]
     _ch._run_eligibility_lifecycle = monkeypatch_dict["_ch._run_eligibility_lifecycle"]
-    _lr.run_comparison_branch = monkeypatch_dict["_lr.run_comparison_branch"]
+    _ch._run_comparison_branch = monkeypatch_dict["_ch._run_comparison_branch"]
     _ha._run_apply_preparation = monkeypatch_dict["_ha._run_apply_preparation"]
 
 
@@ -225,6 +223,7 @@ async def _run_scenario_once(scenario: dict[str, Any]) -> dict[str, Any]:
         "actual_secondary_intents": decision.get("secondary_intents") or [],
         "actual_confidence": decision.get("confidence"),
         "actual_response_type": response_type,
+        "actual_clarification": _is_clarification_result(result, payload),
         "extracted_profile": {k: v for k, v in profile.items() if k not in ("skipped", "db_profile_confirmed")},
         "content_snippet": (payload.get("content") or "")[:120],
         "has_policies": bool(payload.get("policies")),
@@ -233,6 +232,19 @@ async def _run_scenario_once(scenario: dict[str, Any]) -> dict[str, Any]:
         "has_policy_selection": bool(payload.get("policy_selection")),
         "suggested_actions": payload.get("suggested_actions") or [],
     }
+
+
+def _is_clarification_result(
+    result: dict[str, Any],
+    payload: dict[str, Any],
+) -> bool:
+    pending = result.get("pending") or {}
+    return bool(
+        pending.get("kind") == "clarification"
+        or payload.get("policy_selection")
+        or payload.get("slot_request")
+        or payload.get("profile_confirm")
+    )
 
 
 def _detect_response_type(payload: dict[str, Any]) -> str:
@@ -259,10 +271,10 @@ def _compute_metrics(
 ) -> dict[str, Any]:
     total_runs = 0
     intent_correct = 0
-    e2e_correct = 0
+    secondary_intent_correct = 0
+    strict_e2e_correct = 0
     response_type_correct = 0
     clarification_correct = 0
-    clarification_total = 0
     consistency_correct = 0
     profile_field_matches = 0
     profile_field_total = 0
@@ -273,6 +285,7 @@ def _compute_metrics(
         sid = sc["scenario_id"]
         runs = all_results.get(sid) or []
         expected_intent = sc["expected_primary_intent"]
+        expected_secondary = set(sc.get("expected_secondary_intents") or [])
         expected_rt = sc["expected_response_type"]
         expected_clarification = sc.get("expected_clarification", False)
         expected_profile_changes = sc.get("expected_slot_changes") or {}
@@ -288,32 +301,45 @@ def _compute_metrics(
             latencies.append(lat)
 
             actual_intent = r.get("actual_intent")
+            actual_secondary = set(r.get("actual_secondary_intents") or [])
             actual_rt = r.get("actual_response_type")
+            actual_clarification = bool(r.get("actual_clarification", False))
 
-            if actual_intent == expected_intent:
+            intent_match = actual_intent == expected_intent
+            secondary_match = actual_secondary == expected_secondary
+            response_type_match = actual_rt == expected_rt
+            clarification_match = actual_clarification == expected_clarification
+
+            if intent_match:
                 intent_correct += 1
-
-            # E2E: intent + response_type 모두 맞아야 성공
-            if actual_intent == expected_intent and actual_rt == expected_rt:
-                e2e_correct += 1
-
-            if actual_rt == expected_rt:
+            if secondary_match:
+                secondary_intent_correct += 1
+            if response_type_match:
                 response_type_correct += 1
-
-            # 모호성 처리: clarification이 기대될 때 policy_selection 또는 text(clarification)인지
-            if expected_clarification:
-                clarification_total += 1
-                if actual_rt in ("policy_selection", "text"):
-                    clarification_correct += 1
+            if clarification_match:
+                clarification_correct += 1
 
             # 프로필 추출 정확도
             actual_profile = r.get("extracted_profile") or {}
+            profile_match = True
             for key, expected_val in expected_profile_changes.items():
                 if key.startswith("profile."):
                     field = key[len("profile."):]
                     profile_field_total += 1
-                    if actual_profile.get(field) == expected_val:
+                    field_match = actual_profile.get(field) == expected_val
+                    if field_match:
                         profile_field_matches += 1
+                    else:
+                        profile_match = False
+
+            if (
+                intent_match
+                and secondary_match
+                and response_type_match
+                and clarification_match
+                and profile_match
+            ):
+                strict_e2e_correct += 1
 
             intents_this.append(actual_intent)
 
@@ -322,6 +348,7 @@ def _compute_metrics(
             consistency_correct += 1
 
     n_sc = len(scenarios)
+    successful_runs = total_runs - error_count
     latencies_sorted = sorted(latencies)
     p50 = latencies_sorted[len(latencies_sorted) // 2] if latencies_sorted else 0
     p95_idx = int(len(latencies_sorted) * 0.95)
@@ -331,11 +358,15 @@ def _compute_metrics(
         "total_runs": total_runs,
         "error_count": error_count,
         "error_rate_pct": round(error_count / total_runs * 100, 1) if total_runs else 0,
-        "intent_accuracy_pct": round(intent_correct / (total_runs - error_count) * 100, 1) if (total_runs - error_count) else 0,
-        "response_type_accuracy_pct": round(response_type_correct / (total_runs - error_count) * 100, 1) if (total_runs - error_count) else 0,
-        "e2e_success_rate_pct": round(e2e_correct / (total_runs - error_count) * 100, 1) if (total_runs - error_count) else 0,
-        "clarification_accuracy_pct": round(clarification_correct / clarification_total * 100, 1) if clarification_total else None,
+        "intent_accuracy_pct": round(intent_correct / successful_runs * 100, 1) if successful_runs else 0,
+        "secondary_intent_accuracy_pct": round(secondary_intent_correct / successful_runs * 100, 1) if successful_runs else 0,
+        "response_type_accuracy_pct": round(response_type_correct / successful_runs * 100, 1) if successful_runs else 0,
+        "clarification_accuracy_pct": round(clarification_correct / successful_runs * 100, 1) if successful_runs else 0,
         "profile_extraction_accuracy_pct": round(profile_field_matches / profile_field_total * 100, 1) if profile_field_total else None,
+        "strict_e2e_success_rate_pct": round(strict_e2e_correct / total_runs * 100, 1) if total_runs else 0,
+        "e2e_success_rate_pct": round(strict_e2e_correct / total_runs * 100, 1) if total_runs else 0,
+        "handler_accuracy_pct": None,
+        "handler_accuracy_reason": "실행 결과에 handler 이름이 노출되지 않아 측정하지 않음",
         "consistency_rate_pct": round(consistency_correct / n_sc * 100, 1) if n_sc else 0,
         "latency_p50_ms": round(p50, 1),
         "latency_p95_ms": round(p95, 1),
@@ -380,16 +411,34 @@ def _print_failure_analysis(
     failures = []
     for sc in scenarios:
         sid = sc["scenario_id"]
-        expected = sc["expected_primary_intent"]
+        expected_intent = sc["expected_primary_intent"]
+        expected_secondary = set(sc.get("expected_secondary_intents") or [])
+        expected_response_type = sc["expected_response_type"]
+        expected_clarification = sc.get("expected_clarification", False)
         runs = all_results.get(sid) or []
         for i, r in enumerate(runs, 1):
-            if r.get("error") or r.get("actual_intent") != expected:
+            actual_secondary = set(r.get("actual_secondary_intents") or [])
+            mismatches = []
+            if r.get("actual_intent") != expected_intent:
+                mismatches.append("primary_intent")
+            if actual_secondary != expected_secondary:
+                mismatches.append("secondary_intents")
+            if r.get("actual_response_type") != expected_response_type:
+                mismatches.append("response_type")
+            if bool(r.get("actual_clarification", False)) != expected_clarification:
+                mismatches.append("clarification")
+
+            if r.get("error") or mismatches:
                 failures.append({
                     "scenario_id": sid,
                     "run": i,
-                    "expected_intent": expected,
+                    "expected_intent": expected_intent,
                     "actual_intent": r.get("actual_intent"),
+                    "expected_secondary_intents": sorted(expected_secondary),
+                    "actual_secondary_intents": sorted(actual_secondary),
+                    "expected_response_type": expected_response_type,
                     "actual_response_type": r.get("actual_response_type"),
+                    "mismatches": mismatches,
                     "error": r.get("error"),
                     "content_snippet": r.get("content_snippet"),
                     "description": sc["description"],
@@ -403,8 +452,14 @@ def _print_failure_analysis(
         print(
             f"  {f['scenario_id']}-run{f['run']}: "
             f"expected={f['expected_intent']} actual={f['actual_intent']} "
-            f"rt={f['actual_response_type']}"
+            f"rt={f['actual_response_type']} mismatches={f['mismatches']}"
         )
+        if "secondary_intents" in f["mismatches"]:
+            print(
+                "    secondary: "
+                f"expected={f['expected_secondary_intents']} "
+                f"actual={f['actual_secondary_intents']}"
+            )
         if f["error"]:
             print(f"    error: {f['error']}")
         elif f.get("content_snippet"):
@@ -452,12 +507,14 @@ async def _main(scenario_ids: list[str] | None, runs: int) -> None:
     print("[지표 요약]")
     print(f"  총 실행: {metrics['total_runs']}회  오류: {metrics['error_count']}회 ({metrics['error_rate_pct']}%)")
     print(f"  LLM 의도 분류 정확도:   {metrics['intent_accuracy_pct']}%")
+    print(f"  2차 의도 정확도:         {metrics['secondary_intent_accuracy_pct']}%")
     print(f"  응답 타입 정확도:        {metrics['response_type_accuracy_pct']}%")
-    print(f"  E2E 성공률:              {metrics['e2e_success_rate_pct']}%")
+    print(f"  Strict E2E 성공률:       {metrics['strict_e2e_success_rate_pct']}%")
     if metrics["clarification_accuracy_pct"] is not None:
         print(f"  모호성 처리 정확도:      {metrics['clarification_accuracy_pct']}%")
     if metrics["profile_extraction_accuracy_pct"] is not None:
         print(f"  프로필 추출 정확도:      {metrics['profile_extraction_accuracy_pct']}%")
+    print(f"  Handler 정확도:          미측정 ({metrics['handler_accuracy_reason']})")
     print(f"  반복 일관성:             {metrics['consistency_rate_pct']}%")
     print(f"  응답시간 P50:            {metrics['latency_p50_ms']}ms")
     print(f"  응답시간 P95:            {metrics['latency_p95_ms']}ms")
