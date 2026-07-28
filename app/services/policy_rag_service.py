@@ -1,4 +1,6 @@
+import json
 import logging
+import re
 from typing import Annotated, Any
 
 from fastapi import Depends
@@ -112,17 +114,16 @@ class PolicyRagService:
         source_type: str | None = None,
         policy_ids: list[int | str] | None = None,
     ) -> PolicyRagSearchResponse:
-        filter_value = self._search_filter(source_type, policy_ids)
-        results = await self._vectorstore().asimilarity_search_with_score(
-            query=query,
-            k=k,
-            filter=filter_value,
-        )
-
-        search_results = [
-            self._to_search_result(document=document, distance=distance)
-            for document, distance in results
-        ]
+        embedding = await self._embeddings().aembed_query(query)
+        async with psycopg_pool.connection() as conn:
+            rows = await PolicyRagRepository.search_chunks_by_vector(
+                conn=conn,
+                embedding=embedding,
+                limit=k,
+                source_type=source_type,
+                policy_ids=policy_ids,
+            )
+        search_results = [self._row_to_search_result(row) for row in rows]
         return PolicyRagSearchResponse(
             query=query,
             result_count=len(search_results),
@@ -174,19 +175,22 @@ class PolicyRagService:
         return {"$and": conditions}
 
     def _vectorstore(self) -> PGVector:
-        embedding_kwargs = {}
-        if settings.openai_api_key:
-            embedding_kwargs["api_key"] = settings.openai_api_key
-
         return PGVector(
-            embeddings=init_embeddings(
-                model="openai:text-embedding-3-large",
-                **embedding_kwargs,
-            ),
+            embeddings=self._embeddings(),
             collection_name=POLICY_RAG_COLLECTION_NAME,
             connection=engine,
             async_mode=True,
             use_jsonb=True,
+        )
+
+    def _embeddings(self):
+        embedding_kwargs = {}
+        if settings.openai_api_key:
+            embedding_kwargs["api_key"] = settings.openai_api_key
+
+        return init_embeddings(
+            model="openai:text-embedding-3-large",
+            **embedding_kwargs,
         )
 
     def _build_metadata(self, target: dict[str, Any]) -> dict[str, Any]:
@@ -261,6 +265,50 @@ class PolicyRagService:
             chunk_text=document.page_content,
             distance=float(distance),
         )
+
+    def _row_to_search_result(
+        self,
+        row: dict[str, Any],
+    ) -> PolicyRagSearchResult:
+        metadata = self._metadata_dict(row.get("metadata_json"))
+        chunk_text = str(row.get("chunk_text") or "")
+        return PolicyRagSearchResult(
+            chunk_id=self._to_int(row.get("chunk_id")),
+            document_id=self._to_int(row.get("document_id")),
+            policy_id=self._to_int(row.get("policy_id")),
+            condition_profile_id=self._to_int(
+                metadata.get("condition_profile_id")
+            ),
+            policy_code=self._to_str(row.get("policy_code")),
+            policy_name=self._to_str(row.get("policy_name")),
+            section=(
+                self._to_str(metadata.get("section"))
+                or self._section_from_text(chunk_text)
+            ),
+            semantic_section=self._to_str(metadata.get("semantic_section")),
+            source_type=self._to_str(row.get("source_type")),
+            source_title=self._to_str(row.get("source_title")),
+            source_url=self._to_str(row.get("source_url")),
+            evidence_role=self._to_str(metadata.get("evidence_role")),
+            metadata=metadata,
+            chunk_text=chunk_text,
+            distance=float(row["distance"]),
+        )
+
+    def _metadata_dict(self, value: Any) -> dict[str, Any]:
+        if isinstance(value, dict):
+            return dict(value)
+        if isinstance(value, str):
+            try:
+                parsed = json.loads(value)
+            except json.JSONDecodeError:
+                return {}
+            return dict(parsed) if isinstance(parsed, dict) else {}
+        return {}
+
+    def _section_from_text(self, value: str) -> str | None:
+        match = re.search(r"^섹션:\s*(.+?)\s*$", value, re.MULTILINE)
+        return match.group(1).strip() if match else None
 
     def _semantic_section(
         self,
