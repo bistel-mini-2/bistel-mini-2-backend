@@ -15,6 +15,21 @@ from app.schemas.ai_contract import ConditionResult, EvidenceChunk, RequestStatu
 from app.schemas.ai_request_schema import EligibilityResultResponse
 from app.services.ai_request_lifecycle_service import AiRequestLifecycleService
 
+class _FakePsycopgCursor:
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+    async def execute(self, query):
+        return None
+
+
+class _FakePsycopgConnection(str):
+    def cursor(self):
+        return _FakePsycopgCursor()
+
 
 def test_create_eligibility_request_uses_common_lifecycle(monkeypatch) -> None:
     captured: dict[str, object] = {}
@@ -1069,7 +1084,7 @@ def test_process_eligibility_request_saves_policy_assessment(monkeypatch) -> Non
 
     class FakeConnection:
         async def __aenter__(self):
-            return "conn"
+            return _FakePsycopgConnection("conn")
 
         async def __aexit__(self, exc_type, exc, tb):
             return False
@@ -1225,7 +1240,7 @@ def test_policy_detail_eligibility_uses_saved_profile_without_selected_condition
 
     class FakeConnection:
         async def __aenter__(self):
-            return "conn"
+            return _FakePsycopgConnection("conn")
 
         async def __aexit__(self, exc_type, exc, tb):
             return False
@@ -1380,7 +1395,7 @@ def test_policy_detail_eligibility_prefers_saved_profile_over_stale_selected_con
 
     class FakeConnection:
         async def __aenter__(self):
-            return "conn"
+            return _FakePsycopgConnection("conn")
 
         async def __aexit__(self, exc_type, exc, tb):
             return False
@@ -1530,7 +1545,7 @@ def test_recommendation_result_eligibility_skips_saved_profile(monkeypatch) -> N
 
     class FakeConnection:
         async def __aenter__(self):
-            return "conn"
+            return _FakePsycopgConnection("conn")
 
         async def __aexit__(self, exc_type, exc, tb):
             return False

@@ -402,63 +402,100 @@ class PolicyAssessmentRepository:
         confidence_score: float | None = None,
         selected_for_result: bool = False,
     ) -> int:
-        await PolicyAssessmentRepository.ensure_policy_assessment_schema(conn)
         request_id = recommendation_request_id
 
         async with conn.cursor() as cur:
             if eligibility_request_id is not None:
                 await cur.execute(
                     """
-                        DELETE FROM policy_assessment
-                        WHERE eligibility_request_id = %s
-                          AND policy_id = %s
-                          AND assessment_type = %s
+                        INSERT INTO policy_assessment (
+                            request_id,
+                            recommendation_request_id,
+                            eligibility_request_id,
+                            policy_id,
+                            assessment_type,
+                            assessment_status,
+                            confidence_score,
+                            matched_conditions_json,
+                            missing_conditions_json,
+                            conflicting_conditions_json,
+                            manual_check_points_json,
+                            reason_summary,
+                            selected_for_result
+                        )
+                        VALUES (
+                            %s, %s, %s, %s, %s, %s, %s,
+                            %s::jsonb, %s::jsonb, %s::jsonb, %s::jsonb, %s, %s
+                        )
+                        ON CONFLICT (eligibility_request_id, policy_id, assessment_type)
+                        WHERE eligibility_request_id IS NOT NULL
+                        DO UPDATE SET
+                            assessment_status         = EXCLUDED.assessment_status,
+                            confidence_score          = EXCLUDED.confidence_score,
+                            matched_conditions_json   = EXCLUDED.matched_conditions_json,
+                            missing_conditions_json   = EXCLUDED.missing_conditions_json,
+                            conflicting_conditions_json = EXCLUDED.conflicting_conditions_json,
+                            manual_check_points_json  = EXCLUDED.manual_check_points_json,
+                            reason_summary            = EXCLUDED.reason_summary,
+                            selected_for_result       = EXCLUDED.selected_for_result
+                        RETURNING assessment_id
                     """,
                     (
-                        eligibility_request_id,
-                        int(result.policy_id),
-                        assessment_type,
-                    ),
-                )
-            await cur.execute(
-                """
-                    INSERT INTO policy_assessment (
                         request_id,
                         recommendation_request_id,
                         eligibility_request_id,
-                        policy_id,
+                        int(result.policy_id),
                         assessment_type,
-                        assessment_status,
+                        result.assessment_status.value,
                         confidence_score,
-                        matched_conditions_json,
-                        missing_conditions_json,
-                        conflicting_conditions_json,
-                        manual_check_points_json,
-                        reason_summary,
-                        selected_for_result
-                    )
-                    VALUES (
-                        %s, %s, %s, %s, %s, %s, %s,
-                        %s::jsonb, %s::jsonb, %s::jsonb, %s::jsonb, %s, %s
-                    )
-                    RETURNING assessment_id
-                """,
-                (
-                    request_id,
-                    recommendation_request_id,
-                    eligibility_request_id,
-                    int(result.policy_id),
-                    assessment_type,
-                    result.assessment_status.value,
-                    confidence_score,
-                    PolicyAssessmentRepository._json(result.matched_conditions),
-                    PolicyAssessmentRepository._json(result.missing_conditions),
-                    PolicyAssessmentRepository._json(result.conflicting_conditions),
-                    PolicyAssessmentRepository._json(result.manual_check_points),
-                    result.reason_summary,
-                    selected_for_result,
-                ),
-            )
+                        PolicyAssessmentRepository._json(result.matched_conditions),
+                        PolicyAssessmentRepository._json(result.missing_conditions),
+                        PolicyAssessmentRepository._json(result.conflicting_conditions),
+                        PolicyAssessmentRepository._json(result.manual_check_points),
+                        result.reason_summary,
+                        selected_for_result,
+                    ),
+                )
+            else:
+                await cur.execute(
+                    """
+                        INSERT INTO policy_assessment (
+                            request_id,
+                            recommendation_request_id,
+                            eligibility_request_id,
+                            policy_id,
+                            assessment_type,
+                            assessment_status,
+                            confidence_score,
+                            matched_conditions_json,
+                            missing_conditions_json,
+                            conflicting_conditions_json,
+                            manual_check_points_json,
+                            reason_summary,
+                            selected_for_result
+                        )
+                        VALUES (
+                            %s, %s, %s, %s, %s, %s, %s,
+                            %s::jsonb, %s::jsonb, %s::jsonb, %s::jsonb, %s, %s
+                        )
+                        RETURNING assessment_id
+                    """,
+                    (
+                        request_id,
+                        recommendation_request_id,
+                        eligibility_request_id,
+                        int(result.policy_id),
+                        assessment_type,
+                        result.assessment_status.value,
+                        confidence_score,
+                        PolicyAssessmentRepository._json(result.matched_conditions),
+                        PolicyAssessmentRepository._json(result.missing_conditions),
+                        PolicyAssessmentRepository._json(result.conflicting_conditions),
+                        PolicyAssessmentRepository._json(result.manual_check_points),
+                        result.reason_summary,
+                        selected_for_result,
+                    ),
+                )
             row = await cur.fetchone()
             assessment_id = int(row[0])
             await PolicyAssessmentRepository.replace_evidences(

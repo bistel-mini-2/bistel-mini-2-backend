@@ -1,5 +1,8 @@
+import asyncio
 import logging
 from typing import Any
+
+import psycopg.errors
 
 from fastapi import status
 from sqlalchemy import select
@@ -799,13 +802,23 @@ class AiRequestLifecycleService:
             manual_check_points=follow_up_points,
         )
 
-        async with psycopg_pool.connection() as conn:
-            await PolicyAssessmentRepository.save_assessment(
-                conn=conn,
-                result=assessment_result,
-                assessment_type=ASSESSMENT_TYPE_ELIGIBILITY,
-                eligibility_request_id=request_id,
-            )
+        for _attempt in range(3):
+            try:
+                async with psycopg_pool.connection() as conn:
+                    async with conn.cursor() as _cur:
+                        await _cur.execute("SET lock_timeout = '3s'")
+                        await _cur.execute("SET statement_timeout = '10s'")
+                    await PolicyAssessmentRepository.save_assessment(
+                        conn=conn,
+                        result=assessment_result,
+                        assessment_type=ASSESSMENT_TYPE_ELIGIBILITY,
+                        eligibility_request_id=request_id,
+                    )
+                break
+            except psycopg.errors.LockNotAvailable:
+                if _attempt == 2:
+                    raise
+                await asyncio.sleep(2 ** _attempt)
         return follow_up_needed
 
     async def _save_follow_up_question_overrides(

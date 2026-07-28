@@ -48,13 +48,11 @@ class UserRepository:
 
     @staticmethod
     async def find_by_id(db: AsyncSession, user_id: int) -> User | None:
-        await UserRepository.ensure_user_schema(db)
         result = await db.execute(select(User).where(User.user_id == user_id))
         return result.scalar_one_or_none()
 
     @staticmethod
     async def save(db: AsyncSession, user: User) -> User:
-        await UserRepository.ensure_user_schema(db)
         db.add(user)
         await db.flush()
         await db.refresh(user)

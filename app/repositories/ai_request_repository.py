@@ -91,7 +91,6 @@ class AiRequestRepository:
         follow_up_resolved: bool = False,
         policy_id: int | None = None,
     ) -> AiRequestModel:
-        await self.ensure_request_schema(db)
         model = self._model_for(request_type)
         parsed_query_json: dict[str, Any] = {}
         if selected_conditions is not None:
