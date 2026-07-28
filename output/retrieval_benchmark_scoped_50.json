@@ -1,0 +1,5690 @@
+{
+  "dataset": "tests/eval/retrieval_cases.jsonl",
+  "top_k": 5,
+  "case_count": 50,
+  "scope_to_expected_policy": true,
+  "strategies": [
+    {
+      "strategy": "vector",
+      "metrics": {
+        "case_count": 50,
+        "policy_hit_at_k_pct": 100.0,
+        "section_hit_at_k_pct": 98.0,
+        "mrr": 1.0,
+        "error_rate_pct": 0.0,
+        "latency_mean_ms": 710.517,
+        "latency_p50_ms": 664.753,
+        "latency_p95_ms": 1026.989,
+        "by_category": {
+          "application": {
+            "case_count": 10,
+            "policy_hit_at_k_pct": 100.0,
+            "section_hit_at_k_pct": 90.0
+          },
+          "benefit": {
+            "case_count": 21,
+            "policy_hit_at_k_pct": 100.0,
+            "section_hit_at_k_pct": 100.0
+          },
+          "caution": {
+            "case_count": 4,
+            "policy_hit_at_k_pct": 100.0,
+            "section_hit_at_k_pct": 100.0
+          },
+          "target": {
+            "case_count": 15,
+            "policy_hit_at_k_pct": 100.0,
+            "section_hit_at_k_pct": 100.0
+          }
+        }
+      },
+      "cases": [
+        {
+          "case_id": "R001",
+          "category": "target",
+          "query": "발달장애가 있는 회사원이 업무에 적응할 수 있게 교육해 주는 제도가 있을까요?",
+          "expected_policy_ids": [
+            237
+          ],
+          "expected_sections": [
+            "정리된 지원 조건",
+            "공식 지원대상 원문"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 1196.496,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 237,
+              "chunk_id": 23790000002,
+              "section": "공식 지원대상 원문",
+              "score": 0.690017
+            },
+            {
+              "rank": 2,
+              "policy_id": 237,
+              "chunk_id": 23790000003,
+              "section": "지원 내용",
+              "score": 0.683364
+            },
+            {
+              "rank": 3,
+              "policy_id": 237,
+              "chunk_id": 23790000000,
+              "section": "정리된 지원 조건",
+              "score": 0.682487
+            },
+            {
+              "rank": 4,
+              "policy_id": 237,
+              "chunk_id": 23790000006,
+              "section": "유의 사항",
+              "score": 0.662279
+            },
+            {
+              "rank": 5,
+              "policy_id": 237,
+              "chunk_id": 23790000004,
+              "section": "신청 방법",
+              "score": 0.651014
+            }
+          ]
+        },
+        {
+          "case_id": "R002",
+          "category": "benefit",
+          "query": "발달장애가 있는데 직장에서 예절이나 사람들과 지내는 법을 배우고 싶어요",
+          "expected_policy_ids": [
+            237
+          ],
+          "expected_sections": [
+            "지원 내용"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 1290.272,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 237,
+              "chunk_id": 23790000003,
+              "section": "지원 내용",
+              "score": 0.633147
+            },
+            {
+              "rank": 2,
+              "policy_id": 237,
+              "chunk_id": 23790000002,
+              "section": "공식 지원대상 원문",
+              "score": 0.62545
+            },
+            {
+              "rank": 3,
+              "policy_id": 237,
+              "chunk_id": 23790000000,
+              "section": "정리된 지원 조건",
+              "score": 0.621175
+            },
+            {
+              "rank": 4,
+              "policy_id": 237,
+              "chunk_id": 23790000006,
+              "section": "유의 사항",
+              "score": 0.612973
+            },
+            {
+              "rank": 5,
+              "policy_id": 237,
+              "chunk_id": 23790000004,
+              "section": "신청 방법",
+              "score": 0.611296
+            }
+          ]
+        },
+        {
+          "case_id": "R003",
+          "category": "benefit",
+          "query": "개인 역량에 맞춰 석 달 정도 직무를 배울 수 있는 장애인 과정이 있나요?",
+          "expected_policy_ids": [
+            237
+          ],
+          "expected_sections": [
+            "지원 내용"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 2,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 700.082,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 237,
+              "chunk_id": 23790000002,
+              "section": "공식 지원대상 원문",
+              "score": 0.681203
+            },
+            {
+              "rank": 2,
+              "policy_id": 237,
+              "chunk_id": 23790000003,
+              "section": "지원 내용",
+              "score": 0.674249
+            },
+            {
+              "rank": 3,
+              "policy_id": 237,
+              "chunk_id": 23790000000,
+              "section": "정리된 지원 조건",
+              "score": 0.653505
+            },
+            {
+              "rank": 4,
+              "policy_id": 237,
+              "chunk_id": 23790000005,
+              "section": "신청 기간",
+              "score": 0.647901
+            },
+            {
+              "rank": 5,
+              "policy_id": 237,
+              "chunk_id": 23790000006,
+              "section": "유의 사항",
+              "score": 0.647234
+            }
+          ]
+        },
+        {
+          "case_id": "R004",
+          "category": "application",
+          "query": "회사 다니는 발달장애인이 교육을 받으려면 어디에 문의해야 하나요?",
+          "expected_policy_ids": [
+            237
+          ],
+          "expected_sections": [
+            "신청 방법"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 883.32,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 237,
+              "chunk_id": 23790000004,
+              "section": "신청 방법",
+              "score": 0.671904
+            },
+            {
+              "rank": 2,
+              "policy_id": 237,
+              "chunk_id": 23790000002,
+              "section": "공식 지원대상 원문",
+              "score": 0.648336
+            },
+            {
+              "rank": 3,
+              "policy_id": 237,
+              "chunk_id": 23790000003,
+              "section": "지원 내용",
+              "score": 0.640199
+            },
+            {
+              "rank": 4,
+              "policy_id": 237,
+              "chunk_id": 23790000000,
+              "section": "정리된 지원 조건",
+              "score": 0.630748
+            },
+            {
+              "rank": 5,
+              "policy_id": 237,
+              "chunk_id": 23790000006,
+              "section": "유의 사항",
+              "score": 0.628078
+            }
+          ]
+        },
+        {
+          "case_id": "R005",
+          "category": "target",
+          "query": "발달장애인 직원이 사업장 근처에서 직무와 기초 소양을 배울 방법을 찾고 있어요",
+          "expected_policy_ids": [
+            237
+          ],
+          "expected_sections": [
+            "공식 지원대상 원문",
+            "지원 내용"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 648.828,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 237,
+              "chunk_id": 23790000003,
+              "section": "지원 내용",
+              "score": 0.692715
+            },
+            {
+              "rank": 2,
+              "policy_id": 237,
+              "chunk_id": 23790000002,
+              "section": "공식 지원대상 원문",
+              "score": 0.673691
+            },
+            {
+              "rank": 3,
+              "policy_id": 237,
+              "chunk_id": 23790000000,
+              "section": "정리된 지원 조건",
+              "score": 0.660353
+            },
+            {
+              "rank": 4,
+              "policy_id": 237,
+              "chunk_id": 23790000004,
+              "section": "신청 방법",
+              "score": 0.659938
+            },
+            {
+              "rank": 5,
+              "policy_id": 237,
+              "chunk_id": 23790000001,
+              "section": "추가 확인 조건",
+              "score": 0.65117
+            }
+          ]
+        },
+        {
+          "case_id": "R006",
+          "category": "target",
+          "query": "한국 법이 낯선 이주민이나 탈북민이 쉽게 배울 수 있는 과정이 있나요?",
+          "expected_policy_ids": [
+            238
+          ],
+          "expected_sections": [
+            "정리된 지원 조건",
+            "공식 지원대상 원문"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 3,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 730.455,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 238,
+              "chunk_id": 23890000001,
+              "section": "조건 구조",
+              "score": 0.634556
+            },
+            {
+              "rank": 2,
+              "policy_id": 238,
+              "chunk_id": 23890000004,
+              "section": "지원 내용",
+              "score": 0.630302
+            },
+            {
+              "rank": 3,
+              "policy_id": 238,
+              "chunk_id": 23890000000,
+              "section": "정리된 지원 조건",
+              "score": 0.624989
+            },
+            {
+              "rank": 4,
+              "policy_id": 238,
+              "chunk_id": 23890000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.614366
+            },
+            {
+              "rank": 5,
+              "policy_id": 238,
+              "chunk_id": 23890000005,
+              "section": "신청 방법",
+              "score": 0.610923
+            }
+          ]
+        },
+        {
+          "case_id": "R007",
+          "category": "benefit",
+          "query": "농사를 짓는 사람이나 10대가 체험하면서 생활 법률을 배울 수 있나요?",
+          "expected_policy_ids": [
+            238
+          ],
+          "expected_sections": [
+            "지원 내용"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 599.481,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 238,
+              "chunk_id": 23890000004,
+              "section": "지원 내용",
+              "score": 0.627397
+            },
+            {
+              "rank": 2,
+              "policy_id": 238,
+              "chunk_id": 23890000000,
+              "section": "정리된 지원 조건",
+              "score": 0.616402
+            },
+            {
+              "rank": 3,
+              "policy_id": 238,
+              "chunk_id": 23890000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.607799
+            },
+            {
+              "rank": 4,
+              "policy_id": 238,
+              "chunk_id": 23890000001,
+              "section": "조건 구조",
+              "score": 0.604105
+            },
+            {
+              "rank": 5,
+              "policy_id": 238,
+              "chunk_id": 23890000002,
+              "section": "추가 확인 조건",
+              "score": 0.600563
+            }
+          ]
+        },
+        {
+          "case_id": "R008",
+          "category": "target",
+          "query": "장애가 있어도 참여 가능한 쉬운 법 체험 수업을 찾고 있어요",
+          "expected_policy_ids": [
+            238
+          ],
+          "expected_sections": [
+            "정리된 지원 조건",
+            "공식 지원대상 원문"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 3,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 817.507,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 238,
+              "chunk_id": 23890000004,
+              "section": "지원 내용",
+              "score": 0.651829
+            },
+            {
+              "rank": 2,
+              "policy_id": 238,
+              "chunk_id": 23890000002,
+              "section": "추가 확인 조건",
+              "score": 0.638115
+            },
+            {
+              "rank": 3,
+              "policy_id": 238,
+              "chunk_id": 23890000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.636334
+            },
+            {
+              "rank": 4,
+              "policy_id": 238,
+              "chunk_id": 23890000000,
+              "section": "정리된 지원 조건",
+              "score": 0.636206
+            },
+            {
+              "rank": 5,
+              "policy_id": 238,
+              "chunk_id": 23890000001,
+              "section": "조건 구조",
+              "score": 0.624508
+            }
+          ]
+        },
+        {
+          "case_id": "R009",
+          "category": "application",
+          "query": "취약계층 대상 체험식 법 수업은 어느 기관에 신청하나요?",
+          "expected_policy_ids": [
+            238
+          ],
+          "expected_sections": [
+            "신청 방법"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 589.674,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 238,
+              "chunk_id": 23890000005,
+              "section": "신청 방법",
+              "score": 0.632462
+            },
+            {
+              "rank": 2,
+              "policy_id": 238,
+              "chunk_id": 23890000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.618902
+            },
+            {
+              "rank": 3,
+              "policy_id": 238,
+              "chunk_id": 23890000004,
+              "section": "지원 내용",
+              "score": 0.609186
+            },
+            {
+              "rank": 4,
+              "policy_id": 238,
+              "chunk_id": 23890000007,
+              "section": "유의 사항",
+              "score": 0.607953
+            },
+            {
+              "rank": 5,
+              "policy_id": 238,
+              "chunk_id": 23890000002,
+              "section": "추가 확인 조건",
+              "score": 0.606951
+            }
+          ]
+        },
+        {
+          "case_id": "R010",
+          "category": "application",
+          "query": "이주 배경 가족이 정해진 모집 기간 없이 법을 배울 수 있는 곳이 있을까요?",
+          "expected_policy_ids": [
+            238
+          ],
+          "expected_sections": [
+            "신청 기간",
+            "공식 지원대상 원문"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 630.905,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 238,
+              "chunk_id": 23890000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.641428
+            },
+            {
+              "rank": 2,
+              "policy_id": 238,
+              "chunk_id": 23890000004,
+              "section": "지원 내용",
+              "score": 0.638522
+            },
+            {
+              "rank": 3,
+              "policy_id": 238,
+              "chunk_id": 23890000000,
+              "section": "정리된 지원 조건",
+              "score": 0.634872
+            },
+            {
+              "rank": 4,
+              "policy_id": 238,
+              "chunk_id": 23890000001,
+              "section": "조건 구조",
+              "score": 0.630693
+            },
+            {
+              "rank": 5,
+              "policy_id": 238,
+              "chunk_id": 23890000006,
+              "section": "신청 기간",
+              "score": 0.624534
+            }
+          ]
+        },
+        {
+          "case_id": "R011",
+          "category": "benefit",
+          "query": "아기를 가진 건강보험 가입자가 병원비로 쓸 카드 포인트를 받을 수 있나요?",
+          "expected_policy_ids": [
+            240
+          ],
+          "expected_sections": [
+            "지원 내용",
+            "공식 지원대상 원문"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 896.962,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 240,
+              "chunk_id": 24090000004,
+              "section": "공식 지원대상 원문",
+              "score": 0.740866
+            },
+            {
+              "rank": 2,
+              "policy_id": 240,
+              "chunk_id": 24090000005,
+              "section": "지원 내용",
+              "score": 0.726322
+            },
+            {
+              "rank": 3,
+              "policy_id": 240,
+              "chunk_id": 24090000000,
+              "section": "정리된 지원 조건",
+              "score": 0.725823
+            },
+            {
+              "rank": 4,
+              "policy_id": 240,
+              "chunk_id": 24090000008,
+              "section": "유의 사항",
+              "score": 0.706924
+            },
+            {
+              "rank": 5,
+              "policy_id": 240,
+              "chunk_id": 24090000001,
+              "section": "조건 구조",
+              "score": 0.704786
+            }
+          ]
+        },
+        {
+          "case_id": "R012",
+          "category": "benefit",
+          "query": "쌍둥이를 임신하면 한 명일 때보다 의료비 지원이 더 나오나요?",
+          "expected_policy_ids": [
+            240,
+            258
+          ],
+          "expected_sections": [
+            "지원 내용",
+            "공식 지원대상 원문"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 650.116,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 258,
+              "chunk_id": 25890000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.692589
+            },
+            {
+              "rank": 2,
+              "policy_id": 258,
+              "chunk_id": 25890000000,
+              "section": "정리된 지원 조건",
+              "score": 0.67793
+            },
+            {
+              "rank": 3,
+              "policy_id": 258,
+              "chunk_id": 25890000004,
+              "section": "지원 내용",
+              "score": 0.673468
+            },
+            {
+              "rank": 4,
+              "policy_id": 240,
+              "chunk_id": 24090000005,
+              "section": "지원 내용",
+              "score": 0.672179
+            },
+            {
+              "rank": 5,
+              "policy_id": 258,
+              "chunk_id": 25890000007,
+              "section": "유의 사항",
+              "score": 0.67182
+            }
+          ]
+        },
+        {
+          "case_id": "R013",
+          "category": "benefit",
+          "query": "두 돌 전 아이의 진료비와 처방약 비용을 포인트로 낼 수 있는 제도",
+          "expected_policy_ids": [
+            240
+          ],
+          "expected_sections": [
+            "지원 내용"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 2,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 515.818,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 240,
+              "chunk_id": 24090000004,
+              "section": "공식 지원대상 원문",
+              "score": 0.653673
+            },
+            {
+              "rank": 2,
+              "policy_id": 240,
+              "chunk_id": 24090000005,
+              "section": "지원 내용",
+              "score": 0.645522
+            },
+            {
+              "rank": 3,
+              "policy_id": 240,
+              "chunk_id": 24090000001,
+              "section": "조건 구조",
+              "score": 0.616875
+            },
+            {
+              "rank": 4,
+              "policy_id": 240,
+              "chunk_id": 24090000000,
+              "section": "정리된 지원 조건",
+              "score": 0.616756
+            },
+            {
+              "rank": 5,
+              "policy_id": 240,
+              "chunk_id": 24090000007,
+              "section": "신청 기간",
+              "score": 0.611703
+            }
+          ]
+        },
+        {
+          "case_id": "R014",
+          "category": "application",
+          "query": "임산부 병원비 카드 포인트는 공단이나 카드사 중 어디에서 신청하나요?",
+          "expected_policy_ids": [
+            240
+          ],
+          "expected_sections": [
+            "신청 방법"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 2,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 719.887,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 240,
+              "chunk_id": 24090000004,
+              "section": "공식 지원대상 원문",
+              "score": 0.717705
+            },
+            {
+              "rank": 2,
+              "policy_id": 240,
+              "chunk_id": 24090000006,
+              "section": "신청 방법",
+              "score": 0.707497
+            },
+            {
+              "rank": 3,
+              "policy_id": 240,
+              "chunk_id": 24090000007,
+              "section": "신청 기간",
+              "score": 0.6967
+            },
+            {
+              "rank": 4,
+              "policy_id": 240,
+              "chunk_id": 24090000005,
+              "section": "지원 내용",
+              "score": 0.693554
+            },
+            {
+              "rank": 5,
+              "policy_id": 240,
+              "chunk_id": 24090000008,
+              "section": "유의 사항",
+              "score": 0.672883
+            }
+          ]
+        },
+        {
+          "case_id": "R015",
+          "category": "caution",
+          "query": "출산하고 남은 의료비 포인트는 언제까지 써야 없어지지 않나요?",
+          "expected_policy_ids": [
+            240
+          ],
+          "expected_sections": [
+            "지원 내용"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 2,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 1026.989,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 240,
+              "chunk_id": 24090000004,
+              "section": "공식 지원대상 원문",
+              "score": 0.677391
+            },
+            {
+              "rank": 2,
+              "policy_id": 240,
+              "chunk_id": 24090000005,
+              "section": "지원 내용",
+              "score": 0.664237
+            },
+            {
+              "rank": 3,
+              "policy_id": 240,
+              "chunk_id": 24090000002,
+              "section": "제외 조건",
+              "score": 0.643357
+            },
+            {
+              "rank": 4,
+              "policy_id": 240,
+              "chunk_id": 24090000007,
+              "section": "신청 기간",
+              "score": 0.63948
+            },
+            {
+              "rank": 5,
+              "policy_id": 240,
+              "chunk_id": 24090000003,
+              "section": "추가 확인 조건",
+              "score": 0.637699
+            }
+          ]
+        },
+        {
+          "case_id": "R016",
+          "category": "benefit",
+          "query": "계약이나 손해배상 문제로 변호사 상담이 필요한데 비용이 부담돼요",
+          "expected_policy_ids": [
+            242
+          ],
+          "expected_sections": [
+            "지원 내용",
+            "공식 지원대상 원문"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 529.113,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 242,
+              "chunk_id": 24290000003,
+              "section": "지원 내용",
+              "score": 0.677353
+            },
+            {
+              "rank": 2,
+              "policy_id": 242,
+              "chunk_id": 24290000001,
+              "section": "조건 구조",
+              "score": 0.651824
+            },
+            {
+              "rank": 3,
+              "policy_id": 242,
+              "chunk_id": 24290000002,
+              "section": "공식 지원대상 원문",
+              "score": 0.643978
+            },
+            {
+              "rank": 4,
+              "policy_id": 242,
+              "chunk_id": 24290000006,
+              "section": "유의 사항",
+              "score": 0.64279
+            },
+            {
+              "rank": 5,
+              "policy_id": 242,
+              "chunk_id": 24290000005,
+              "section": "신청 기간",
+              "score": 0.639647
+            }
+          ]
+        },
+        {
+          "case_id": "R017",
+          "category": "benefit",
+          "query": "빚 때문에 회생이나 파산을 알아보는데 돈 없이 도움받을 곳이 있나요?",
+          "expected_policy_ids": [
+            242
+          ],
+          "expected_sections": [
+            "지원 내용"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 991.242,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 242,
+              "chunk_id": 24290000003,
+              "section": "지원 내용",
+              "score": 0.632304
+            },
+            {
+              "rank": 2,
+              "policy_id": 242,
+              "chunk_id": 24290000004,
+              "section": "신청 방법",
+              "score": 0.607687
+            },
+            {
+              "rank": 3,
+              "policy_id": 242,
+              "chunk_id": 24290000002,
+              "section": "공식 지원대상 원문",
+              "score": 0.607596
+            },
+            {
+              "rank": 4,
+              "policy_id": 242,
+              "chunk_id": 24290000006,
+              "section": "유의 사항",
+              "score": 0.590818
+            },
+            {
+              "rank": 5,
+              "policy_id": 242,
+              "chunk_id": 24290000000,
+              "section": "정리된 지원 조건",
+              "score": 0.585752
+            }
+          ]
+        },
+        {
+          "case_id": "R018",
+          "category": "target",
+          "query": "형편이 어렵고 법을 잘 몰라도 전문가에게 도움을 받을 수 있을까요?",
+          "expected_policy_ids": [
+            242
+          ],
+          "expected_sections": [
+            "정리된 지원 조건",
+            "공식 지원대상 원문"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 3,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 619.711,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 242,
+              "chunk_id": 24290000006,
+              "section": "유의 사항",
+              "score": 0.630366
+            },
+            {
+              "rank": 2,
+              "policy_id": 242,
+              "chunk_id": 24290000001,
+              "section": "조건 구조",
+              "score": 0.624193
+            },
+            {
+              "rank": 3,
+              "policy_id": 242,
+              "chunk_id": 24290000002,
+              "section": "공식 지원대상 원문",
+              "score": 0.623732
+            },
+            {
+              "rank": 4,
+              "policy_id": 242,
+              "chunk_id": 24290000003,
+              "section": "지원 내용",
+              "score": 0.620489
+            },
+            {
+              "rank": 5,
+              "policy_id": 242,
+              "chunk_id": 24290000005,
+              "section": "신청 기간",
+              "score": 0.619294
+            }
+          ]
+        },
+        {
+          "case_id": "R019",
+          "category": "application",
+          "query": "법률 문제를 무료로 물어보려면 어떤 기관을 찾아가야 하나요?",
+          "expected_policy_ids": [
+            242
+          ],
+          "expected_sections": [
+            "신청 방법"
+          ],
+          "policy_hit": true,
+          "section_hit": false,
+          "policy_rank": 1,
+          "section_rank": null,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 614.364,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 242,
+              "chunk_id": 24290000005,
+              "section": "신청 기간",
+              "score": 0.695514
+            },
+            {
+              "rank": 2,
+              "policy_id": 242,
+              "chunk_id": 24290000002,
+              "section": "공식 지원대상 원문",
+              "score": 0.69351
+            },
+            {
+              "rank": 3,
+              "policy_id": 242,
+              "chunk_id": 24290000006,
+              "section": "유의 사항",
+              "score": 0.687225
+            },
+            {
+              "rank": 4,
+              "policy_id": 242,
+              "chunk_id": 24290000000,
+              "section": "정리된 지원 조건",
+              "score": 0.676184
+            },
+            {
+              "rank": 5,
+              "policy_id": 242,
+              "chunk_id": 24290000001,
+              "section": "조건 구조",
+              "score": 0.672051
+            }
+          ]
+        },
+        {
+          "case_id": "R020",
+          "category": "benefit",
+          "query": "집주인과의 분쟁이나 민사 재판 문제를 상담받고 싶어요",
+          "expected_policy_ids": [
+            242
+          ],
+          "expected_sections": [
+            "지원 내용"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 503.094,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 242,
+              "chunk_id": 24290000003,
+              "section": "지원 내용",
+              "score": 0.649835
+            },
+            {
+              "rank": 2,
+              "policy_id": 242,
+              "chunk_id": 24290000001,
+              "section": "조건 구조",
+              "score": 0.626754
+            },
+            {
+              "rank": 3,
+              "policy_id": 242,
+              "chunk_id": 24290000006,
+              "section": "유의 사항",
+              "score": 0.622654
+            },
+            {
+              "rank": 4,
+              "policy_id": 242,
+              "chunk_id": 24290000002,
+              "section": "공식 지원대상 원문",
+              "score": 0.620774
+            },
+            {
+              "rank": 5,
+              "policy_id": 242,
+              "chunk_id": 24290000005,
+              "section": "신청 기간",
+              "score": 0.620635
+            }
+          ]
+        },
+        {
+          "case_id": "R021",
+          "category": "benefit",
+          "query": "임신을 준비하는 치료 때문에 쉰 날도 급여를 일부 받을 수 있나요?",
+          "expected_policy_ids": [
+            246
+          ],
+          "expected_sections": [
+            "지원 내용",
+            "공식 지원대상 원문"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 647.954,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 246,
+              "chunk_id": 24690000004,
+              "section": "지원 내용",
+              "score": 0.697272
+            },
+            {
+              "rank": 2,
+              "policy_id": 246,
+              "chunk_id": 24690000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.68498
+            },
+            {
+              "rank": 3,
+              "policy_id": 246,
+              "chunk_id": 24690000001,
+              "section": "조건 구조",
+              "score": 0.68345
+            },
+            {
+              "rank": 4,
+              "policy_id": 246,
+              "chunk_id": 24690000000,
+              "section": "정리된 지원 조건",
+              "score": 0.662376
+            },
+            {
+              "rank": 5,
+              "policy_id": 246,
+              "chunk_id": 24690000002,
+              "section": "추가 확인 조건",
+              "score": 0.647497
+            }
+          ]
+        },
+        {
+          "case_id": "R022",
+          "category": "target",
+          "query": "시술 때문에 휴가를 내려는데 고용보험 가입 기간 조건이 있나요?",
+          "expected_policy_ids": [
+            246
+          ],
+          "expected_sections": [
+            "조건 구조",
+            "공식 지원대상 원문"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 503.916,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 246,
+              "chunk_id": 24690000001,
+              "section": "조건 구조",
+              "score": 0.665143
+            },
+            {
+              "rank": 2,
+              "policy_id": 246,
+              "chunk_id": 24690000002,
+              "section": "추가 확인 조건",
+              "score": 0.648613
+            },
+            {
+              "rank": 3,
+              "policy_id": 246,
+              "chunk_id": 24690000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.642933
+            },
+            {
+              "rank": 4,
+              "policy_id": 246,
+              "chunk_id": 24690000006,
+              "section": "신청 기간",
+              "score": 0.641582
+            },
+            {
+              "rank": 5,
+              "policy_id": 246,
+              "chunk_id": 24690000000,
+              "section": "정리된 지원 조건",
+              "score": 0.633797
+            }
+          ]
+        },
+        {
+          "case_id": "R023",
+          "category": "target",
+          "query": "규모가 작은 회사 직원도 임신 준비 시술을 위해 유급으로 쉴 수 있을까요?",
+          "expected_policy_ids": [
+            246
+          ],
+          "expected_sections": [
+            "정리된 지원 조건",
+            "공식 지원대상 원문"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 667.583,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 246,
+              "chunk_id": 24690000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.655657
+            },
+            {
+              "rank": 2,
+              "policy_id": 246,
+              "chunk_id": 24690000001,
+              "section": "조건 구조",
+              "score": 0.651602
+            },
+            {
+              "rank": 3,
+              "policy_id": 246,
+              "chunk_id": 24690000004,
+              "section": "지원 내용",
+              "score": 0.651019
+            },
+            {
+              "rank": 4,
+              "policy_id": 246,
+              "chunk_id": 24690000000,
+              "section": "정리된 지원 조건",
+              "score": 0.637366
+            },
+            {
+              "rank": 5,
+              "policy_id": 246,
+              "chunk_id": 24690000002,
+              "section": "추가 확인 조건",
+              "score": 0.630109
+            }
+          ]
+        },
+        {
+          "case_id": "R024",
+          "category": "caution",
+          "query": "시술 때문에 사용한 휴가 비용은 언제까지 청구해야 하나요?",
+          "expected_policy_ids": [
+            246
+          ],
+          "expected_sections": [
+            "추가 확인 조건",
+            "공식 지원대상 원문"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 4,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 647.718,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 246,
+              "chunk_id": 24690000006,
+              "section": "신청 기간",
+              "score": 0.618695
+            },
+            {
+              "rank": 2,
+              "policy_id": 246,
+              "chunk_id": 24690000007,
+              "section": "유의 사항",
+              "score": 0.611229
+            },
+            {
+              "rank": 3,
+              "policy_id": 246,
+              "chunk_id": 24690000001,
+              "section": "조건 구조",
+              "score": 0.61
+            },
+            {
+              "rank": 4,
+              "policy_id": 246,
+              "chunk_id": 24690000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.608979
+            },
+            {
+              "rank": 5,
+              "policy_id": 246,
+              "chunk_id": 24690000005,
+              "section": "신청 방법",
+              "score": 0.604823
+            }
+          ]
+        },
+        {
+          "case_id": "R025",
+          "category": "application",
+          "query": "임신 준비 시술로 쉰 기간의 임금 보전은 어디에 신청하나요?",
+          "expected_policy_ids": [
+            246
+          ],
+          "expected_sections": [
+            "신청 방법"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 2,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 559.1,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 246,
+              "chunk_id": 24690000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.648641
+            },
+            {
+              "rank": 2,
+              "policy_id": 246,
+              "chunk_id": 24690000005,
+              "section": "신청 방법",
+              "score": 0.642748
+            },
+            {
+              "rank": 3,
+              "policy_id": 246,
+              "chunk_id": 24690000004,
+              "section": "지원 내용",
+              "score": 0.641155
+            },
+            {
+              "rank": 4,
+              "policy_id": 246,
+              "chunk_id": 24690000001,
+              "section": "조건 구조",
+              "score": 0.63318
+            },
+            {
+              "rank": 5,
+              "policy_id": 246,
+              "chunk_id": 24690000006,
+              "section": "신청 기간",
+              "score": 0.630021
+            }
+          ]
+        },
+        {
+          "case_id": "R026",
+          "category": "benefit",
+          "query": "신분을 드러내기 힘든 상황에서도 안전하게 아이를 낳을 방법이 있나요?",
+          "expected_policy_ids": [
+            247
+          ],
+          "expected_sections": [
+            "지원 내용",
+            "공식 지원대상 원문"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 889.828,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 247,
+              "chunk_id": 24790000004,
+              "section": "지원 내용",
+              "score": 0.62854
+            },
+            {
+              "rank": 2,
+              "policy_id": 247,
+              "chunk_id": 24790000001,
+              "section": "조건 구조",
+              "score": 0.624442
+            },
+            {
+              "rank": 3,
+              "policy_id": 247,
+              "chunk_id": 24790000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.624399
+            },
+            {
+              "rank": 4,
+              "policy_id": 247,
+              "chunk_id": 24790000000,
+              "section": "정리된 지원 조건",
+              "score": 0.615534
+            },
+            {
+              "rank": 5,
+              "policy_id": 247,
+              "chunk_id": 24790000007,
+              "section": "유의 사항",
+              "score": 0.614728
+            }
+          ]
+        },
+        {
+          "case_id": "R027",
+          "category": "benefit",
+          "query": "임신 사실 때문에 막막한데 밤에도 비밀로 상담할 수 있는 곳을 찾고 있어요",
+          "expected_policy_ids": [
+            247
+          ],
+          "expected_sections": [
+            "지원 내용"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 603.03,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 247,
+              "chunk_id": 24790000004,
+              "section": "지원 내용",
+              "score": 0.657528
+            },
+            {
+              "rank": 2,
+              "policy_id": 247,
+              "chunk_id": 24790000006,
+              "section": "신청 기간",
+              "score": 0.624847
+            },
+            {
+              "rank": 3,
+              "policy_id": 247,
+              "chunk_id": 24790000005,
+              "section": "신청 방법",
+              "score": 0.622519
+            },
+            {
+              "rank": 4,
+              "policy_id": 247,
+              "chunk_id": 24790000007,
+              "section": "유의 사항",
+              "score": 0.622149
+            },
+            {
+              "rank": 5,
+              "policy_id": 247,
+              "chunk_id": 24790000001,
+              "section": "조건 구조",
+              "score": 0.6198
+            }
+          ]
+        },
+        {
+          "case_id": "R028",
+          "category": "benefit",
+          "query": "부득이하게 맡겨진 신생아의 임시 보호 비용도 지원되나요?",
+          "expected_policy_ids": [
+            247
+          ],
+          "expected_sections": [
+            "지원 내용",
+            "공식 지원대상 원문"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 843.674,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 247,
+              "chunk_id": 24790000004,
+              "section": "지원 내용",
+              "score": 0.710527
+            },
+            {
+              "rank": 2,
+              "policy_id": 247,
+              "chunk_id": 24790000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.709892
+            },
+            {
+              "rank": 3,
+              "policy_id": 247,
+              "chunk_id": 24790000000,
+              "section": "정리된 지원 조건",
+              "score": 0.67614
+            },
+            {
+              "rank": 4,
+              "policy_id": 247,
+              "chunk_id": 24790000007,
+              "section": "유의 사항",
+              "score": 0.673203
+            },
+            {
+              "rank": 5,
+              "policy_id": 247,
+              "chunk_id": 24790000006,
+              "section": "신청 기간",
+              "score": 0.665211
+            }
+          ]
+        },
+        {
+          "case_id": "R029",
+          "category": "benefit",
+          "query": "이름을 밝히지 않고 출산할 때 병원비와 산후 숙려 비용을 도와주나요?",
+          "expected_policy_ids": [
+            247
+          ],
+          "expected_sections": [
+            "지원 내용",
+            "공식 지원대상 원문"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 661.922,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 247,
+              "chunk_id": 24790000004,
+              "section": "지원 내용",
+              "score": 0.663863
+            },
+            {
+              "rank": 2,
+              "policy_id": 247,
+              "chunk_id": 24790000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.652635
+            },
+            {
+              "rank": 3,
+              "policy_id": 247,
+              "chunk_id": 24790000005,
+              "section": "신청 방법",
+              "score": 0.642171
+            },
+            {
+              "rank": 4,
+              "policy_id": 247,
+              "chunk_id": 24790000007,
+              "section": "유의 사항",
+              "score": 0.639875
+            },
+            {
+              "rank": 5,
+              "policy_id": 247,
+              "chunk_id": 24790000006,
+              "section": "신청 기간",
+              "score": 0.633204
+            }
+          ]
+        },
+        {
+          "case_id": "R030",
+          "category": "target",
+          "query": "미혼이고 소득이 있어도 출산 문제를 비공개로 상담할 수 있나요?",
+          "expected_policy_ids": [
+            247
+          ],
+          "expected_sections": [
+            "공식 지원대상 원문"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 2,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 560.202,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 247,
+              "chunk_id": 24790000004,
+              "section": "지원 내용",
+              "score": 0.634245
+            },
+            {
+              "rank": 2,
+              "policy_id": 247,
+              "chunk_id": 24790000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.61532
+            },
+            {
+              "rank": 3,
+              "policy_id": 247,
+              "chunk_id": 24790000007,
+              "section": "유의 사항",
+              "score": 0.611524
+            },
+            {
+              "rank": 4,
+              "policy_id": 247,
+              "chunk_id": 24790000006,
+              "section": "신청 기간",
+              "score": 0.601655
+            },
+            {
+              "rank": 5,
+              "policy_id": 247,
+              "chunk_id": 24790000001,
+              "section": "조건 구조",
+              "score": 0.59924
+            }
+          ]
+        },
+        {
+          "case_id": "R031",
+          "category": "target",
+          "query": "부모님이 예순다섯이 넘으셨는데 계절 독감 주사를 무료로 맞을 수 있나요?",
+          "expected_policy_ids": [
+            251
+          ],
+          "expected_sections": [
+            "정리된 지원 조건",
+            "공식 지원대상 원문"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 691.51,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 251,
+              "chunk_id": 25190000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.666104
+            },
+            {
+              "rank": 2,
+              "policy_id": 251,
+              "chunk_id": 25190000001,
+              "section": "조건 구조",
+              "score": 0.65424
+            },
+            {
+              "rank": 3,
+              "policy_id": 251,
+              "chunk_id": 25190000004,
+              "section": "지원 내용",
+              "score": 0.65051
+            },
+            {
+              "rank": 4,
+              "policy_id": 251,
+              "chunk_id": 25190000000,
+              "section": "정리된 지원 조건",
+              "score": 0.64384
+            },
+            {
+              "rank": 5,
+              "policy_id": 251,
+              "chunk_id": 25190000002,
+              "section": "추가 확인 조건",
+              "score": 0.628006
+            }
+          ]
+        },
+        {
+          "case_id": "R032",
+          "category": "target",
+          "query": "어린 아기부터 중학생 나이 아이까지 독감 주사 비용을 지원하나요?",
+          "expected_policy_ids": [
+            251
+          ],
+          "expected_sections": [
+            "정리된 지원 조건",
+            "공식 지원대상 원문"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 696.507,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 251,
+              "chunk_id": 25190000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.684418
+            },
+            {
+              "rank": 2,
+              "policy_id": 251,
+              "chunk_id": 25190000004,
+              "section": "지원 내용",
+              "score": 0.676842
+            },
+            {
+              "rank": 3,
+              "policy_id": 251,
+              "chunk_id": 25190000000,
+              "section": "정리된 지원 조건",
+              "score": 0.645487
+            },
+            {
+              "rank": 4,
+              "policy_id": 251,
+              "chunk_id": 25190000007,
+              "section": "유의 사항",
+              "score": 0.642208
+            },
+            {
+              "rank": 5,
+              "policy_id": 251,
+              "chunk_id": 25190000001,
+              "section": "조건 구조",
+              "score": 0.641979
+            }
+          ]
+        },
+        {
+          "case_id": "R033",
+          "category": "target",
+          "query": "아기를 가진 사람도 보건 당국에서 지원하는 독감 주사를 맞을 수 있나요?",
+          "expected_policy_ids": [
+            251
+          ],
+          "expected_sections": [
+            "정리된 지원 조건",
+            "공식 지원대상 원문"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 636.268,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 251,
+              "chunk_id": 25190000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.69091
+            },
+            {
+              "rank": 2,
+              "policy_id": 251,
+              "chunk_id": 25190000000,
+              "section": "정리된 지원 조건",
+              "score": 0.662583
+            },
+            {
+              "rank": 3,
+              "policy_id": 251,
+              "chunk_id": 25190000004,
+              "section": "지원 내용",
+              "score": 0.662457
+            },
+            {
+              "rank": 4,
+              "policy_id": 251,
+              "chunk_id": 25190000001,
+              "section": "조건 구조",
+              "score": 0.653035
+            },
+            {
+              "rank": 5,
+              "policy_id": 251,
+              "chunk_id": 25190000005,
+              "section": "신청 방법",
+              "score": 0.633944
+            }
+          ]
+        },
+        {
+          "case_id": "R034",
+          "category": "benefit",
+          "query": "아이가 독감 주사를 한 번도 안 맞았다면 이번에 몇 번 접종해야 하나요?",
+          "expected_policy_ids": [
+            251
+          ],
+          "expected_sections": [
+            "지원 내용"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 513.32,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 251,
+              "chunk_id": 25190000004,
+              "section": "지원 내용",
+              "score": 0.659737
+            },
+            {
+              "rank": 2,
+              "policy_id": 251,
+              "chunk_id": 25190000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.622097
+            },
+            {
+              "rank": 3,
+              "policy_id": 251,
+              "chunk_id": 25190000002,
+              "section": "추가 확인 조건",
+              "score": 0.609878
+            },
+            {
+              "rank": 4,
+              "policy_id": 251,
+              "chunk_id": 25190000005,
+              "section": "신청 방법",
+              "score": 0.601454
+            },
+            {
+              "rank": 5,
+              "policy_id": 251,
+              "chunk_id": 25190000007,
+              "section": "유의 사항",
+              "score": 0.597234
+            }
+          ]
+        },
+        {
+          "case_id": "R035",
+          "category": "application",
+          "query": "어르신과 아이 독감 주사는 보건소 말고 동네 병원에서도 지원되나요?",
+          "expected_policy_ids": [
+            251
+          ],
+          "expected_sections": [
+            "신청 방법"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 2,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 728.333,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 251,
+              "chunk_id": 25190000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.661857
+            },
+            {
+              "rank": 2,
+              "policy_id": 251,
+              "chunk_id": 25190000005,
+              "section": "신청 방법",
+              "score": 0.648971
+            },
+            {
+              "rank": 3,
+              "policy_id": 251,
+              "chunk_id": 25190000004,
+              "section": "지원 내용",
+              "score": 0.647333
+            },
+            {
+              "rank": 4,
+              "policy_id": 251,
+              "chunk_id": 25190000000,
+              "section": "정리된 지원 조건",
+              "score": 0.638398
+            },
+            {
+              "rank": 5,
+              "policy_id": 251,
+              "chunk_id": 25190000001,
+              "section": "조건 구조",
+              "score": 0.618106
+            }
+          ]
+        },
+        {
+          "case_id": "R036",
+          "category": "benefit",
+          "query": "둘째가 태어났는데 첫째 때보다 출산 축하 지원을 더 받을 수 있나요?",
+          "expected_policy_ids": [
+            255
+          ],
+          "expected_sections": [
+            "지원 내용",
+            "공식 지원대상 원문"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 706.517,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 255,
+              "chunk_id": 25590000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.651605
+            },
+            {
+              "rank": 2,
+              "policy_id": 255,
+              "chunk_id": 25590000004,
+              "section": "지원 내용",
+              "score": 0.640855
+            },
+            {
+              "rank": 3,
+              "policy_id": 255,
+              "chunk_id": 25590000000,
+              "section": "정리된 지원 조건",
+              "score": 0.618147
+            },
+            {
+              "rank": 4,
+              "policy_id": 255,
+              "chunk_id": 25590000001,
+              "section": "조건 구조",
+              "score": 0.598112
+            },
+            {
+              "rank": 5,
+              "policy_id": 255,
+              "chunk_id": 25590000002,
+              "section": "추가 확인 조건",
+              "score": 0.589485
+            }
+          ]
+        },
+        {
+          "case_id": "R037",
+          "category": "target",
+          "query": "출생신고를 마친 두 돌 전 아기에게 주는 초기 양육 지원이 궁금해요",
+          "expected_policy_ids": [
+            255,
+            287
+          ],
+          "expected_sections": [
+            "정리된 지원 조건",
+            "공식 지원대상 원문",
+            "지원 내용"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 912.266,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 287,
+              "chunk_id": 28790000005,
+              "section": "지원 내용",
+              "score": 0.645135
+            },
+            {
+              "rank": 2,
+              "policy_id": 287,
+              "chunk_id": 28790000004,
+              "section": "공식 지원대상 원문",
+              "score": 0.642165
+            },
+            {
+              "rank": 3,
+              "policy_id": 287,
+              "chunk_id": 28730010037,
+              "section": "1. 차액 지원",
+              "score": 0.635904
+            },
+            {
+              "rank": 4,
+              "policy_id": 287,
+              "chunk_id": 28730010039,
+              "section": "1. 법적근거(아동수당법)",
+              "score": 0.634857
+            },
+            {
+              "rank": 5,
+              "policy_id": 255,
+              "chunk_id": 25590000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.631321
+            }
+          ]
+        },
+        {
+          "case_id": "R038",
+          "category": "benefit",
+          "query": "아기가 태어나면 육아 물품에 쓸 수 있는 카드 포인트가 나오나요?",
+          "expected_policy_ids": [
+            255
+          ],
+          "expected_sections": [
+            "지원 내용"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 609.921,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 255,
+              "chunk_id": 25590000004,
+              "section": "지원 내용",
+              "score": 0.681446
+            },
+            {
+              "rank": 2,
+              "policy_id": 255,
+              "chunk_id": 25590000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.67788
+            },
+            {
+              "rank": 3,
+              "policy_id": 255,
+              "chunk_id": 25590000000,
+              "section": "정리된 지원 조건",
+              "score": 0.637059
+            },
+            {
+              "rank": 4,
+              "policy_id": 255,
+              "chunk_id": 25590000001,
+              "section": "조건 구조",
+              "score": 0.610354
+            },
+            {
+              "rank": 5,
+              "policy_id": 255,
+              "chunk_id": 25590000002,
+              "section": "추가 확인 조건",
+              "score": 0.601484
+            }
+          ]
+        },
+        {
+          "case_id": "R039",
+          "category": "application",
+          "query": "모든 신생아에게 한 번 나오는 목돈은 온라인이나 동네 행정기관에서 어떻게 신청하나요?",
+          "expected_policy_ids": [
+            255
+          ],
+          "expected_sections": [
+            "신청 방법"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 4,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 531.371,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 255,
+              "chunk_id": 25590000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.681691
+            },
+            {
+              "rank": 2,
+              "policy_id": 255,
+              "chunk_id": 25590000004,
+              "section": "지원 내용",
+              "score": 0.674946
+            },
+            {
+              "rank": 3,
+              "policy_id": 255,
+              "chunk_id": 25590000000,
+              "section": "정리된 지원 조건",
+              "score": 0.652886
+            },
+            {
+              "rank": 4,
+              "policy_id": 255,
+              "chunk_id": 25590000005,
+              "section": "신청 방법",
+              "score": 0.648147
+            },
+            {
+              "rank": 5,
+              "policy_id": 255,
+              "chunk_id": 25590000002,
+              "section": "추가 확인 조건",
+              "score": 0.610544
+            }
+          ]
+        },
+        {
+          "case_id": "R040",
+          "category": "benefit",
+          "query": "시설에서 보호받는 아기는 출산 지원을 카드 대신 현금으로 받을 수 있나요?",
+          "expected_policy_ids": [
+            255
+          ],
+          "expected_sections": [
+            "지원 내용"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 839.714,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 255,
+              "chunk_id": 25590000004,
+              "section": "지원 내용",
+              "score": 0.691185
+            },
+            {
+              "rank": 2,
+              "policy_id": 255,
+              "chunk_id": 25590000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.674042
+            },
+            {
+              "rank": 3,
+              "policy_id": 255,
+              "chunk_id": 25590000000,
+              "section": "정리된 지원 조건",
+              "score": 0.626018
+            },
+            {
+              "rank": 4,
+              "policy_id": 255,
+              "chunk_id": 25590000001,
+              "section": "조건 구조",
+              "score": 0.598555
+            },
+            {
+              "rank": 5,
+              "policy_id": 255,
+              "chunk_id": 25590000005,
+              "section": "신청 방법",
+              "score": 0.595169
+            }
+          ]
+        },
+        {
+          "case_id": "R041",
+          "category": "target",
+          "query": "생계 지원을 받는 집에 노인이나 임산부가 있으면 냉난방비도 도움받나요?",
+          "expected_policy_ids": [
+            289
+          ],
+          "expected_sections": [
+            "정리된 지원 조건",
+            "공식 지원대상 원문"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 545.813,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 289,
+              "chunk_id": 28990000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.666008
+            },
+            {
+              "rank": 2,
+              "policy_id": 289,
+              "chunk_id": 28990000000,
+              "section": "정리된 지원 조건",
+              "score": 0.664325
+            },
+            {
+              "rank": 3,
+              "policy_id": 289,
+              "chunk_id": 28990000002,
+              "section": "추가 확인 조건",
+              "score": 0.651009
+            },
+            {
+              "rank": 4,
+              "policy_id": 289,
+              "chunk_id": 28990000001,
+              "section": "조건 구조",
+              "score": 0.64329
+            },
+            {
+              "rank": 5,
+              "policy_id": 289,
+              "chunk_id": 28990000004,
+              "section": "지원 내용",
+              "score": 0.632324
+            }
+          ]
+        },
+        {
+          "case_id": "R042",
+          "category": "benefit",
+          "query": "여름에는 전기료, 겨울에는 가스나 기름값을 깎아주는 제도가 있나요?",
+          "expected_policy_ids": [
+            289
+          ],
+          "expected_sections": [
+            "지원 내용"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 695.656,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 289,
+              "chunk_id": 28990000004,
+              "section": "지원 내용",
+              "score": 0.703639
+            },
+            {
+              "rank": 2,
+              "policy_id": 289,
+              "chunk_id": 28990000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.641634
+            },
+            {
+              "rank": 3,
+              "policy_id": 289,
+              "chunk_id": 28990000006,
+              "section": "신청 기간",
+              "score": 0.606292
+            },
+            {
+              "rank": 4,
+              "policy_id": 289,
+              "chunk_id": 28990000007,
+              "section": "유의 사항",
+              "score": 0.599721
+            },
+            {
+              "rank": 5,
+              "policy_id": 289,
+              "chunk_id": 28990000005,
+              "section": "신청 방법",
+              "score": 0.598858
+            }
+          ]
+        },
+        {
+          "case_id": "R043",
+          "category": "benefit",
+          "query": "난방비 도움을 카드로 결제하거나 고지서에서 바로 빼는 방식 중 고를 수 있나요?",
+          "expected_policy_ids": [
+            289
+          ],
+          "expected_sections": [
+            "지원 내용"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 592.452,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 289,
+              "chunk_id": 28990000004,
+              "section": "지원 내용",
+              "score": 0.644612
+            },
+            {
+              "rank": 2,
+              "policy_id": 289,
+              "chunk_id": 28990000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.624701
+            },
+            {
+              "rank": 3,
+              "policy_id": 289,
+              "chunk_id": 28990000005,
+              "section": "신청 방법",
+              "score": 0.600846
+            },
+            {
+              "rank": 4,
+              "policy_id": 289,
+              "chunk_id": 28990000007,
+              "section": "유의 사항",
+              "score": 0.59939
+            },
+            {
+              "rank": 5,
+              "policy_id": 289,
+              "chunk_id": 28990000000,
+              "section": "정리된 지원 조건",
+              "score": 0.582731
+            }
+          ]
+        },
+        {
+          "case_id": "R044",
+          "category": "target",
+          "query": "출산한 지 반년이 안 된 수급 가정도 전기와 난방 비용을 지원받나요?",
+          "expected_policy_ids": [
+            289
+          ],
+          "expected_sections": [
+            "추가 확인 조건",
+            "공식 지원대상 원문"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 734.267,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 289,
+              "chunk_id": 28990000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.683499
+            },
+            {
+              "rank": 2,
+              "policy_id": 289,
+              "chunk_id": 28990000004,
+              "section": "지원 내용",
+              "score": 0.664791
+            },
+            {
+              "rank": 3,
+              "policy_id": 289,
+              "chunk_id": 28990000002,
+              "section": "추가 확인 조건",
+              "score": 0.660486
+            },
+            {
+              "rank": 4,
+              "policy_id": 289,
+              "chunk_id": 28990000000,
+              "section": "정리된 지원 조건",
+              "score": 0.656961
+            },
+            {
+              "rank": 5,
+              "policy_id": 289,
+              "chunk_id": 28990000001,
+              "section": "조건 구조",
+              "score": 0.646234
+            }
+          ]
+        },
+        {
+          "case_id": "R045",
+          "category": "application",
+          "query": "저소득 가정의 냉난방비 도움은 온라인과 주민센터 중 어디서 신청하나요?",
+          "expected_policy_ids": [
+            289
+          ],
+          "expected_sections": [
+            "신청 방법"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 925.895,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 289,
+              "chunk_id": 28990000005,
+              "section": "신청 방법",
+              "score": 0.674969
+            },
+            {
+              "rank": 2,
+              "policy_id": 289,
+              "chunk_id": 28990000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.65658
+            },
+            {
+              "rank": 3,
+              "policy_id": 289,
+              "chunk_id": 28990000004,
+              "section": "지원 내용",
+              "score": 0.637214
+            },
+            {
+              "rank": 4,
+              "policy_id": 289,
+              "chunk_id": 28990000006,
+              "section": "신청 기간",
+              "score": 0.615967
+            },
+            {
+              "rank": 5,
+              "policy_id": 289,
+              "chunk_id": 28990000001,
+              "section": "조건 구조",
+              "score": 0.615573
+            }
+          ]
+        },
+        {
+          "case_id": "R046",
+          "category": "target",
+          "query": "형편이 어려운 초중고생이 운동 학원에 다닐 때 수강료를 지원받을 수 있나요?",
+          "expected_policy_ids": [
+            292
+          ],
+          "expected_sections": [
+            "정리된 지원 조건",
+            "공식 지원대상 원문"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 701.839,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 292,
+              "chunk_id": 29290000000,
+              "section": "정리된 지원 조건",
+              "score": 0.72006
+            },
+            {
+              "rank": 2,
+              "policy_id": 292,
+              "chunk_id": 29290000004,
+              "section": "지원 내용",
+              "score": 0.704519
+            },
+            {
+              "rank": 3,
+              "policy_id": 292,
+              "chunk_id": 29290000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.702834
+            },
+            {
+              "rank": 4,
+              "policy_id": 292,
+              "chunk_id": 29290000001,
+              "section": "조건 구조",
+              "score": 0.664308
+            },
+            {
+              "rank": 5,
+              "policy_id": 292,
+              "chunk_id": 29290000007,
+              "section": "유의 사항",
+              "score": 0.659009
+            }
+          ]
+        },
+        {
+          "case_id": "R047",
+          "category": "benefit",
+          "query": "아이 체육 수업 비용을 매달 일정 금액씩 1년 동안 보조해 주는 제도",
+          "expected_policy_ids": [
+            292
+          ],
+          "expected_sections": [
+            "지원 내용"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 706.775,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 292,
+              "chunk_id": 29290000004,
+              "section": "지원 내용",
+              "score": 0.740679
+            },
+            {
+              "rank": 2,
+              "policy_id": 292,
+              "chunk_id": 29290000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.704746
+            },
+            {
+              "rank": 3,
+              "policy_id": 292,
+              "chunk_id": 29290000000,
+              "section": "정리된 지원 조건",
+              "score": 0.678444
+            },
+            {
+              "rank": 4,
+              "policy_id": 292,
+              "chunk_id": 29290000007,
+              "section": "유의 사항",
+              "score": 0.659335
+            },
+            {
+              "rank": 5,
+              "policy_id": 292,
+              "chunk_id": 29290000006,
+              "section": "신청 기간",
+              "score": 0.657478
+            }
+          ]
+        },
+        {
+          "case_id": "R048",
+          "category": "caution",
+          "query": "폭력 피해를 겪은 청소년은 운동 수업비 지원을 먼저 받을 수 있나요?",
+          "expected_policy_ids": [
+            292
+          ],
+          "expected_sections": [
+            "유의 사항",
+            "공식 지원대상 원문"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 2,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 603.599,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 292,
+              "chunk_id": 29290000000,
+              "section": "정리된 지원 조건",
+              "score": 0.701923
+            },
+            {
+              "rank": 2,
+              "policy_id": 292,
+              "chunk_id": 29290000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.699962
+            },
+            {
+              "rank": 3,
+              "policy_id": 292,
+              "chunk_id": 29290000007,
+              "section": "유의 사항",
+              "score": 0.696447
+            },
+            {
+              "rank": 4,
+              "policy_id": 292,
+              "chunk_id": 29290000004,
+              "section": "지원 내용",
+              "score": 0.676914
+            },
+            {
+              "rank": 5,
+              "policy_id": 292,
+              "chunk_id": 29290000002,
+              "section": "추가 확인 조건",
+              "score": 0.669696
+            }
+          ]
+        },
+        {
+          "case_id": "R049",
+          "category": "application",
+          "query": "저소득 청소년 운동비는 시청 방문 말고 인터넷으로도 신청할 수 있나요?",
+          "expected_policy_ids": [
+            292
+          ],
+          "expected_sections": [
+            "신청 방법"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 914.217,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 292,
+              "chunk_id": 29290000005,
+              "section": "신청 방법",
+              "score": 0.666196
+            },
+            {
+              "rank": 2,
+              "policy_id": 292,
+              "chunk_id": 29290000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.655362
+            },
+            {
+              "rank": 3,
+              "policy_id": 292,
+              "chunk_id": 29290000000,
+              "section": "정리된 지원 조건",
+              "score": 0.641968
+            },
+            {
+              "rank": 4,
+              "policy_id": 292,
+              "chunk_id": 29290000001,
+              "section": "조건 구조",
+              "score": 0.637936
+            },
+            {
+              "rank": 5,
+              "policy_id": 292,
+              "chunk_id": 29290000002,
+              "section": "추가 확인 조건",
+              "score": 0.621709
+            }
+          ]
+        },
+        {
+          "case_id": "R050",
+          "category": "caution",
+          "query": "아이 운동 수업료가 지원 한도보다 비싸면 초과분은 직접 내야 하나요?",
+          "expected_policy_ids": [
+            292
+          ],
+          "expected_sections": [
+            "지원 내용"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 500.347,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 292,
+              "chunk_id": 29290000004,
+              "section": "지원 내용",
+              "score": 0.724618
+            },
+            {
+              "rank": 2,
+              "policy_id": 292,
+              "chunk_id": 29290000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.673277
+            },
+            {
+              "rank": 3,
+              "policy_id": 292,
+              "chunk_id": 29290000000,
+              "section": "정리된 지원 조건",
+              "score": 0.65351
+            },
+            {
+              "rank": 4,
+              "policy_id": 292,
+              "chunk_id": 29290000001,
+              "section": "조건 구조",
+              "score": 0.634124
+            },
+            {
+              "rank": 5,
+              "policy_id": 292,
+              "chunk_id": 29290000007,
+              "section": "유의 사항",
+              "score": 0.634067
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "strategy": "adaptive",
+      "metrics": {
+        "case_count": 50,
+        "policy_hit_at_k_pct": 100.0,
+        "section_hit_at_k_pct": 98.0,
+        "mrr": 1.0,
+        "error_rate_pct": 0.0,
+        "latency_mean_ms": 724.944,
+        "latency_p50_ms": 700.228,
+        "latency_p95_ms": 951.483,
+        "by_category": {
+          "application": {
+            "case_count": 10,
+            "policy_hit_at_k_pct": 100.0,
+            "section_hit_at_k_pct": 90.0
+          },
+          "benefit": {
+            "case_count": 21,
+            "policy_hit_at_k_pct": 100.0,
+            "section_hit_at_k_pct": 100.0
+          },
+          "caution": {
+            "case_count": 4,
+            "policy_hit_at_k_pct": 100.0,
+            "section_hit_at_k_pct": 100.0
+          },
+          "target": {
+            "case_count": 15,
+            "policy_hit_at_k_pct": 100.0,
+            "section_hit_at_k_pct": 100.0
+          }
+        },
+        "fallback_count": 1,
+        "fallback_rate_pct": 2.0
+      },
+      "cases": [
+        {
+          "case_id": "R001",
+          "category": "target",
+          "query": "발달장애가 있는 회사원이 업무에 적응할 수 있게 교육해 주는 제도가 있을까요?",
+          "expected_policy_ids": [
+            237
+          ],
+          "expected_sections": [
+            "정리된 지원 조건",
+            "공식 지원대상 원문"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 864.687,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 237,
+              "chunk_id": 23790000002,
+              "section": "공식 지원대상 원문",
+              "score": 0.690131
+            },
+            {
+              "rank": 2,
+              "policy_id": 237,
+              "chunk_id": 23790000003,
+              "section": "지원 내용",
+              "score": 0.683445
+            },
+            {
+              "rank": 3,
+              "policy_id": 237,
+              "chunk_id": 23790000000,
+              "section": "정리된 지원 조건",
+              "score": 0.682602
+            },
+            {
+              "rank": 4,
+              "policy_id": 237,
+              "chunk_id": 23790000006,
+              "section": "유의 사항",
+              "score": 0.662421
+            },
+            {
+              "rank": 5,
+              "policy_id": 237,
+              "chunk_id": 23790000004,
+              "section": "신청 방법",
+              "score": 0.651117
+            }
+          ],
+          "fallback_used": false
+        },
+        {
+          "case_id": "R002",
+          "category": "benefit",
+          "query": "발달장애가 있는데 직장에서 예절이나 사람들과 지내는 법을 배우고 싶어요",
+          "expected_policy_ids": [
+            237
+          ],
+          "expected_sections": [
+            "지원 내용"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 683.313,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 237,
+              "chunk_id": 23790000003,
+              "section": "지원 내용",
+              "score": 0.633153
+            },
+            {
+              "rank": 2,
+              "policy_id": 237,
+              "chunk_id": 23790000002,
+              "section": "공식 지원대상 원문",
+              "score": 0.625435
+            },
+            {
+              "rank": 3,
+              "policy_id": 237,
+              "chunk_id": 23790000000,
+              "section": "정리된 지원 조건",
+              "score": 0.621157
+            },
+            {
+              "rank": 4,
+              "policy_id": 237,
+              "chunk_id": 23790000006,
+              "section": "유의 사항",
+              "score": 0.612964
+            },
+            {
+              "rank": 5,
+              "policy_id": 237,
+              "chunk_id": 23790000004,
+              "section": "신청 방법",
+              "score": 0.61128
+            }
+          ],
+          "fallback_used": false
+        },
+        {
+          "case_id": "R003",
+          "category": "benefit",
+          "query": "개인 역량에 맞춰 석 달 정도 직무를 배울 수 있는 장애인 과정이 있나요?",
+          "expected_policy_ids": [
+            237
+          ],
+          "expected_sections": [
+            "지원 내용"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 2,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 510.556,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 237,
+              "chunk_id": 23790000002,
+              "section": "공식 지원대상 원문",
+              "score": 0.681243
+            },
+            {
+              "rank": 2,
+              "policy_id": 237,
+              "chunk_id": 23790000003,
+              "section": "지원 내용",
+              "score": 0.674268
+            },
+            {
+              "rank": 3,
+              "policy_id": 237,
+              "chunk_id": 23790000000,
+              "section": "정리된 지원 조건",
+              "score": 0.653535
+            },
+            {
+              "rank": 4,
+              "policy_id": 237,
+              "chunk_id": 23790000005,
+              "section": "신청 기간",
+              "score": 0.647937
+            },
+            {
+              "rank": 5,
+              "policy_id": 237,
+              "chunk_id": 23790000006,
+              "section": "유의 사항",
+              "score": 0.647257
+            }
+          ],
+          "fallback_used": false
+        },
+        {
+          "case_id": "R004",
+          "category": "application",
+          "query": "회사 다니는 발달장애인이 교육을 받으려면 어디에 문의해야 하나요?",
+          "expected_policy_ids": [
+            237
+          ],
+          "expected_sections": [
+            "신청 방법"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 674.288,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 237,
+              "chunk_id": 23790000004,
+              "section": "신청 방법",
+              "score": 0.671909
+            },
+            {
+              "rank": 2,
+              "policy_id": 237,
+              "chunk_id": 23790000002,
+              "section": "공식 지원대상 원문",
+              "score": 0.648346
+            },
+            {
+              "rank": 3,
+              "policy_id": 237,
+              "chunk_id": 23790000003,
+              "section": "지원 내용",
+              "score": 0.640197
+            },
+            {
+              "rank": 4,
+              "policy_id": 237,
+              "chunk_id": 23790000000,
+              "section": "정리된 지원 조건",
+              "score": 0.630752
+            },
+            {
+              "rank": 5,
+              "policy_id": 237,
+              "chunk_id": 23790000006,
+              "section": "유의 사항",
+              "score": 0.628088
+            }
+          ],
+          "fallback_used": false
+        },
+        {
+          "case_id": "R005",
+          "category": "target",
+          "query": "발달장애인 직원이 사업장 근처에서 직무와 기초 소양을 배울 방법을 찾고 있어요",
+          "expected_policy_ids": [
+            237
+          ],
+          "expected_sections": [
+            "공식 지원대상 원문",
+            "지원 내용"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 658.838,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 237,
+              "chunk_id": 23790000003,
+              "section": "지원 내용",
+              "score": 0.692715
+            },
+            {
+              "rank": 2,
+              "policy_id": 237,
+              "chunk_id": 23790000002,
+              "section": "공식 지원대상 원문",
+              "score": 0.673691
+            },
+            {
+              "rank": 3,
+              "policy_id": 237,
+              "chunk_id": 23790000000,
+              "section": "정리된 지원 조건",
+              "score": 0.660353
+            },
+            {
+              "rank": 4,
+              "policy_id": 237,
+              "chunk_id": 23790000004,
+              "section": "신청 방법",
+              "score": 0.659938
+            },
+            {
+              "rank": 5,
+              "policy_id": 237,
+              "chunk_id": 23790000001,
+              "section": "추가 확인 조건",
+              "score": 0.65117
+            }
+          ],
+          "fallback_used": false
+        },
+        {
+          "case_id": "R006",
+          "category": "target",
+          "query": "한국 법이 낯선 이주민이나 탈북민이 쉽게 배울 수 있는 과정이 있나요?",
+          "expected_policy_ids": [
+            238
+          ],
+          "expected_sections": [
+            "정리된 지원 조건",
+            "공식 지원대상 원문"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 3,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 941.704,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 238,
+              "chunk_id": 23890000001,
+              "section": "조건 구조",
+              "score": 0.633776
+            },
+            {
+              "rank": 2,
+              "policy_id": 238,
+              "chunk_id": 23890000004,
+              "section": "지원 내용",
+              "score": 0.630321
+            },
+            {
+              "rank": 3,
+              "policy_id": 238,
+              "chunk_id": 23890000000,
+              "section": "정리된 지원 조건",
+              "score": 0.624954
+            },
+            {
+              "rank": 4,
+              "policy_id": 238,
+              "chunk_id": 23890000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.614369
+            },
+            {
+              "rank": 5,
+              "policy_id": 238,
+              "chunk_id": 23890000005,
+              "section": "신청 방법",
+              "score": 0.611041
+            }
+          ],
+          "fallback_used": false
+        },
+        {
+          "case_id": "R007",
+          "category": "benefit",
+          "query": "농사를 짓는 사람이나 10대가 체험하면서 생활 법률을 배울 수 있나요?",
+          "expected_policy_ids": [
+            238
+          ],
+          "expected_sections": [
+            "지원 내용"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 619.183,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 238,
+              "chunk_id": 23890000004,
+              "section": "지원 내용",
+              "score": 0.627397
+            },
+            {
+              "rank": 2,
+              "policy_id": 238,
+              "chunk_id": 23890000000,
+              "section": "정리된 지원 조건",
+              "score": 0.616402
+            },
+            {
+              "rank": 3,
+              "policy_id": 238,
+              "chunk_id": 23890000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.607799
+            },
+            {
+              "rank": 4,
+              "policy_id": 238,
+              "chunk_id": 23890000001,
+              "section": "조건 구조",
+              "score": 0.604105
+            },
+            {
+              "rank": 5,
+              "policy_id": 238,
+              "chunk_id": 23890000002,
+              "section": "추가 확인 조건",
+              "score": 0.600563
+            }
+          ],
+          "fallback_used": false
+        },
+        {
+          "case_id": "R008",
+          "category": "target",
+          "query": "장애가 있어도 참여 가능한 쉬운 법 체험 수업을 찾고 있어요",
+          "expected_policy_ids": [
+            238
+          ],
+          "expected_sections": [
+            "정리된 지원 조건",
+            "공식 지원대상 원문"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 3,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 537.108,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 238,
+              "chunk_id": 23890000004,
+              "section": "지원 내용",
+              "score": 0.651871
+            },
+            {
+              "rank": 2,
+              "policy_id": 238,
+              "chunk_id": 23890000002,
+              "section": "추가 확인 조건",
+              "score": 0.638107
+            },
+            {
+              "rank": 3,
+              "policy_id": 238,
+              "chunk_id": 23890000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.636377
+            },
+            {
+              "rank": 4,
+              "policy_id": 238,
+              "chunk_id": 23890000000,
+              "section": "정리된 지원 조건",
+              "score": 0.636243
+            },
+            {
+              "rank": 5,
+              "policy_id": 238,
+              "chunk_id": 23890000001,
+              "section": "조건 구조",
+              "score": 0.624519
+            }
+          ],
+          "fallback_used": false
+        },
+        {
+          "case_id": "R009",
+          "category": "application",
+          "query": "취약계층 대상 체험식 법 수업은 어느 기관에 신청하나요?",
+          "expected_policy_ids": [
+            238
+          ],
+          "expected_sections": [
+            "신청 방법"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 766.168,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 238,
+              "chunk_id": 23890000005,
+              "section": "신청 방법",
+              "score": 0.632462
+            },
+            {
+              "rank": 2,
+              "policy_id": 238,
+              "chunk_id": 23890000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.618902
+            },
+            {
+              "rank": 3,
+              "policy_id": 238,
+              "chunk_id": 23890000004,
+              "section": "지원 내용",
+              "score": 0.609186
+            },
+            {
+              "rank": 4,
+              "policy_id": 238,
+              "chunk_id": 23890000007,
+              "section": "유의 사항",
+              "score": 0.607953
+            },
+            {
+              "rank": 5,
+              "policy_id": 238,
+              "chunk_id": 23890000002,
+              "section": "추가 확인 조건",
+              "score": 0.606951
+            }
+          ],
+          "fallback_used": false
+        },
+        {
+          "case_id": "R010",
+          "category": "application",
+          "query": "이주 배경 가족이 정해진 모집 기간 없이 법을 배울 수 있는 곳이 있을까요?",
+          "expected_policy_ids": [
+            238
+          ],
+          "expected_sections": [
+            "신청 기간",
+            "공식 지원대상 원문"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 944.798,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 238,
+              "chunk_id": 23890000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.641253
+            },
+            {
+              "rank": 2,
+              "policy_id": 238,
+              "chunk_id": 23890000004,
+              "section": "지원 내용",
+              "score": 0.638395
+            },
+            {
+              "rank": 3,
+              "policy_id": 238,
+              "chunk_id": 23890000000,
+              "section": "정리된 지원 조건",
+              "score": 0.634737
+            },
+            {
+              "rank": 4,
+              "policy_id": 238,
+              "chunk_id": 23890000001,
+              "section": "조건 구조",
+              "score": 0.630652
+            },
+            {
+              "rank": 5,
+              "policy_id": 238,
+              "chunk_id": 23890000005,
+              "section": "신청 방법",
+              "score": 0.624212
+            }
+          ],
+          "fallback_used": false
+        },
+        {
+          "case_id": "R011",
+          "category": "benefit",
+          "query": "아기를 가진 건강보험 가입자가 병원비로 쓸 카드 포인트를 받을 수 있나요?",
+          "expected_policy_ids": [
+            240
+          ],
+          "expected_sections": [
+            "지원 내용",
+            "공식 지원대상 원문"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 689.809,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 240,
+              "chunk_id": 24090000004,
+              "section": "공식 지원대상 원문",
+              "score": 0.740789
+            },
+            {
+              "rank": 2,
+              "policy_id": 240,
+              "chunk_id": 24090000005,
+              "section": "지원 내용",
+              "score": 0.726277
+            },
+            {
+              "rank": 3,
+              "policy_id": 240,
+              "chunk_id": 24090000000,
+              "section": "정리된 지원 조건",
+              "score": 0.725806
+            },
+            {
+              "rank": 4,
+              "policy_id": 240,
+              "chunk_id": 24090000008,
+              "section": "유의 사항",
+              "score": 0.706834
+            },
+            {
+              "rank": 5,
+              "policy_id": 240,
+              "chunk_id": 24090000001,
+              "section": "조건 구조",
+              "score": 0.70474
+            }
+          ],
+          "fallback_used": false
+        },
+        {
+          "case_id": "R012",
+          "category": "benefit",
+          "query": "쌍둥이를 임신하면 한 명일 때보다 의료비 지원이 더 나오나요?",
+          "expected_policy_ids": [
+            240,
+            258
+          ],
+          "expected_sections": [
+            "지원 내용",
+            "공식 지원대상 원문"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 932.371,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 258,
+              "chunk_id": 25890000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.692433
+            },
+            {
+              "rank": 2,
+              "policy_id": 258,
+              "chunk_id": 25890000000,
+              "section": "정리된 지원 조건",
+              "score": 0.678005
+            },
+            {
+              "rank": 3,
+              "policy_id": 258,
+              "chunk_id": 25890000004,
+              "section": "지원 내용",
+              "score": 0.673425
+            },
+            {
+              "rank": 4,
+              "policy_id": 240,
+              "chunk_id": 24090000005,
+              "section": "지원 내용",
+              "score": 0.672067
+            },
+            {
+              "rank": 5,
+              "policy_id": 258,
+              "chunk_id": 25890000007,
+              "section": "유의 사항",
+              "score": 0.67206
+            }
+          ],
+          "fallback_used": false
+        },
+        {
+          "case_id": "R013",
+          "category": "benefit",
+          "query": "두 돌 전 아이의 진료비와 처방약 비용을 포인트로 낼 수 있는 제도",
+          "expected_policy_ids": [
+            240
+          ],
+          "expected_sections": [
+            "지원 내용"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 2,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 709.217,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 240,
+              "chunk_id": 24090000004,
+              "section": "공식 지원대상 원문",
+              "score": 0.653673
+            },
+            {
+              "rank": 2,
+              "policy_id": 240,
+              "chunk_id": 24090000005,
+              "section": "지원 내용",
+              "score": 0.645522
+            },
+            {
+              "rank": 3,
+              "policy_id": 240,
+              "chunk_id": 24090000001,
+              "section": "조건 구조",
+              "score": 0.616875
+            },
+            {
+              "rank": 4,
+              "policy_id": 240,
+              "chunk_id": 24090000000,
+              "section": "정리된 지원 조건",
+              "score": 0.616756
+            },
+            {
+              "rank": 5,
+              "policy_id": 240,
+              "chunk_id": 24090000007,
+              "section": "신청 기간",
+              "score": 0.611703
+            }
+          ],
+          "fallback_used": false
+        },
+        {
+          "case_id": "R014",
+          "category": "application",
+          "query": "임산부 병원비 카드 포인트는 공단이나 카드사 중 어디에서 신청하나요?",
+          "expected_policy_ids": [
+            240
+          ],
+          "expected_sections": [
+            "신청 방법"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 2,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 714.237,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 240,
+              "chunk_id": 24090000004,
+              "section": "공식 지원대상 원문",
+              "score": 0.717705
+            },
+            {
+              "rank": 2,
+              "policy_id": 240,
+              "chunk_id": 24090000006,
+              "section": "신청 방법",
+              "score": 0.707497
+            },
+            {
+              "rank": 3,
+              "policy_id": 240,
+              "chunk_id": 24090000007,
+              "section": "신청 기간",
+              "score": 0.6967
+            },
+            {
+              "rank": 4,
+              "policy_id": 240,
+              "chunk_id": 24090000005,
+              "section": "지원 내용",
+              "score": 0.693554
+            },
+            {
+              "rank": 5,
+              "policy_id": 240,
+              "chunk_id": 24090000008,
+              "section": "유의 사항",
+              "score": 0.672883
+            }
+          ],
+          "fallback_used": false
+        },
+        {
+          "case_id": "R015",
+          "category": "caution",
+          "query": "출산하고 남은 의료비 포인트는 언제까지 써야 없어지지 않나요?",
+          "expected_policy_ids": [
+            240
+          ],
+          "expected_sections": [
+            "지원 내용"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 2,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 1043.073,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 240,
+              "chunk_id": 24090000004,
+              "section": "공식 지원대상 원문",
+              "score": 0.677391
+            },
+            {
+              "rank": 2,
+              "policy_id": 240,
+              "chunk_id": 24090000005,
+              "section": "지원 내용",
+              "score": 0.664237
+            },
+            {
+              "rank": 3,
+              "policy_id": 240,
+              "chunk_id": 24090000002,
+              "section": "제외 조건",
+              "score": 0.643357
+            },
+            {
+              "rank": 4,
+              "policy_id": 240,
+              "chunk_id": 24090000007,
+              "section": "신청 기간",
+              "score": 0.63948
+            },
+            {
+              "rank": 5,
+              "policy_id": 240,
+              "chunk_id": 24090000003,
+              "section": "추가 확인 조건",
+              "score": 0.637699
+            }
+          ],
+          "fallback_used": true
+        },
+        {
+          "case_id": "R016",
+          "category": "benefit",
+          "query": "계약이나 손해배상 문제로 변호사 상담이 필요한데 비용이 부담돼요",
+          "expected_policy_ids": [
+            242
+          ],
+          "expected_sections": [
+            "지원 내용",
+            "공식 지원대상 원문"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 699.351,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 242,
+              "chunk_id": 24290000003,
+              "section": "지원 내용",
+              "score": 0.677353
+            },
+            {
+              "rank": 2,
+              "policy_id": 242,
+              "chunk_id": 24290000001,
+              "section": "조건 구조",
+              "score": 0.651824
+            },
+            {
+              "rank": 3,
+              "policy_id": 242,
+              "chunk_id": 24290000002,
+              "section": "공식 지원대상 원문",
+              "score": 0.643978
+            },
+            {
+              "rank": 4,
+              "policy_id": 242,
+              "chunk_id": 24290000006,
+              "section": "유의 사항",
+              "score": 0.64279
+            },
+            {
+              "rank": 5,
+              "policy_id": 242,
+              "chunk_id": 24290000005,
+              "section": "신청 기간",
+              "score": 0.639647
+            }
+          ],
+          "fallback_used": false
+        },
+        {
+          "case_id": "R017",
+          "category": "benefit",
+          "query": "빚 때문에 회생이나 파산을 알아보는데 돈 없이 도움받을 곳이 있나요?",
+          "expected_policy_ids": [
+            242
+          ],
+          "expected_sections": [
+            "지원 내용"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 503.416,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 242,
+              "chunk_id": 24290000003,
+              "section": "지원 내용",
+              "score": 0.632294
+            },
+            {
+              "rank": 2,
+              "policy_id": 242,
+              "chunk_id": 24290000004,
+              "section": "신청 방법",
+              "score": 0.60769
+            },
+            {
+              "rank": 3,
+              "policy_id": 242,
+              "chunk_id": 24290000002,
+              "section": "공식 지원대상 원문",
+              "score": 0.607594
+            },
+            {
+              "rank": 4,
+              "policy_id": 242,
+              "chunk_id": 24290000006,
+              "section": "유의 사항",
+              "score": 0.590821
+            },
+            {
+              "rank": 5,
+              "policy_id": 242,
+              "chunk_id": 24290000000,
+              "section": "정리된 지원 조건",
+              "score": 0.585752
+            }
+          ],
+          "fallback_used": false
+        },
+        {
+          "case_id": "R018",
+          "category": "target",
+          "query": "형편이 어렵고 법을 잘 몰라도 전문가에게 도움을 받을 수 있을까요?",
+          "expected_policy_ids": [
+            242
+          ],
+          "expected_sections": [
+            "정리된 지원 조건",
+            "공식 지원대상 원문"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 3,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 701.106,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 242,
+              "chunk_id": 24290000006,
+              "section": "유의 사항",
+              "score": 0.630366
+            },
+            {
+              "rank": 2,
+              "policy_id": 242,
+              "chunk_id": 24290000001,
+              "section": "조건 구조",
+              "score": 0.624193
+            },
+            {
+              "rank": 3,
+              "policy_id": 242,
+              "chunk_id": 24290000002,
+              "section": "공식 지원대상 원문",
+              "score": 0.623732
+            },
+            {
+              "rank": 4,
+              "policy_id": 242,
+              "chunk_id": 24290000003,
+              "section": "지원 내용",
+              "score": 0.620489
+            },
+            {
+              "rank": 5,
+              "policy_id": 242,
+              "chunk_id": 24290000005,
+              "section": "신청 기간",
+              "score": 0.619294
+            }
+          ],
+          "fallback_used": false
+        },
+        {
+          "case_id": "R019",
+          "category": "application",
+          "query": "법률 문제를 무료로 물어보려면 어떤 기관을 찾아가야 하나요?",
+          "expected_policy_ids": [
+            242
+          ],
+          "expected_sections": [
+            "신청 방법"
+          ],
+          "policy_hit": true,
+          "section_hit": false,
+          "policy_rank": 1,
+          "section_rank": null,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 655.339,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 242,
+              "chunk_id": 24290000005,
+              "section": "신청 기간",
+              "score": 0.695514
+            },
+            {
+              "rank": 2,
+              "policy_id": 242,
+              "chunk_id": 24290000002,
+              "section": "공식 지원대상 원문",
+              "score": 0.69351
+            },
+            {
+              "rank": 3,
+              "policy_id": 242,
+              "chunk_id": 24290000006,
+              "section": "유의 사항",
+              "score": 0.687225
+            },
+            {
+              "rank": 4,
+              "policy_id": 242,
+              "chunk_id": 24290000000,
+              "section": "정리된 지원 조건",
+              "score": 0.676184
+            },
+            {
+              "rank": 5,
+              "policy_id": 242,
+              "chunk_id": 24290000001,
+              "section": "조건 구조",
+              "score": 0.672051
+            }
+          ],
+          "fallback_used": false
+        },
+        {
+          "case_id": "R020",
+          "category": "benefit",
+          "query": "집주인과의 분쟁이나 민사 재판 문제를 상담받고 싶어요",
+          "expected_policy_ids": [
+            242
+          ],
+          "expected_sections": [
+            "지원 내용"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 611.609,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 242,
+              "chunk_id": 24290000003,
+              "section": "지원 내용",
+              "score": 0.649835
+            },
+            {
+              "rank": 2,
+              "policy_id": 242,
+              "chunk_id": 24290000001,
+              "section": "조건 구조",
+              "score": 0.626754
+            },
+            {
+              "rank": 3,
+              "policy_id": 242,
+              "chunk_id": 24290000006,
+              "section": "유의 사항",
+              "score": 0.622654
+            },
+            {
+              "rank": 4,
+              "policy_id": 242,
+              "chunk_id": 24290000002,
+              "section": "공식 지원대상 원문",
+              "score": 0.620774
+            },
+            {
+              "rank": 5,
+              "policy_id": 242,
+              "chunk_id": 24290000005,
+              "section": "신청 기간",
+              "score": 0.620635
+            }
+          ],
+          "fallback_used": false
+        },
+        {
+          "case_id": "R021",
+          "category": "benefit",
+          "query": "임신을 준비하는 치료 때문에 쉰 날도 급여를 일부 받을 수 있나요?",
+          "expected_policy_ids": [
+            246
+          ],
+          "expected_sections": [
+            "지원 내용",
+            "공식 지원대상 원문"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 626.356,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 246,
+              "chunk_id": 24690000004,
+              "section": "지원 내용",
+              "score": 0.697239
+            },
+            {
+              "rank": 2,
+              "policy_id": 246,
+              "chunk_id": 24690000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.684963
+            },
+            {
+              "rank": 3,
+              "policy_id": 246,
+              "chunk_id": 24690000001,
+              "section": "조건 구조",
+              "score": 0.683444
+            },
+            {
+              "rank": 4,
+              "policy_id": 246,
+              "chunk_id": 24690000000,
+              "section": "정리된 지원 조건",
+              "score": 0.662367
+            },
+            {
+              "rank": 5,
+              "policy_id": 246,
+              "chunk_id": 24690000002,
+              "section": "추가 확인 조건",
+              "score": 0.647484
+            }
+          ],
+          "fallback_used": false
+        },
+        {
+          "case_id": "R022",
+          "category": "target",
+          "query": "시술 때문에 휴가를 내려는데 고용보험 가입 기간 조건이 있나요?",
+          "expected_policy_ids": [
+            246
+          ],
+          "expected_sections": [
+            "조건 구조",
+            "공식 지원대상 원문"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 972.223,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 246,
+              "chunk_id": 24690000001,
+              "section": "조건 구조",
+              "score": 0.663544
+            },
+            {
+              "rank": 2,
+              "policy_id": 246,
+              "chunk_id": 24690000002,
+              "section": "추가 확인 조건",
+              "score": 0.647813
+            },
+            {
+              "rank": 3,
+              "policy_id": 246,
+              "chunk_id": 24690000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.641403
+            },
+            {
+              "rank": 4,
+              "policy_id": 246,
+              "chunk_id": 24690000006,
+              "section": "신청 기간",
+              "score": 0.640083
+            },
+            {
+              "rank": 5,
+              "policy_id": 246,
+              "chunk_id": 24690000000,
+              "section": "정리된 지원 조건",
+              "score": 0.632396
+            }
+          ],
+          "fallback_used": false
+        },
+        {
+          "case_id": "R023",
+          "category": "target",
+          "query": "규모가 작은 회사 직원도 임신 준비 시술을 위해 유급으로 쉴 수 있을까요?",
+          "expected_policy_ids": [
+            246
+          ],
+          "expected_sections": [
+            "정리된 지원 조건",
+            "공식 지원대상 원문"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 887.167,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 246,
+              "chunk_id": 24690000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.656057
+            },
+            {
+              "rank": 2,
+              "policy_id": 246,
+              "chunk_id": 24690000001,
+              "section": "조건 구조",
+              "score": 0.651955
+            },
+            {
+              "rank": 3,
+              "policy_id": 246,
+              "chunk_id": 24690000004,
+              "section": "지원 내용",
+              "score": 0.651373
+            },
+            {
+              "rank": 4,
+              "policy_id": 246,
+              "chunk_id": 24690000000,
+              "section": "정리된 지원 조건",
+              "score": 0.637737
+            },
+            {
+              "rank": 5,
+              "policy_id": 246,
+              "chunk_id": 24690000002,
+              "section": "추가 확인 조건",
+              "score": 0.630463
+            }
+          ],
+          "fallback_used": false
+        },
+        {
+          "case_id": "R024",
+          "category": "caution",
+          "query": "시술 때문에 사용한 휴가 비용은 언제까지 청구해야 하나요?",
+          "expected_policy_ids": [
+            246
+          ],
+          "expected_sections": [
+            "추가 확인 조건",
+            "공식 지원대상 원문"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 4,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 708.89,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 246,
+              "chunk_id": 24690000006,
+              "section": "신청 기간",
+              "score": 0.61867
+            },
+            {
+              "rank": 2,
+              "policy_id": 246,
+              "chunk_id": 24690000007,
+              "section": "유의 사항",
+              "score": 0.611194
+            },
+            {
+              "rank": 3,
+              "policy_id": 246,
+              "chunk_id": 24690000001,
+              "section": "조건 구조",
+              "score": 0.609955
+            },
+            {
+              "rank": 4,
+              "policy_id": 246,
+              "chunk_id": 24690000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.608935
+            },
+            {
+              "rank": 5,
+              "policy_id": 246,
+              "chunk_id": 24690000005,
+              "section": "신청 방법",
+              "score": 0.604796
+            }
+          ],
+          "fallback_used": false
+        },
+        {
+          "case_id": "R025",
+          "category": "application",
+          "query": "임신 준비 시술로 쉰 기간의 임금 보전은 어디에 신청하나요?",
+          "expected_policy_ids": [
+            246
+          ],
+          "expected_sections": [
+            "신청 방법"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 2,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 649.713,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 246,
+              "chunk_id": 24690000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.648641
+            },
+            {
+              "rank": 2,
+              "policy_id": 246,
+              "chunk_id": 24690000005,
+              "section": "신청 방법",
+              "score": 0.642748
+            },
+            {
+              "rank": 3,
+              "policy_id": 246,
+              "chunk_id": 24690000004,
+              "section": "지원 내용",
+              "score": 0.641155
+            },
+            {
+              "rank": 4,
+              "policy_id": 246,
+              "chunk_id": 24690000001,
+              "section": "조건 구조",
+              "score": 0.63318
+            },
+            {
+              "rank": 5,
+              "policy_id": 246,
+              "chunk_id": 24690000006,
+              "section": "신청 기간",
+              "score": 0.630021
+            }
+          ],
+          "fallback_used": false
+        },
+        {
+          "case_id": "R026",
+          "category": "benefit",
+          "query": "신분을 드러내기 힘든 상황에서도 안전하게 아이를 낳을 방법이 있나요?",
+          "expected_policy_ids": [
+            247
+          ],
+          "expected_sections": [
+            "지원 내용",
+            "공식 지원대상 원문"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 646.879,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 247,
+              "chunk_id": 24790000004,
+              "section": "지원 내용",
+              "score": 0.628419
+            },
+            {
+              "rank": 2,
+              "policy_id": 247,
+              "chunk_id": 24790000001,
+              "section": "조건 구조",
+              "score": 0.624404
+            },
+            {
+              "rank": 3,
+              "policy_id": 247,
+              "chunk_id": 24790000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.624262
+            },
+            {
+              "rank": 4,
+              "policy_id": 247,
+              "chunk_id": 24790000000,
+              "section": "정리된 지원 조건",
+              "score": 0.615468
+            },
+            {
+              "rank": 5,
+              "policy_id": 247,
+              "chunk_id": 24790000007,
+              "section": "유의 사항",
+              "score": 0.614534
+            }
+          ],
+          "fallback_used": false
+        },
+        {
+          "case_id": "R027",
+          "category": "benefit",
+          "query": "임신 사실 때문에 막막한데 밤에도 비밀로 상담할 수 있는 곳을 찾고 있어요",
+          "expected_policy_ids": [
+            247
+          ],
+          "expected_sections": [
+            "지원 내용"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 723.998,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 247,
+              "chunk_id": 24790000004,
+              "section": "지원 내용",
+              "score": 0.657528
+            },
+            {
+              "rank": 2,
+              "policy_id": 247,
+              "chunk_id": 24790000006,
+              "section": "신청 기간",
+              "score": 0.624847
+            },
+            {
+              "rank": 3,
+              "policy_id": 247,
+              "chunk_id": 24790000005,
+              "section": "신청 방법",
+              "score": 0.622519
+            },
+            {
+              "rank": 4,
+              "policy_id": 247,
+              "chunk_id": 24790000007,
+              "section": "유의 사항",
+              "score": 0.622149
+            },
+            {
+              "rank": 5,
+              "policy_id": 247,
+              "chunk_id": 24790000001,
+              "section": "조건 구조",
+              "score": 0.6198
+            }
+          ],
+          "fallback_used": false
+        },
+        {
+          "case_id": "R028",
+          "category": "benefit",
+          "query": "부득이하게 맡겨진 신생아의 임시 보호 비용도 지원되나요?",
+          "expected_policy_ids": [
+            247
+          ],
+          "expected_sections": [
+            "지원 내용",
+            "공식 지원대상 원문"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 744.497,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 247,
+              "chunk_id": 24790000004,
+              "section": "지원 내용",
+              "score": 0.710527
+            },
+            {
+              "rank": 2,
+              "policy_id": 247,
+              "chunk_id": 24790000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.709892
+            },
+            {
+              "rank": 3,
+              "policy_id": 247,
+              "chunk_id": 24790000000,
+              "section": "정리된 지원 조건",
+              "score": 0.67614
+            },
+            {
+              "rank": 4,
+              "policy_id": 247,
+              "chunk_id": 24790000007,
+              "section": "유의 사항",
+              "score": 0.673203
+            },
+            {
+              "rank": 5,
+              "policy_id": 247,
+              "chunk_id": 24790000006,
+              "section": "신청 기간",
+              "score": 0.665211
+            }
+          ],
+          "fallback_used": false
+        },
+        {
+          "case_id": "R029",
+          "category": "benefit",
+          "query": "이름을 밝히지 않고 출산할 때 병원비와 산후 숙려 비용을 도와주나요?",
+          "expected_policy_ids": [
+            247
+          ],
+          "expected_sections": [
+            "지원 내용",
+            "공식 지원대상 원문"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 805.143,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 247,
+              "chunk_id": 24790000004,
+              "section": "지원 내용",
+              "score": 0.663863
+            },
+            {
+              "rank": 2,
+              "policy_id": 247,
+              "chunk_id": 24790000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.652635
+            },
+            {
+              "rank": 3,
+              "policy_id": 247,
+              "chunk_id": 24790000005,
+              "section": "신청 방법",
+              "score": 0.642171
+            },
+            {
+              "rank": 4,
+              "policy_id": 247,
+              "chunk_id": 24790000007,
+              "section": "유의 사항",
+              "score": 0.639875
+            },
+            {
+              "rank": 5,
+              "policy_id": 247,
+              "chunk_id": 24790000006,
+              "section": "신청 기간",
+              "score": 0.633204
+            }
+          ],
+          "fallback_used": false
+        },
+        {
+          "case_id": "R030",
+          "category": "target",
+          "query": "미혼이고 소득이 있어도 출산 문제를 비공개로 상담할 수 있나요?",
+          "expected_policy_ids": [
+            247
+          ],
+          "expected_sections": [
+            "공식 지원대상 원문"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 2,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 591.586,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 247,
+              "chunk_id": 24790000004,
+              "section": "지원 내용",
+              "score": 0.634324
+            },
+            {
+              "rank": 2,
+              "policy_id": 247,
+              "chunk_id": 24790000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.615471
+            },
+            {
+              "rank": 3,
+              "policy_id": 247,
+              "chunk_id": 24790000007,
+              "section": "유의 사항",
+              "score": 0.611748
+            },
+            {
+              "rank": 4,
+              "policy_id": 247,
+              "chunk_id": 24790000006,
+              "section": "신청 기간",
+              "score": 0.601808
+            },
+            {
+              "rank": 5,
+              "policy_id": 247,
+              "chunk_id": 24790000001,
+              "section": "조건 구조",
+              "score": 0.599335
+            }
+          ],
+          "fallback_used": false
+        },
+        {
+          "case_id": "R031",
+          "category": "target",
+          "query": "부모님이 예순다섯이 넘으셨는데 계절 독감 주사를 무료로 맞을 수 있나요?",
+          "expected_policy_ids": [
+            251
+          ],
+          "expected_sections": [
+            "정리된 지원 조건",
+            "공식 지원대상 원문"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 626.456,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 251,
+              "chunk_id": 25190000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.666104
+            },
+            {
+              "rank": 2,
+              "policy_id": 251,
+              "chunk_id": 25190000001,
+              "section": "조건 구조",
+              "score": 0.65424
+            },
+            {
+              "rank": 3,
+              "policy_id": 251,
+              "chunk_id": 25190000004,
+              "section": "지원 내용",
+              "score": 0.65051
+            },
+            {
+              "rank": 4,
+              "policy_id": 251,
+              "chunk_id": 25190000000,
+              "section": "정리된 지원 조건",
+              "score": 0.64384
+            },
+            {
+              "rank": 5,
+              "policy_id": 251,
+              "chunk_id": 25190000002,
+              "section": "추가 확인 조건",
+              "score": 0.628006
+            }
+          ],
+          "fallback_used": false
+        },
+        {
+          "case_id": "R032",
+          "category": "target",
+          "query": "어린 아기부터 중학생 나이 아이까지 독감 주사 비용을 지원하나요?",
+          "expected_policy_ids": [
+            251
+          ],
+          "expected_sections": [
+            "정리된 지원 조건",
+            "공식 지원대상 원문"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 719.76,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 251,
+              "chunk_id": 25190000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.684418
+            },
+            {
+              "rank": 2,
+              "policy_id": 251,
+              "chunk_id": 25190000004,
+              "section": "지원 내용",
+              "score": 0.676842
+            },
+            {
+              "rank": 3,
+              "policy_id": 251,
+              "chunk_id": 25190000000,
+              "section": "정리된 지원 조건",
+              "score": 0.645487
+            },
+            {
+              "rank": 4,
+              "policy_id": 251,
+              "chunk_id": 25190000007,
+              "section": "유의 사항",
+              "score": 0.642208
+            },
+            {
+              "rank": 5,
+              "policy_id": 251,
+              "chunk_id": 25190000001,
+              "section": "조건 구조",
+              "score": 0.641979
+            }
+          ],
+          "fallback_used": false
+        },
+        {
+          "case_id": "R033",
+          "category": "target",
+          "query": "아기를 가진 사람도 보건 당국에서 지원하는 독감 주사를 맞을 수 있나요?",
+          "expected_policy_ids": [
+            251
+          ],
+          "expected_sections": [
+            "정리된 지원 조건",
+            "공식 지원대상 원문"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 494.548,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 251,
+              "chunk_id": 25190000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.69091
+            },
+            {
+              "rank": 2,
+              "policy_id": 251,
+              "chunk_id": 25190000000,
+              "section": "정리된 지원 조건",
+              "score": 0.662583
+            },
+            {
+              "rank": 3,
+              "policy_id": 251,
+              "chunk_id": 25190000004,
+              "section": "지원 내용",
+              "score": 0.662457
+            },
+            {
+              "rank": 4,
+              "policy_id": 251,
+              "chunk_id": 25190000001,
+              "section": "조건 구조",
+              "score": 0.653035
+            },
+            {
+              "rank": 5,
+              "policy_id": 251,
+              "chunk_id": 25190000005,
+              "section": "신청 방법",
+              "score": 0.633944
+            }
+          ],
+          "fallback_used": false
+        },
+        {
+          "case_id": "R034",
+          "category": "benefit",
+          "query": "아이가 독감 주사를 한 번도 안 맞았다면 이번에 몇 번 접종해야 하나요?",
+          "expected_policy_ids": [
+            251
+          ],
+          "expected_sections": [
+            "지원 내용"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 548.231,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 251,
+              "chunk_id": 25190000004,
+              "section": "지원 내용",
+              "score": 0.659737
+            },
+            {
+              "rank": 2,
+              "policy_id": 251,
+              "chunk_id": 25190000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.622097
+            },
+            {
+              "rank": 3,
+              "policy_id": 251,
+              "chunk_id": 25190000002,
+              "section": "추가 확인 조건",
+              "score": 0.609878
+            },
+            {
+              "rank": 4,
+              "policy_id": 251,
+              "chunk_id": 25190000005,
+              "section": "신청 방법",
+              "score": 0.601454
+            },
+            {
+              "rank": 5,
+              "policy_id": 251,
+              "chunk_id": 25190000007,
+              "section": "유의 사항",
+              "score": 0.597234
+            }
+          ],
+          "fallback_used": false
+        },
+        {
+          "case_id": "R035",
+          "category": "application",
+          "query": "어르신과 아이 독감 주사는 보건소 말고 동네 병원에서도 지원되나요?",
+          "expected_policy_ids": [
+            251
+          ],
+          "expected_sections": [
+            "신청 방법"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 2,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 722.18,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 251,
+              "chunk_id": 25190000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.661857
+            },
+            {
+              "rank": 2,
+              "policy_id": 251,
+              "chunk_id": 25190000005,
+              "section": "신청 방법",
+              "score": 0.648971
+            },
+            {
+              "rank": 3,
+              "policy_id": 251,
+              "chunk_id": 25190000004,
+              "section": "지원 내용",
+              "score": 0.647333
+            },
+            {
+              "rank": 4,
+              "policy_id": 251,
+              "chunk_id": 25190000000,
+              "section": "정리된 지원 조건",
+              "score": 0.638398
+            },
+            {
+              "rank": 5,
+              "policy_id": 251,
+              "chunk_id": 25190000001,
+              "section": "조건 구조",
+              "score": 0.618106
+            }
+          ],
+          "fallback_used": false
+        },
+        {
+          "case_id": "R036",
+          "category": "benefit",
+          "query": "둘째가 태어났는데 첫째 때보다 출산 축하 지원을 더 받을 수 있나요?",
+          "expected_policy_ids": [
+            255
+          ],
+          "expected_sections": [
+            "지원 내용",
+            "공식 지원대상 원문"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 770.564,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 255,
+              "chunk_id": 25590000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.651605
+            },
+            {
+              "rank": 2,
+              "policy_id": 255,
+              "chunk_id": 25590000004,
+              "section": "지원 내용",
+              "score": 0.640855
+            },
+            {
+              "rank": 3,
+              "policy_id": 255,
+              "chunk_id": 25590000000,
+              "section": "정리된 지원 조건",
+              "score": 0.618147
+            },
+            {
+              "rank": 4,
+              "policy_id": 255,
+              "chunk_id": 25590000001,
+              "section": "조건 구조",
+              "score": 0.598112
+            },
+            {
+              "rank": 5,
+              "policy_id": 255,
+              "chunk_id": 25590000002,
+              "section": "추가 확인 조건",
+              "score": 0.589485
+            }
+          ],
+          "fallback_used": false
+        },
+        {
+          "case_id": "R037",
+          "category": "target",
+          "query": "출생신고를 마친 두 돌 전 아기에게 주는 초기 양육 지원이 궁금해요",
+          "expected_policy_ids": [
+            255,
+            287
+          ],
+          "expected_sections": [
+            "정리된 지원 조건",
+            "공식 지원대상 원문",
+            "지원 내용"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 627.627,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 287,
+              "chunk_id": 28790000005,
+              "section": "지원 내용",
+              "score": 0.645141
+            },
+            {
+              "rank": 2,
+              "policy_id": 287,
+              "chunk_id": 28790000004,
+              "section": "공식 지원대상 원문",
+              "score": 0.642202
+            },
+            {
+              "rank": 3,
+              "policy_id": 287,
+              "chunk_id": 28730010037,
+              "section": "1. 차액 지원",
+              "score": 0.635915
+            },
+            {
+              "rank": 4,
+              "policy_id": 287,
+              "chunk_id": 28730010039,
+              "section": "1. 법적근거(아동수당법)",
+              "score": 0.634851
+            },
+            {
+              "rank": 5,
+              "policy_id": 255,
+              "chunk_id": 25590000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.631268
+            }
+          ],
+          "fallback_used": false
+        },
+        {
+          "case_id": "R038",
+          "category": "benefit",
+          "query": "아기가 태어나면 육아 물품에 쓸 수 있는 카드 포인트가 나오나요?",
+          "expected_policy_ids": [
+            255
+          ],
+          "expected_sections": [
+            "지원 내용"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 582.223,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 255,
+              "chunk_id": 25590000004,
+              "section": "지원 내용",
+              "score": 0.681446
+            },
+            {
+              "rank": 2,
+              "policy_id": 255,
+              "chunk_id": 25590000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.67788
+            },
+            {
+              "rank": 3,
+              "policy_id": 255,
+              "chunk_id": 25590000000,
+              "section": "정리된 지원 조건",
+              "score": 0.637059
+            },
+            {
+              "rank": 4,
+              "policy_id": 255,
+              "chunk_id": 25590000001,
+              "section": "조건 구조",
+              "score": 0.610354
+            },
+            {
+              "rank": 5,
+              "policy_id": 255,
+              "chunk_id": 25590000002,
+              "section": "추가 확인 조건",
+              "score": 0.601484
+            }
+          ],
+          "fallback_used": false
+        },
+        {
+          "case_id": "R039",
+          "category": "application",
+          "query": "모든 신생아에게 한 번 나오는 목돈은 온라인이나 동네 행정기관에서 어떻게 신청하나요?",
+          "expected_policy_ids": [
+            255
+          ],
+          "expected_sections": [
+            "신청 방법"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 4,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 641.742,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 255,
+              "chunk_id": 25590000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.681691
+            },
+            {
+              "rank": 2,
+              "policy_id": 255,
+              "chunk_id": 25590000004,
+              "section": "지원 내용",
+              "score": 0.674946
+            },
+            {
+              "rank": 3,
+              "policy_id": 255,
+              "chunk_id": 25590000000,
+              "section": "정리된 지원 조건",
+              "score": 0.652886
+            },
+            {
+              "rank": 4,
+              "policy_id": 255,
+              "chunk_id": 25590000005,
+              "section": "신청 방법",
+              "score": 0.648147
+            },
+            {
+              "rank": 5,
+              "policy_id": 255,
+              "chunk_id": 25590000002,
+              "section": "추가 확인 조건",
+              "score": 0.610544
+            }
+          ],
+          "fallback_used": false
+        },
+        {
+          "case_id": "R040",
+          "category": "benefit",
+          "query": "시설에서 보호받는 아기는 출산 지원을 카드 대신 현금으로 받을 수 있나요?",
+          "expected_policy_ids": [
+            255
+          ],
+          "expected_sections": [
+            "지원 내용"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 937.927,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 255,
+              "chunk_id": 25590000004,
+              "section": "지원 내용",
+              "score": 0.691204
+            },
+            {
+              "rank": 2,
+              "policy_id": 255,
+              "chunk_id": 25590000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.674087
+            },
+            {
+              "rank": 3,
+              "policy_id": 255,
+              "chunk_id": 25590000000,
+              "section": "정리된 지원 조건",
+              "score": 0.62605
+            },
+            {
+              "rank": 4,
+              "policy_id": 255,
+              "chunk_id": 25590000001,
+              "section": "조건 구조",
+              "score": 0.598579
+            },
+            {
+              "rank": 5,
+              "policy_id": 255,
+              "chunk_id": 25590000005,
+              "section": "신청 방법",
+              "score": 0.595152
+            }
+          ],
+          "fallback_used": false
+        },
+        {
+          "case_id": "R041",
+          "category": "target",
+          "query": "생계 지원을 받는 집에 노인이나 임산부가 있으면 냉난방비도 도움받나요?",
+          "expected_policy_ids": [
+            289
+          ],
+          "expected_sections": [
+            "정리된 지원 조건",
+            "공식 지원대상 원문"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 675.279,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 289,
+              "chunk_id": 28990000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.666008
+            },
+            {
+              "rank": 2,
+              "policy_id": 289,
+              "chunk_id": 28990000000,
+              "section": "정리된 지원 조건",
+              "score": 0.664325
+            },
+            {
+              "rank": 3,
+              "policy_id": 289,
+              "chunk_id": 28990000002,
+              "section": "추가 확인 조건",
+              "score": 0.651009
+            },
+            {
+              "rank": 4,
+              "policy_id": 289,
+              "chunk_id": 28990000001,
+              "section": "조건 구조",
+              "score": 0.64329
+            },
+            {
+              "rank": 5,
+              "policy_id": 289,
+              "chunk_id": 28990000004,
+              "section": "지원 내용",
+              "score": 0.632324
+            }
+          ],
+          "fallback_used": false
+        },
+        {
+          "case_id": "R042",
+          "category": "benefit",
+          "query": "여름에는 전기료, 겨울에는 가스나 기름값을 깎아주는 제도가 있나요?",
+          "expected_policy_ids": [
+            289
+          ],
+          "expected_sections": [
+            "지원 내용"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 843.59,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 289,
+              "chunk_id": 28990000004,
+              "section": "지원 내용",
+              "score": 0.703639
+            },
+            {
+              "rank": 2,
+              "policy_id": 289,
+              "chunk_id": 28990000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.641634
+            },
+            {
+              "rank": 3,
+              "policy_id": 289,
+              "chunk_id": 28990000006,
+              "section": "신청 기간",
+              "score": 0.606292
+            },
+            {
+              "rank": 4,
+              "policy_id": 289,
+              "chunk_id": 28990000007,
+              "section": "유의 사항",
+              "score": 0.599721
+            },
+            {
+              "rank": 5,
+              "policy_id": 289,
+              "chunk_id": 28990000005,
+              "section": "신청 방법",
+              "score": 0.598858
+            }
+          ],
+          "fallback_used": false
+        },
+        {
+          "case_id": "R043",
+          "category": "benefit",
+          "query": "난방비 도움을 카드로 결제하거나 고지서에서 바로 빼는 방식 중 고를 수 있나요?",
+          "expected_policy_ids": [
+            289
+          ],
+          "expected_sections": [
+            "지원 내용"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 800.42,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 289,
+              "chunk_id": 28990000004,
+              "section": "지원 내용",
+              "score": 0.644612
+            },
+            {
+              "rank": 2,
+              "policy_id": 289,
+              "chunk_id": 28990000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.624701
+            },
+            {
+              "rank": 3,
+              "policy_id": 289,
+              "chunk_id": 28990000005,
+              "section": "신청 방법",
+              "score": 0.600846
+            },
+            {
+              "rank": 4,
+              "policy_id": 289,
+              "chunk_id": 28990000007,
+              "section": "유의 사항",
+              "score": 0.59939
+            },
+            {
+              "rank": 5,
+              "policy_id": 289,
+              "chunk_id": 28990000000,
+              "section": "정리된 지원 조건",
+              "score": 0.582731
+            }
+          ],
+          "fallback_used": false
+        },
+        {
+          "case_id": "R044",
+          "category": "target",
+          "query": "출산한 지 반년이 안 된 수급 가정도 전기와 난방 비용을 지원받나요?",
+          "expected_policy_ids": [
+            289
+          ],
+          "expected_sections": [
+            "추가 확인 조건",
+            "공식 지원대상 원문"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 951.483,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 289,
+              "chunk_id": 28990000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.683479
+            },
+            {
+              "rank": 2,
+              "policy_id": 289,
+              "chunk_id": 28990000004,
+              "section": "지원 내용",
+              "score": 0.664755
+            },
+            {
+              "rank": 3,
+              "policy_id": 289,
+              "chunk_id": 28990000002,
+              "section": "추가 확인 조건",
+              "score": 0.66048
+            },
+            {
+              "rank": 4,
+              "policy_id": 289,
+              "chunk_id": 28990000000,
+              "section": "정리된 지원 조건",
+              "score": 0.656953
+            },
+            {
+              "rank": 5,
+              "policy_id": 289,
+              "chunk_id": 28990000001,
+              "section": "조건 구조",
+              "score": 0.646219
+            }
+          ],
+          "fallback_used": false
+        },
+        {
+          "case_id": "R045",
+          "category": "application",
+          "query": "저소득 가정의 냉난방비 도움은 온라인과 주민센터 중 어디서 신청하나요?",
+          "expected_policy_ids": [
+            289
+          ],
+          "expected_sections": [
+            "신청 방법"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 671.345,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 289,
+              "chunk_id": 28990000005,
+              "section": "신청 방법",
+              "score": 0.673505
+            },
+            {
+              "rank": 2,
+              "policy_id": 289,
+              "chunk_id": 28990000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.655368
+            },
+            {
+              "rank": 3,
+              "policy_id": 289,
+              "chunk_id": 28990000004,
+              "section": "지원 내용",
+              "score": 0.637204
+            },
+            {
+              "rank": 4,
+              "policy_id": 289,
+              "chunk_id": 28990000006,
+              "section": "신청 기간",
+              "score": 0.615131
+            },
+            {
+              "rank": 5,
+              "policy_id": 289,
+              "chunk_id": 28990000001,
+              "section": "조건 구조",
+              "score": 0.614703
+            }
+          ],
+          "fallback_used": false
+        },
+        {
+          "case_id": "R046",
+          "category": "target",
+          "query": "형편이 어려운 초중고생이 운동 학원에 다닐 때 수강료를 지원받을 수 있나요?",
+          "expected_policy_ids": [
+            292
+          ],
+          "expected_sections": [
+            "정리된 지원 조건",
+            "공식 지원대상 원문"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 655.805,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 292,
+              "chunk_id": 29290000000,
+              "section": "정리된 지원 조건",
+              "score": 0.72006
+            },
+            {
+              "rank": 2,
+              "policy_id": 292,
+              "chunk_id": 29290000004,
+              "section": "지원 내용",
+              "score": 0.704519
+            },
+            {
+              "rank": 3,
+              "policy_id": 292,
+              "chunk_id": 29290000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.702834
+            },
+            {
+              "rank": 4,
+              "policy_id": 292,
+              "chunk_id": 29290000001,
+              "section": "조건 구조",
+              "score": 0.664308
+            },
+            {
+              "rank": 5,
+              "policy_id": 292,
+              "chunk_id": 29290000007,
+              "section": "유의 사항",
+              "score": 0.659009
+            }
+          ],
+          "fallback_used": false
+        },
+        {
+          "case_id": "R047",
+          "category": "benefit",
+          "query": "아이 체육 수업 비용을 매달 일정 금액씩 1년 동안 보조해 주는 제도",
+          "expected_policy_ids": [
+            292
+          ],
+          "expected_sections": [
+            "지원 내용"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 708.837,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 292,
+              "chunk_id": 29290000004,
+              "section": "지원 내용",
+              "score": 0.740643
+            },
+            {
+              "rank": 2,
+              "policy_id": 292,
+              "chunk_id": 29290000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.704742
+            },
+            {
+              "rank": 3,
+              "policy_id": 292,
+              "chunk_id": 29290000000,
+              "section": "정리된 지원 조건",
+              "score": 0.678323
+            },
+            {
+              "rank": 4,
+              "policy_id": 292,
+              "chunk_id": 29290000007,
+              "section": "유의 사항",
+              "score": 0.659282
+            },
+            {
+              "rank": 5,
+              "policy_id": 292,
+              "chunk_id": 29290000006,
+              "section": "신청 기간",
+              "score": 0.657513
+            }
+          ],
+          "fallback_used": false
+        },
+        {
+          "case_id": "R048",
+          "category": "caution",
+          "query": "폭력 피해를 겪은 청소년은 운동 수업비 지원을 먼저 받을 수 있나요?",
+          "expected_policy_ids": [
+            292
+          ],
+          "expected_sections": [
+            "유의 사항",
+            "공식 지원대상 원문"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 2,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 637.871,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 292,
+              "chunk_id": 29290000000,
+              "section": "정리된 지원 조건",
+              "score": 0.701923
+            },
+            {
+              "rank": 2,
+              "policy_id": 292,
+              "chunk_id": 29290000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.699962
+            },
+            {
+              "rank": 3,
+              "policy_id": 292,
+              "chunk_id": 29290000007,
+              "section": "유의 사항",
+              "score": 0.696447
+            },
+            {
+              "rank": 4,
+              "policy_id": 292,
+              "chunk_id": 29290000004,
+              "section": "지원 내용",
+              "score": 0.676914
+            },
+            {
+              "rank": 5,
+              "policy_id": 292,
+              "chunk_id": 29290000002,
+              "section": "추가 확인 조건",
+              "score": 0.669696
+            }
+          ],
+          "fallback_used": false
+        },
+        {
+          "case_id": "R049",
+          "category": "application",
+          "query": "저소득 청소년 운동비는 시청 방문 말고 인터넷으로도 신청할 수 있나요?",
+          "expected_policy_ids": [
+            292
+          ],
+          "expected_sections": [
+            "신청 방법"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 919.041,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 292,
+              "chunk_id": 29290000005,
+              "section": "신청 방법",
+              "score": 0.666117
+            },
+            {
+              "rank": 2,
+              "policy_id": 292,
+              "chunk_id": 29290000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.655369
+            },
+            {
+              "rank": 3,
+              "policy_id": 292,
+              "chunk_id": 29290000000,
+              "section": "정리된 지원 조건",
+              "score": 0.641852
+            },
+            {
+              "rank": 4,
+              "policy_id": 292,
+              "chunk_id": 29290000001,
+              "section": "조건 구조",
+              "score": 0.637866
+            },
+            {
+              "rank": 5,
+              "policy_id": 292,
+              "chunk_id": 29290000002,
+              "section": "추가 확인 조건",
+              "score": 0.621926
+            }
+          ],
+          "fallback_used": false
+        },
+        {
+          "case_id": "R050",
+          "category": "caution",
+          "query": "아이 운동 수업료가 지원 한도보다 비싸면 초과분은 직접 내야 하나요?",
+          "expected_policy_ids": [
+            292
+          ],
+          "expected_sections": [
+            "지원 내용"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 895.623,
+          "error": null,
+          "retrieved": [
+            {
+              "rank": 1,
+              "policy_id": 292,
+              "chunk_id": 29290000004,
+              "section": "지원 내용",
+              "score": 0.725055
+            },
+            {
+              "rank": 2,
+              "policy_id": 292,
+              "chunk_id": 29290000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.673875
+            },
+            {
+              "rank": 3,
+              "policy_id": 292,
+              "chunk_id": 29290000000,
+              "section": "정리된 지원 조건",
+              "score": 0.654138
+            },
+            {
+              "rank": 4,
+              "policy_id": 292,
+              "chunk_id": 29290000007,
+              "section": "유의 사항",
+              "score": 0.634679
+            },
+            {
+              "rank": 5,
+              "policy_id": 292,
+              "chunk_id": 29290000001,
+              "section": "조건 구조",
+              "score": 0.634273
+            }
+          ],
+          "fallback_used": false
+        }
+      ]
+    }
+  ]
+}

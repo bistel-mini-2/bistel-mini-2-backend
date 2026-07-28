@@ -2,6 +2,7 @@ import asyncio
 from types import SimpleNamespace
 
 from app.ai.retrievers import (
+    AdaptivePolicyRetriever,
     HybridPolicyRetriever,
     RetrievalHit,
     RetrievalStrategy,
@@ -32,6 +33,7 @@ class StubRetriever:
         top_k=5,
         source_type=None,
         policy_ids=None,
+        evidence_role=None,
     ):
         self.calls.append(
             {
@@ -39,6 +41,7 @@ class StubRetriever:
                 "top_k": top_k,
                 "source_type": source_type,
                 "policy_ids": policy_ids,
+                "evidence_role": evidence_role,
             }
         )
         return self.hits[:top_k]
@@ -49,6 +52,8 @@ def make_hit(
     score: float = 0.5,
     *,
     policy_id: int = 100,
+    section: str | None = None,
+    evidence_role: str | None = None,
 ) -> RetrievalHit:
     return RetrievalHit(
         chunk_id=chunk_id,
@@ -57,6 +62,8 @@ def make_hit(
         source_title="테스트 정책",
         source_url="https://example.com/policy",
         score=score,
+        section=section,
+        evidence_role=evidence_role,
     )
 
 
@@ -292,7 +299,147 @@ def test_hybrid_retriever_keeps_multiple_chunks_for_scoped_policy():
     assert {hit.policy_id for hit in hits} == {101}
 
 
-def test_factory_exposes_three_retrieval_strategies():
+def test_adaptive_retriever_keeps_vector_when_requested_role_exists():
+    vector = StubRetriever(
+        [make_hit(1, section="지원 대상", evidence_role="TARGET")]
+    )
+    keyword = StubRetriever([make_hit(2)])
+
+    hits = asyncio.run(
+        AdaptivePolicyRetriever(
+            vector_retriever=vector,
+            keyword_retriever=keyword,
+        ).retrieve(
+            "지원 자격",
+            top_k=1,
+            policy_ids=[100],
+            evidence_role="TARGET",
+        )
+    )
+
+    assert [hit.chunk_id for hit in hits] == [1]
+    assert len(vector.calls) == 1
+    assert vector.calls[0]["top_k"] == 1
+    assert keyword.calls == []
+
+
+def test_adaptive_retriever_falls_back_without_requested_role():
+    vector = StubRetriever(
+        [
+            make_hit(1, section="지원 내용"),
+            make_hit(3, section="신청 방법"),
+        ]
+    )
+    keyword = StubRetriever(
+        [make_hit(2, section="지원 대상", evidence_role="TARGET")]
+    )
+
+    hits = asyncio.run(
+        AdaptivePolicyRetriever(
+            vector_retriever=vector,
+            keyword_retriever=keyword,
+        ).retrieve(
+            "지원 자격",
+            top_k=2,
+            policy_ids=[100],
+            evidence_role="TARGET",
+        )
+    )
+
+    assert [hit.chunk_id for hit in hits] == [1, 2]
+    assert len(vector.calls) == 1
+    assert len(keyword.calls) == 1
+
+
+def test_adaptive_retriever_keeps_relevant_vector_policy_without_diversity():
+    vector = StubRetriever(
+        [
+            make_hit(1, policy_id=101),
+            make_hit(2, policy_id=101),
+        ]
+    )
+    keyword = StubRetriever([make_hit(3, policy_id=102)])
+
+    hits = asyncio.run(
+        AdaptivePolicyRetriever(
+            vector_retriever=vector,
+            keyword_retriever=keyword,
+        ).retrieve("지원 정책", top_k=2)
+    )
+
+    assert {hit.policy_id for hit in hits} == {101}
+    assert keyword.calls == []
+
+
+def test_adaptive_retriever_ignores_non_section_role_when_vector_has_hits():
+    vector = StubRetriever([make_hit(1, section="지원 내용")])
+    keyword = StubRetriever([make_hit(2)])
+
+    hits = asyncio.run(
+        AdaptivePolicyRetriever(
+            vector_retriever=vector,
+            keyword_retriever=keyword,
+        ).retrieve(
+            "추천 근거",
+            top_k=1,
+            policy_ids=[100],
+            evidence_role="recommendation_reason",
+        )
+    )
+
+    assert [hit.chunk_id for hit in hits] == [1]
+    assert keyword.calls == []
+
+
+def test_adaptive_retriever_accepts_requested_role_from_section_metadata():
+    vector = StubRetriever(
+        [
+            make_hit(
+                1,
+                section="공식 지원대상 원문",
+                evidence_role="CAUTION",
+            )
+        ]
+    )
+    keyword = StubRetriever([make_hit(2)])
+
+    hits = asyncio.run(
+        AdaptivePolicyRetriever(
+            vector_retriever=vector,
+            keyword_retriever=keyword,
+        ).retrieve(
+            "지원 자격",
+            top_k=1,
+            policy_ids=[100],
+            evidence_role="TARGET",
+        )
+    )
+
+    assert [hit.chunk_id for hit in hits] == [1]
+    assert keyword.calls == []
+
+
+def test_adaptive_retriever_keeps_vector_when_fallback_adds_no_role():
+    vector = StubRetriever([make_hit(1, section="지원 내용")])
+    keyword = StubRetriever([make_hit(2, section="신청 방법")])
+
+    hits = asyncio.run(
+        AdaptivePolicyRetriever(
+            vector_retriever=vector,
+            keyword_retriever=keyword,
+        ).retrieve(
+            "지원 자격",
+            top_k=1,
+            policy_ids=[100],
+            evidence_role="TARGET",
+        )
+    )
+
+    assert [hit.chunk_id for hit in hits] == [1]
+    assert len(keyword.calls) == 1
+
+
+def test_factory_exposes_four_retrieval_strategies():
     assert isinstance(
         build_policy_retriever(RetrievalStrategy.SQL_KEYWORD),
         SqlKeywordPolicyRetriever,
@@ -304,6 +451,10 @@ def test_factory_exposes_three_retrieval_strategies():
     assert isinstance(
         build_policy_retriever(RetrievalStrategy.HYBRID),
         HybridPolicyRetriever,
+    )
+    assert isinstance(
+        build_policy_retriever(RetrievalStrategy.ADAPTIVE),
+        AdaptivePolicyRetriever,
     )
 
 

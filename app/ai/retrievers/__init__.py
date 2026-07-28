@@ -1,4 +1,5 @@
 from app.ai.retrievers.policy_retriever import (
+    AdaptivePolicyRetriever,
     HybridPolicyRetriever,
     PolicyRetriever,
     RetrievalHit,
@@ -9,6 +10,7 @@ from app.ai.retrievers.policy_retriever import (
 )
 
 __all__ = [
+    "AdaptivePolicyRetriever",
     "HybridPolicyRetriever",
     "PolicyRetriever",
     "RetrievalHit",

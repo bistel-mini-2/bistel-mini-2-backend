@@ -1,8 +1,11 @@
-from app.ai.retrievers import RetrievalHit
+import asyncio
+
+from app.ai.retrievers import RetrievalHit, RetrievalStrategy
 from tests.eval.retrieval_eval import (
     DEFAULT_CASES_PATH,
     RetrievalCase,
     aggregate_metrics,
+    evaluate_strategy,
     load_cases,
     score_case,
 )
@@ -135,3 +138,65 @@ def test_aggregate_metrics_includes_failures_in_denominator():
     assert metrics["error_rate_pct"] == 50.0
     assert metrics["latency_p50_ms"] == 20.0
     assert metrics["latency_p95_ms"] == 30.0
+
+
+def test_aggregate_metrics_reports_adaptive_fallback_rate():
+    case = RetrievalCase(
+        case_id="R999",
+        query="질문",
+        expected_policy_ids=(100,),
+        expected_sections=("지원 내용",),
+        category="benefit",
+    )
+    fallback = score_case(
+        case,
+        [_hit(100, 1, "지원 내용")],
+        top_k=1,
+        elapsed_ms=20,
+    )
+    fallback["fallback_used"] = True
+    vector_only = score_case(
+        case,
+        [_hit(100, 2, "지원 내용")],
+        top_k=1,
+        elapsed_ms=10,
+    )
+    vector_only["fallback_used"] = False
+
+    metrics = aggregate_metrics([fallback, vector_only])
+
+    assert metrics["fallback_count"] == 1
+    assert metrics["fallback_rate_pct"] == 50.0
+
+
+def test_evaluate_strategy_can_scope_search_to_expected_policy(monkeypatch):
+    calls: list[dict[str, object]] = []
+
+    class FakeRetriever:
+        async def retrieve(self, query, **kwargs):
+            calls.append({"query": query, **kwargs})
+            return [_hit(100, 1, "지원 대상")]
+
+    monkeypatch.setattr(
+        "tests.eval.retrieval_eval.build_policy_retriever",
+        lambda strategy: FakeRetriever(),
+    )
+    case = RetrievalCase(
+        case_id="R999",
+        query="지원 자격",
+        expected_policy_ids=(100,),
+        expected_sections=("지원 대상",),
+        category="target",
+    )
+
+    asyncio.run(
+        evaluate_strategy(
+            RetrievalStrategy.ADAPTIVE,
+            [case],
+            top_k=5,
+            scope_to_expected_policy=True,
+        )
+    )
+
+    assert calls[0]["policy_ids"] == [100]
+    assert calls[0]["evidence_role"] == "TARGET"

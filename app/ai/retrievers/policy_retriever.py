@@ -14,6 +14,7 @@ class RetrievalStrategy(StrEnum):
     SQL_KEYWORD = "sql_keyword"
     VECTOR = "vector"
     HYBRID = "hybrid"
+    ADAPTIVE = "adaptive"
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,6 +44,7 @@ class PolicyRetriever(Protocol):
         top_k: int = 5,
         source_type: str | None = None,
         policy_ids: list[int | str] | None = None,
+        evidence_role: str | None = None,
     ) -> list[RetrievalHit]: ...
 
 
@@ -59,6 +61,7 @@ class VectorPolicyRetriever:
         top_k: int = 5,
         source_type: str | None = None,
         policy_ids: list[int | str] | None = None,
+        evidence_role: str | None = None,
     ) -> list[RetrievalHit]:
         response = await self.rag_service.search(
             query=query,
@@ -100,6 +103,7 @@ class SqlKeywordPolicyRetriever:
         top_k: int = 5,
         source_type: str | None = None,
         policy_ids: list[int | str] | None = None,
+        evidence_role: str | None = None,
     ) -> list[RetrievalHit]:
         async with psycopg_pool.connection() as conn:
             rows = await self.repository.search_chunks_by_keywords(
@@ -164,6 +168,7 @@ class HybridPolicyRetriever:
         top_k: int = 5,
         source_type: str | None = None,
         policy_ids: list[int | str] | None = None,
+        evidence_role: str | None = None,
     ) -> list[RetrievalHit]:
         candidate_k = max(top_k * self.candidate_multiplier, top_k)
         keyword_hits, vector_hits = await asyncio.gather(
@@ -172,15 +177,31 @@ class HybridPolicyRetriever:
                 top_k=candidate_k,
                 source_type=source_type,
                 policy_ids=policy_ids,
+                evidence_role=evidence_role,
             ),
             self.vector_retriever.retrieve(
                 query,
                 top_k=candidate_k,
                 source_type=source_type,
                 policy_ids=policy_ids,
+                evidence_role=evidence_role,
             ),
         )
+        return self.fuse_hits(
+            keyword_hits,
+            vector_hits,
+            top_k=top_k,
+            policy_ids=policy_ids,
+        )
 
+    def fuse_hits(
+        self,
+        keyword_hits: list[RetrievalHit],
+        vector_hits: list[RetrievalHit],
+        *,
+        top_k: int,
+        policy_ids: list[int | str] | None,
+    ) -> list[RetrievalHit]:
         fused_scores: dict[int, float] = {}
         hits_by_chunk_id: dict[int, RetrievalHit] = {}
         for hits, weight in (
@@ -210,15 +231,131 @@ class HybridPolicyRetriever:
 
         selected: list[RetrievalHit] = []
         policy_counts: dict[int, int] = {}
+        policy_cap = min(
+            self.max_chunks_per_policy,
+            max(1, top_k // 2),
+        )
         for hit in ranked_hits:
             count = policy_counts.get(hit.policy_id, 0)
-            if count >= self.max_chunks_per_policy:
+            if count >= policy_cap:
                 continue
             selected.append(hit)
             policy_counts[hit.policy_id] = count + 1
             if len(selected) == top_k:
                 break
         return selected
+
+
+class AdaptivePolicyRetriever:
+    strategy = RetrievalStrategy.ADAPTIVE
+    _SECTION_ROLES = frozenset(
+        {"SUMMARY", "TARGET", "BENEFIT", "APPLICATION", "CAUTION"}
+    )
+
+    def __init__(
+        self,
+        vector_retriever: PolicyRetriever | None = None,
+        keyword_retriever: PolicyRetriever | None = None,
+        *,
+        candidate_multiplier: int = 2,
+    ) -> None:
+        self.vector_retriever = vector_retriever or VectorPolicyRetriever()
+        self.keyword_retriever = keyword_retriever or SqlKeywordPolicyRetriever()
+        self.candidate_multiplier = candidate_multiplier
+        self.fusion = HybridPolicyRetriever(
+            keyword_retriever=self.keyword_retriever,
+            vector_retriever=self.vector_retriever,
+            candidate_multiplier=candidate_multiplier,
+        )
+        self.fallback_count = 0
+
+    async def retrieve(
+        self,
+        query: str,
+        *,
+        top_k: int = 5,
+        source_type: str | None = None,
+        policy_ids: list[int | str] | None = None,
+        evidence_role: str | None = None,
+    ) -> list[RetrievalHit]:
+        candidate_k = max(top_k * self.candidate_multiplier, top_k)
+        vector_hits = await self.vector_retriever.retrieve(
+            query,
+            top_k=top_k,
+            source_type=source_type,
+            policy_ids=policy_ids,
+            evidence_role=evidence_role,
+        )
+        visible_vector_hits = vector_hits[:top_k]
+        fallback_reason = self._fallback_reason(
+            visible_vector_hits,
+            evidence_role=evidence_role,
+        )
+        if fallback_reason is None:
+            return visible_vector_hits
+
+        self.fallback_count += 1
+        keyword_hits = await self.keyword_retriever.retrieve(
+            query,
+            top_k=candidate_k,
+            source_type=source_type,
+            policy_ids=policy_ids,
+            evidence_role=evidence_role,
+        )
+        if fallback_reason == "missing_role":
+            return self._supplement_required_role(
+                visible_vector_hits,
+                keyword_hits,
+                top_k=top_k,
+                evidence_role=evidence_role,
+            )
+        return self.fusion.fuse_hits(
+            keyword_hits,
+            vector_hits,
+            top_k=top_k,
+            policy_ids=policy_ids,
+        )
+
+    @classmethod
+    def _fallback_reason(
+        cls,
+        hits: list[RetrievalHit],
+        *,
+        evidence_role: str | None,
+    ) -> str | None:
+        if not hits:
+            return "empty"
+
+        required_role = str(evidence_role or "").strip().upper()
+        if required_role in cls._SECTION_ROLES and not any(
+            required_role in _hit_roles(hit) for hit in hits
+        ):
+            return "missing_role"
+
+        return None
+
+    @staticmethod
+    def _supplement_required_role(
+        vector_hits: list[RetrievalHit],
+        keyword_hits: list[RetrievalHit],
+        *,
+        top_k: int,
+        evidence_role: str | None,
+    ) -> list[RetrievalHit]:
+        required_role = str(evidence_role or "").strip().upper()
+        vector_chunk_ids = {hit.chunk_id for hit in vector_hits}
+        supplements = [
+            hit
+            for hit in keyword_hits
+            if hit.chunk_id not in vector_chunk_ids
+            and required_role in _hit_roles(hit)
+        ]
+        if not supplements:
+            return vector_hits[:top_k]
+
+        supplement = supplements[0]
+        kept_vector_hits = vector_hits[: max(top_k - 1, 0)]
+        return [*kept_vector_hits, supplement][:top_k]
 
 
 def build_policy_retriever(
@@ -231,6 +368,10 @@ def build_policy_retriever(
         return SqlKeywordPolicyRetriever()
     if selected is RetrievalStrategy.HYBRID:
         return HybridPolicyRetriever(
+            vector_retriever=VectorPolicyRetriever(rag_service=rag_service)
+        )
+    if selected is RetrievalStrategy.ADAPTIVE:
+        return AdaptivePolicyRetriever(
             vector_retriever=VectorPolicyRetriever(rag_service=rag_service)
         )
     return VectorPolicyRetriever(rag_service=rag_service)
@@ -272,3 +413,24 @@ def _to_metadata(value: Any) -> dict[str, Any]:
 def _section_from_text(value: str) -> str | None:
     match = re.search(r"^섹션:\s*(.+?)\s*$", value, re.MULTILINE)
     return match.group(1).strip() if match else None
+
+
+def _hit_roles(hit: RetrievalHit) -> set[str]:
+    roles: set[str] = set()
+    if hit.evidence_role:
+        roles.add(str(hit.evidence_role).strip().upper())
+    role_by_section = {
+        "기본 정보": "SUMMARY",
+        "요약": "SUMMARY",
+        "지원 대상": "TARGET",
+        "정리된 지원 조건": "TARGET",
+        "공식 지원대상 원문": "TARGET",
+        "지원 내용": "BENEFIT",
+        "신청 방법": "APPLICATION",
+        "신청 기간": "APPLICATION",
+        "유의 사항": "CAUTION",
+    }
+    section_role = role_by_section.get(str(hit.section or "").strip())
+    if section_role:
+        roles.add(section_role)
+    return roles

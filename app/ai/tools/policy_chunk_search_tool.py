@@ -31,7 +31,7 @@ async def search_policy_chunks(
     top_k: int = 5,
     evidence_role: str | None = None,
     rag_service: PolicyRagService | None = None,
-    strategy: RetrievalStrategy | str = RetrievalStrategy.VECTOR,
+    strategy: RetrievalStrategy | str = RetrievalStrategy.ADAPTIVE,
     retriever: PolicyRetriever | None = None,
 ) -> list[EvidenceChunk]:
     selected_retriever = retriever or build_policy_retriever(
@@ -42,6 +42,7 @@ async def search_policy_chunks(
         query,
         top_k=top_k,
         policy_ids=policy_ids,
+        evidence_role=evidence_role,
     )
 
     allowed_policy_ids = {str(policy_id) for policy_id in policy_ids or []}

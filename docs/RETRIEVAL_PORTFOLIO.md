@@ -4,8 +4,8 @@
 
 정책 챗봇의 검색 로직을 교체 가능한 리트리버 계층으로 분리하고,
 50문항 골드셋으로 PostgreSQL 키워드 검색, pgvector 의미 검색,
-RRF 하이브리드 검색을 동일 조건에서 비교해 pgvector를 기본 전략으로
-선정했다.
+RRF 하이브리드 검색을 동일 조건에서 비교하고 Vector 우선 Adaptive
+fallback을 챗봇 기본 전략으로 선정했다.
 
 ## 문제
 
@@ -35,9 +35,11 @@ flowchart LR
     C --> D["SQL Keyword"]
     C --> E["pgvector"]
     C --> F["Hybrid RRF"]
+    C --> I["Adaptive fallback"]
     D --> G["정규화된 RetrievalHit"]
     E --> G
     F --> G
+    I --> G
     G --> H["EvidenceChunk"]
     H --> A
 ```
@@ -46,15 +48,16 @@ flowchart LR
 새 검색 전략을 추가할 때 에이전트 프롬프트나 툴 응답 계약을 바꿀 필요가
 없다.
 
-### 2. 세 가지 검색 전략
+### 2. 네 가지 검색 전략
 
 | 전략 | 구현 | 비교 목적 |
 |---|---|---|
 | SQL keyword | PostgreSQL `ILIKE` 기반 부분문자열 일치율 | 의미 검색이 없는 RDBMS 기준선 |
 | Vector | `text-embedding-3-large` 임베딩과 pgvector 코사인 거리 | 사용자 표현과 원문 표현이 다른 의미 검색 |
 | Hybrid | 두 채널의 후보를 병렬 조회하고 RRF로 결합 | 키워드와 의미 검색의 상호 보완 가능성 |
+| Adaptive | Vector 우선, 근거 역할 누락 시 SQL 보충 | 대부분 요청의 Vector 경로 유지와 조건부 안전망 |
 
-여기서 “RDBMS 대 벡터 DB”로 표현하면 정확하지 않다. 세 방식 모두
+여기서 “RDBMS 대 벡터 DB”로 표현하면 정확하지 않다. 네 방식 모두
 PostgreSQL의 정책 청크를 조회하며, 차이는 일반 문자열 조건 검색과
 pgvector 확장을 이용한 의미 검색, 그리고 두 결과의 결합 방식이다.
 
@@ -70,6 +73,11 @@ weighted RRF score = Σ channel_weight / (60 + rank)
 포함해 한 정책의 긴 참고문서가 결과를 독점하지 못하게 했다. 특정
 `policy_ids`가 지정된 검색은 여러 근거 섹션이 필요하므로 제한하지 않는다.
 
+Adaptive는 Vector를 요청된 K로 한 번만 실행한다. 결과가 비었거나 요청한
+표준 근거 역할이 없을 때만 SQL 후보를 추가 조회한다. 이때 기존 Vector
+순위를 보존하고 부족한 역할 청크만 보충하며, SQL에서 유효한 역할 청크를
+찾지 못하면 원래 Vector 결과를 반환한다.
+
 ### 3. 50문항 골드셋
 
 - 전체 50문항, 10개 정책을 기준으로 정책별 5문항 구성
@@ -78,7 +86,7 @@ weighted RRF score = Σ channel_weight / (60 + rank)
 - 48문항은 단일 정답, 의미상 두 정책이 모두 가능한 2문항은 복수 정답
 - 각 문항에 정답 정책 ID와 기대 근거 섹션을 함께 라벨링
 
-모든 문항은 정책 원문과 세 검색 방식의 상위 후보를 대조해 전수 검수했다.
+모든 문항은 정책 원문과 검색 방식별 상위 후보를 대조해 전수 검수했다.
 문장 모호성, 대체 정답, 근거 섹션, 정책명 노출, 자연스러움, 의미 중복을
 확인했으며 판정 근거는 별도 문서에 남겼다.
 
@@ -104,9 +112,10 @@ weighted RRF score = Σ channel_weight / (60 + rank)
 
 | 방식 | Policy Hit@5 | Section Hit@5 | MRR | p50 | p95 | Error |
 |---|---:|---:|---:|---:|---:|---:|
-| SQL keyword | 18.0% | 12.0% | 0.0957 | 1,251ms | 1,712ms | 0.0% |
-| pgvector | 86.0% | **78.0%** | 0.7497 | **775ms** | **1,072ms** | 0.0% |
-| Weighted Hybrid RRF | **88.0%** | **78.0%** | **0.7757** | 1,337ms | 1,784ms | 0.0% |
+| SQL keyword | 18.0% | 12.0% | 0.0957 | 1,257ms | 1,732ms | 0.0% |
+| pgvector | 86.0% | **78.0%** | 0.7497 | **782ms** | **1,093ms** | 0.0% |
+| Weighted Hybrid RRF | **88.0%** | **78.0%** | **0.7757** | 1,292ms | 1,717ms | 0.0% |
+| Adaptive fallback | 86.0% | **78.0%** | 0.7497 | 809ms | 2,290ms | 0.0% |
 
 pgvector는 SQL 키워드 기준선보다 Policy Hit@5가 **68%p**,
 Section Hit@5가 **66%p** 높았다. 초기 동등 가중치 하이브리드는 Vector와
@@ -114,21 +123,27 @@ Hit@5가 같고 MRR이 낮았지만, weighted RRF와 정책별 청크 제한을 
 뒤 Policy Hit@5가 Vector보다 **2%p**, MRR이 **0.0260** 높아졌다.
 Section Hit@5는 78%로 유지했다.
 
-다만 하이브리드 p50은 Vector보다 약 562ms 길다. 따라서 지연시간을
-포함한 운영 기본값은 pgvector로 유지하고, 검색 누락 비용이 더 큰
-흐름에서는 하이브리드를 선택할 수 있도록 정확도와 지연시간의
-트레이드오프를 확인했다.
+다만 하이브리드 p50은 Vector보다 약 510ms 길다. Adaptive는 7/50문항
+(14%)에서만 fallback해 Vector와 같은 정확도를 유지했지만, 추가 SQL이
+실행된 문항 때문에 p95가 높았다. 운영 기본값은 Adaptive로 두되 정상
+경로는 Vector이며, 전체 Hybrid는 정확도 우선 흐름에서 명시적으로
+선택하도록 경계를 정했다.
+
+실제 챗봇처럼 정책 ID를 지정한 별도 평가에서는 Vector와 Adaptive 모두
+Section Hit@5 98%였고 Adaptive fallback은 1/50(2%)이었다. 현재
+골드셋에서는 Adaptive의 추가 정확도 이득이 입증되지 않았으므로, 성과를
+“정확도 개선”이 아닌 “조건부 근거 누락 안전망”으로 한정한다.
 
 ## 이력서에 사용할 수 있는 문장
 
 ### 한 줄 버전
 
-> 정책 챗봇에 교체 가능한 리트리버 계층과 50문항 평가 체계를 구축하고, weighted RRF와 정책별 청크 제한으로 Hybrid Policy Hit@5 88%·MRR 0.7757을 달성하면서 지연시간을 함께 정량 비교
+> 정책 챗봇에 Vector 우선 Adaptive fallback을 적용해 broad 평가의 검색 품질을 유지하면서 SQL 추가 조회를 14%, 정책 범위 지정 근거 검색에서는 2%로 제한
 
 ### 두 줄 버전
 
 > 에이전트의 툴 계약과 검색 구현을 분리한 `PolicyRetriever` 계층을 설계하고 SQL 키워드, pgvector, RRF 하이브리드 전략을 동일 인터페이스로 구현  
-> 정책명 노출을 제거한 50문항 골드셋과 Policy/Section Hit@5·MRR·지연시간 평가기를 구축해 정확도는 Hybrid, 지연시간은 Vector가 우세함을 검증하고 Vector를 운영 기본값으로 선정
+> 정책명 노출을 제거한 50문항 골드셋과 Policy/Section Hit@5·MRR·fallback 비율 평가기를 구축해 전체 Hybrid와 조건부 Adaptive의 정확도·tail latency 트레이드오프를 검증
 
 ### 담당 업무 중심 버전
 
@@ -146,9 +161,9 @@ Section Hit@5는 78%로 유지했다.
 ### 왜 정확도가 높은 하이브리드를 기본값으로 쓰지 않았는가?
 
 weighted Hybrid는 Vector보다 Policy Hit@5가 2%p 높고 Section Hit@5는
-같지만 p50이 약 562ms 느렸다. 정확도 개선 폭과 응답 지연을 함께 비교해
-일반 챗봇 요청은 Vector를 기본값으로 유지했다. 누락 비용이 더 큰
-배치 분석이나 별도 흐름에서는 Hybrid를 선택할 수 있다.
+같지만 p50이 약 510ms 느렸다. 일반 챗봇은 Vector를 우선하는 Adaptive를
+사용하고, 누락 비용이 더 큰 배치 분석이나 별도 흐름에서만 전체 Hybrid를
+선택할 수 있다.
 
 ### 에이전트가 직접 검색 전략을 선택하는가?
 
@@ -186,6 +201,7 @@ weighted Hybrid는 Vector보다 Policy Hit@5가 2%p 높고 Section Hit@5는
 - 전수 검수 기록: `docs/RETRIEVAL_GOLDSET_AUDIT.md`
 - 상세 결과: `docs/RETRIEVAL_BENCHMARK.md`
 - 원본 실행 결과: `output/retrieval_benchmark_50.json`
+- 정책 범위 지정 결과: `output/retrieval_benchmark_scoped_50.json`
 
 ```bash
 PYTHONPATH=. .venv/bin/python tests/eval/retrieval_eval.py \

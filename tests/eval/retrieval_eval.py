@@ -1,4 +1,4 @@
-"""정책 챗봇 리트리버 3방식 정량 비교.
+"""정책 챗봇 리트리버와 Adaptive fallback 정량 비교.
 
 동일한 골드셋을 SQL 키워드, pgvector, RRF 하이브리드 리트리버에 적용해
 정책 Hit@K, 근거 섹션 Hit@K, MRR, 지연시간을 측정한다.
@@ -21,6 +21,12 @@ from app.common.psycopg_pool_conf import psycopg_pool
 
 
 DEFAULT_CASES_PATH = Path(__file__).with_name("retrieval_cases.jsonl")
+CATEGORY_EVIDENCE_ROLE = {
+    "target": "TARGET",
+    "benefit": "BENEFIT",
+    "application": "APPLICATION",
+    "caution": "CAUTION",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,28 +78,43 @@ async def evaluate_strategy(
     cases: Sequence[RetrievalCase],
     *,
     top_k: int,
+    scope_to_expected_policy: bool = False,
 ) -> dict[str, Any]:
     retriever = build_policy_retriever(strategy)
     case_results: list[dict[str, Any]] = []
 
     for case in cases:
+        fallback_count_before = int(getattr(retriever, "fallback_count", 0))
         started_at = time.perf_counter()
         try:
-            hits = await retriever.retrieve(case.query, top_k=top_k)
+            hits = await retriever.retrieve(
+                case.query,
+                top_k=top_k,
+                policy_ids=(
+                    list(case.expected_policy_ids)
+                    if scope_to_expected_policy
+                    else None
+                ),
+                evidence_role=CATEGORY_EVIDENCE_ROLE.get(case.category),
+            )
             error = None
         except Exception as exc:
             hits = []
             error = f"{type(exc).__name__}: {exc}"
         elapsed_ms = (time.perf_counter() - started_at) * 1000
-        case_results.append(
-            score_case(
-                case,
-                hits,
-                top_k=top_k,
-                elapsed_ms=elapsed_ms,
-                error=error,
-            )
+        case_result = score_case(
+            case,
+            hits,
+            top_k=top_k,
+            elapsed_ms=elapsed_ms,
+            error=error,
         )
+        if hasattr(retriever, "fallback_count"):
+            case_result["fallback_used"] = (
+                int(getattr(retriever, "fallback_count", 0))
+                > fallback_count_before
+            )
+        case_results.append(case_result)
 
     return {
         "strategy": strategy.value,
@@ -163,7 +184,7 @@ def aggregate_metrics(case_results: Sequence[dict[str, Any]]) -> dict[str, Any]:
         }
 
     latencies = [float(result["elapsed_ms"]) for result in case_results]
-    return {
+    metrics = {
         "case_count": count,
         "policy_hit_at_k_pct": _pct(
             sum(bool(result["policy_hit"]) for result in case_results),
@@ -188,6 +209,13 @@ def aggregate_metrics(case_results: Sequence[dict[str, Any]]) -> dict[str, Any]:
         "latency_p95_ms": round(_percentile(latencies, 0.95), 3),
         "by_category": _category_metrics(case_results),
     }
+    if any("fallback_used" in result for result in case_results):
+        fallback_count = sum(
+            bool(result.get("fallback_used")) for result in case_results
+        )
+        metrics["fallback_count"] = fallback_count
+        metrics["fallback_rate_pct"] = _pct(fallback_count, count)
+    return metrics
 
 
 def _category_metrics(
@@ -244,11 +272,17 @@ async def run_benchmark(
     *,
     top_k: int,
     strategies: Sequence[RetrievalStrategy],
+    scope_to_expected_policy: bool = False,
 ) -> dict[str, Any]:
     await psycopg_pool.open(wait=True, timeout=10)
     try:
         results = [
-            await evaluate_strategy(strategy, cases, top_k=top_k)
+            await evaluate_strategy(
+                strategy,
+                cases,
+                top_k=top_k,
+                scope_to_expected_policy=scope_to_expected_policy,
+            )
             for strategy in strategies
         ]
     finally:
@@ -257,6 +291,7 @@ async def run_benchmark(
         "dataset": "tests/eval/retrieval_cases.jsonl",
         "top_k": top_k,
         "case_count": len(cases),
+        "scope_to_expected_policy": scope_to_expected_policy,
         "strategies": results,
     }
 
@@ -266,6 +301,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--cases", type=Path, default=DEFAULT_CASES_PATH)
     parser.add_argument("--ids", nargs="*")
     parser.add_argument("--top-k", type=int, default=5)
+    parser.add_argument("--scope-to-expected-policy", action="store_true")
     parser.add_argument(
         "--strategies",
         nargs="+",
@@ -294,6 +330,7 @@ def main() -> None:
             strategies=[
                 RetrievalStrategy(strategy) for strategy in args.strategies
             ],
+            scope_to_expected_policy=args.scope_to_expected_policy,
         )
     )
     serialized = json.dumps(result, ensure_ascii=False, indent=2)
