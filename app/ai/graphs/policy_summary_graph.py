@@ -4,6 +4,7 @@ from typing import Any
 from langgraph.graph import END, START, StateGraph
 
 from app.ai.agents.policy_summary_agent import PolicySummaryAgent
+from app.ai.retrievers import PolicyRetriever
 from app.ai.states.policy_summary_state import PolicySummaryGraphState
 from app.ai.tools.policy_chunk_search_tool import search_policy_chunks
 from app.ai.utils.policy_summary_utils import build_policy_summary_key_points
@@ -15,8 +16,10 @@ class PolicySummaryGraphRunner:
     def __init__(
         self,
         agent: PolicySummaryAgent | None = None,
+        retriever: PolicyRetriever | None = None,
     ) -> None:
         self.agent = agent or PolicySummaryAgent()
+        self.retriever = retriever
         workflow = StateGraph(PolicySummaryGraphState)
         workflow.add_node("summary_evidence_search", self.summary_evidence_search)
         workflow.add_node("policy_summary", self.policy_summary)
@@ -46,11 +49,14 @@ class PolicySummaryGraphRunner:
         chunks: list[EvidenceChunk] = []
         if query:
             try:
-                chunks = await search_policy_chunks(
-                    query=query[:500],
-                    policy_ids=[policy["policy_id"]],
-                    top_k=5,
-                )
+                search_kwargs: dict[str, Any] = {
+                    "query": query[:500],
+                    "policy_ids": [policy["policy_id"]],
+                    "top_k": 5,
+                }
+                if self.retriever is not None:
+                    search_kwargs["retriever"] = self.retriever
+                chunks = await search_policy_chunks(**search_kwargs)
             except Exception:
                 chunks = []
         return {**state, "evidence_chunks": chunks}

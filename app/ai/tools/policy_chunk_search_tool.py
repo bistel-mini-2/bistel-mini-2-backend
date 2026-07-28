@@ -1,5 +1,10 @@
 import re
 
+from app.ai.retrievers import (
+    PolicyRetriever,
+    RetrievalStrategy,
+    build_policy_retriever,
+)
 from app.schemas.ai_contract import EvidenceChunk
 from app.services.policy_rag_service import PolicyRagService
 
@@ -26,15 +31,22 @@ async def search_policy_chunks(
     top_k: int = 5,
     evidence_role: str | None = None,
     rag_service: PolicyRagService | None = None,
+    strategy: RetrievalStrategy | str = RetrievalStrategy.VECTOR,
+    retriever: PolicyRetriever | None = None,
 ) -> list[EvidenceChunk]:
-    service = rag_service or PolicyRagService()
-    response = await service.search(query=query, k=top_k, policy_ids=policy_ids)
+    selected_retriever = retriever or build_policy_retriever(
+        strategy,
+        rag_service=rag_service,
+    )
+    results = await selected_retriever.retrieve(
+        query,
+        top_k=top_k,
+        policy_ids=policy_ids,
+    )
 
     allowed_policy_ids = {str(policy_id) for policy_id in policy_ids or []}
     chunks: list[EvidenceChunk] = []
-    for result in response.results:
-        if result.chunk_id is None or result.policy_id is None:
-            continue
+    for result in results:
         if _RAW_STRUCTURED_RE.search(result.chunk_text or ""):
             continue
 
@@ -54,7 +66,7 @@ async def search_policy_chunks(
                     or _source_title(result.policy_name, result.section)
                 ),
                 source_url=result.source_url or "",
-                score=_distance_to_score(result.distance),
+                score=result.score,
                 evidence_role=(
                     result.evidence_role
                     or _evidence_role(result.section)
@@ -75,9 +87,3 @@ def _evidence_role(section: str | None) -> str | None:
     if section is None:
         return None
     return ROLE_BY_SECTION.get(section)
-
-
-def _distance_to_score(distance: float | None) -> float | None:
-    if distance is None:
-        return None
-    return 1 / (1 + max(float(distance), 0.0))
