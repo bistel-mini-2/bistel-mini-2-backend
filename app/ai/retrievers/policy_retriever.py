@@ -1,4 +1,5 @@
 import asyncio
+import json
 from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import Any, Protocol
@@ -111,7 +112,7 @@ class SqlKeywordPolicyRetriever:
 
     @staticmethod
     def _to_hit(row: dict[str, Any]) -> RetrievalHit:
-        metadata = dict(row.get("metadata_json") or {})
+        metadata = _to_metadata(row.get("metadata_json"))
         return RetrievalHit(
             chunk_id=int(row["chunk_id"]),
             policy_id=int(row["policy_id"]),
@@ -226,3 +227,15 @@ def _to_str(value: Any) -> str | None:
     if value is None:
         return None
     return str(value)
+
+
+def _to_metadata(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return dict(value)
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError:
+            return {}
+        return dict(parsed) if isinstance(parsed, dict) else {}
+    return {}

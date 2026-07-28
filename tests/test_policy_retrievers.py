@@ -158,6 +158,33 @@ def test_sql_keyword_retriever_maps_repository_row(monkeypatch):
     ]
 
 
+def test_sql_keyword_retriever_parses_string_metadata():
+    hit = SqlKeywordPolicyRetriever._to_hit(
+        {
+            "chunk_id": 10,
+            "document_id": 20,
+            "policy_id": 100,
+            "policy_code": "P100",
+            "policy_name": "청년 지원",
+            "chunk_text": "지원 대상 근거",
+            "metadata_json": (
+                '{"section": "지원 대상", "evidence_role": "target"}'
+            ),
+            "source_type": "POLICY_DETAIL",
+            "source_title": "청년 지원 상세",
+            "source_url": "https://example.com/100",
+            "keyword_score": 1.0,
+        }
+    )
+
+    assert hit.section == "지원 대상"
+    assert hit.evidence_role == "target"
+    assert hit.metadata == {
+        "section": "지원 대상",
+        "evidence_role": "target",
+    }
+
+
 def test_hybrid_retriever_uses_rrf_and_rewards_shared_hits():
     keyword = StubRetriever([make_hit(1), make_hit(2)])
     vector = StubRetriever([make_hit(2), make_hit(3)])
