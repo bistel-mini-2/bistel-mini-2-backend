@@ -185,6 +185,26 @@ def test_sql_keyword_retriever_parses_string_metadata():
     }
 
 
+def test_sql_keyword_retriever_recovers_section_from_chunk_text():
+    hit = SqlKeywordPolicyRetriever._to_hit(
+        {
+            "chunk_id": 10,
+            "document_id": 20,
+            "policy_id": 100,
+            "policy_code": "P100",
+            "policy_name": "청년 지원",
+            "chunk_text": "정책명: 청년 지원\n섹션: 지원 내용\n내용:\n지원금",
+            "metadata_json": None,
+            "source_type": "POLICY_DETAIL",
+            "source_title": "청년 지원 상세",
+            "source_url": "https://example.com/100",
+            "keyword_score": 1.0,
+        }
+    )
+
+    assert hit.section == "지원 내용"
+
+
 def test_hybrid_retriever_uses_rrf_and_rewards_shared_hits():
     keyword = StubRetriever([make_hit(1), make_hit(2)])
     vector = StubRetriever([make_hit(2), make_hit(3)])

@@ -116,3 +116,51 @@ def test_to_search_result_preserves_metadata_fields():
     assert result.evidence_role == "application"
     assert result.semantic_section == "DOCUMENT"
     assert result.metadata["metadata_version"] == POLICY_RAG_METADATA_VERSION
+
+
+def test_row_to_search_result_parses_string_metadata():
+    service = PolicyRagService()
+
+    result = service._row_to_search_result(
+        {
+            "chunk_id": 1,
+            "document_id": 10,
+            "policy_id": 100,
+            "policy_code": "P100",
+            "policy_name": "테스트 정책",
+            "chunk_text": "지원 대상 근거",
+            "metadata_json": (
+                '{"section": "지원 대상", "evidence_role": "target"}'
+            ),
+            "source_type": "POLICY_DETAIL",
+            "source_title": "테스트 정책 상세",
+            "source_url": "https://example.com/100",
+            "distance": 0.2,
+        }
+    )
+
+    assert result.section == "지원 대상"
+    assert result.evidence_role == "target"
+    assert result.distance == 0.2
+
+
+def test_row_to_search_result_recovers_section_from_chunk_text():
+    service = PolicyRagService()
+
+    result = service._row_to_search_result(
+        {
+            "chunk_id": 1,
+            "document_id": 10,
+            "policy_id": 100,
+            "policy_code": "P100",
+            "policy_name": "테스트 정책",
+            "chunk_text": "정책명: 테스트 정책\n섹션: 신청 방법\n내용:\n주민센터",
+            "metadata_json": None,
+            "source_type": "POLICY_DETAIL",
+            "source_title": "테스트 정책 상세",
+            "source_url": "https://example.com/100",
+            "distance": 0.2,
+        }
+    )
+
+    assert result.section == "신청 방법"

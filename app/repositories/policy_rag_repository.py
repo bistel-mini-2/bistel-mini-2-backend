@@ -7,6 +7,87 @@ POLICY_RAG_METADATA_VERSION = "2026-06-26.1"
 
 class PolicyRagRepository:
     @staticmethod
+    async def search_chunks_by_vector(
+        conn,
+        embedding: list[float],
+        limit: int,
+        source_type: str | None = None,
+        policy_ids: list[int | str] | None = None,
+    ) -> list[dict[str, Any]]:
+        if not embedding or limit <= 0:
+            return []
+
+        numeric_policy_ids, policy_codes = PolicyRagRepository._policy_keys(
+            policy_ids
+        )
+        embedding_literal = "[" + ",".join(map(str, embedding)) + "]"
+        async with conn.cursor() as cur:
+            await cur.execute(
+                """
+                    SELECT
+                        c.chunk_id,
+                        c.document_id,
+                        c.chunk_text,
+                        c.metadata_json,
+                        d.source_title,
+                        d.source_url,
+                        d.source_type,
+                        p.policy_id,
+                        p.policy_code,
+                        p.policy_name,
+                        embedding.embedding <=> %s::vector AS distance
+                    FROM langchain_pg_embedding embedding
+                    JOIN langchain_pg_collection collection
+                      ON collection.uuid = embedding.collection_id
+                     AND collection.name = 'policy_documents'
+                    JOIN policy_document_chunk c
+                      ON embedding.id = c.chunk_id::text
+                    JOIN policy_document d ON d.document_id = c.document_id
+                    JOIN policy p ON p.policy_id = d.policy_id
+                    WHERE c.chunk_text IS NOT NULL
+                      AND btrim(c.chunk_text) <> ''
+                      AND (%s::varchar IS NULL OR d.source_type = %s::varchar)
+                      AND (
+                          (%s::bigint[] IS NULL AND %s::varchar[] IS NULL)
+                          OR p.policy_id = ANY(
+                              COALESCE(%s::bigint[], ARRAY[]::bigint[])
+                          )
+                          OR p.policy_code = ANY(
+                              COALESCE(%s::varchar[], ARRAY[]::varchar[])
+                          )
+                      )
+                    ORDER BY distance, c.chunk_id
+                    LIMIT %s
+                """,
+                (
+                    embedding_literal,
+                    source_type,
+                    source_type,
+                    numeric_policy_ids or None,
+                    policy_codes or None,
+                    numeric_policy_ids or None,
+                    policy_codes or None,
+                    limit,
+                ),
+            )
+            rows = await cur.fetchall()
+
+        columns = [
+            "chunk_id",
+            "document_id",
+            "chunk_text",
+            "metadata_json",
+            "source_title",
+            "source_url",
+            "source_type",
+            "policy_id",
+            "policy_code",
+            "policy_name",
+            "distance",
+        ]
+        return [dict(zip(columns, row, strict=True)) for row in rows]
+
+    @staticmethod
     async def search_chunks_by_keywords(
         conn,
         query: str,

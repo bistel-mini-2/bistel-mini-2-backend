@@ -1,5 +1,6 @@
 import asyncio
 import json
+import re
 from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import Any, Protocol
@@ -113,19 +114,23 @@ class SqlKeywordPolicyRetriever:
     @staticmethod
     def _to_hit(row: dict[str, Any]) -> RetrievalHit:
         metadata = _to_metadata(row.get("metadata_json"))
+        chunk_text = str(row["chunk_text"])
         return RetrievalHit(
             chunk_id=int(row["chunk_id"]),
             policy_id=int(row["policy_id"]),
             document_id=_to_int(row.get("document_id")),
             policy_code=_to_str(row.get("policy_code")),
             policy_name=_to_str(row.get("policy_name")),
-            section=_to_str(metadata.get("section")),
+            section=(
+                _to_str(metadata.get("section"))
+                or _section_from_text(chunk_text)
+            ),
             source_type=_to_str(row.get("source_type")),
             source_title=_to_str(row.get("source_title")),
             source_url=_to_str(row.get("source_url")),
             evidence_role=_to_str(metadata.get("evidence_role")),
             metadata=metadata,
-            chunk_text=str(row["chunk_text"]),
+            chunk_text=chunk_text,
             score=float(row["keyword_score"]),
         )
 
@@ -239,3 +244,8 @@ def _to_metadata(value: Any) -> dict[str, Any]:
             return {}
         return dict(parsed) if isinstance(parsed, dict) else {}
     return {}
+
+
+def _section_from_text(value: str) -> str | None:
+    match = re.search(r"^섹션:\s*(.+?)\s*$", value, re.MULTILINE)
+    return match.group(1).strip() if match else None
