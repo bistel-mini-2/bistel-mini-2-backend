@@ -27,7 +27,13 @@ def test_retrieval_goldset_has_exactly_50_unique_cases():
 
     assert len(cases) == 50
     assert len({case.case_id for case in cases}) == 50
-    assert len({case.expected_policy_id for case in cases}) == 10
+    assert len(
+        {
+            policy_id
+            for case in cases
+            for policy_id in case.expected_policy_ids
+        }
+    ) == 12
 
 
 def test_retrieval_queries_do_not_reveal_exact_policy_names():
@@ -40,19 +46,22 @@ def test_retrieval_queries_do_not_reveal_exact_policy_names():
         247: "위기임신 및 보호출산 지원",
         251: "인플루엔자 국가예방접종 지원사업",
         255: "첫만남이용권",
+        258: "의료급여임신.출산진료비지원",
+        287: "부모급여 지원",
         289: "에너지바우처",
         292: "스포츠강좌이용권",
     }
 
     for case in load_cases(DEFAULT_CASES_PATH):
-        assert policy_names[case.expected_policy_id] not in case.query
+        for policy_id in case.expected_policy_ids:
+            assert policy_names[policy_id] not in case.query
 
 
 def test_score_case_tracks_policy_and_section_hit_separately():
     case = RetrievalCase(
         case_id="R999",
         query="질문",
-        expected_policy_id=100,
+        expected_policy_ids=(100,),
         expected_sections=("지원 내용",),
         category="benefit",
     )
@@ -75,11 +84,32 @@ def test_score_case_tracks_policy_and_section_hit_separately():
     assert result["reciprocal_rank"] == 0.5
 
 
+def test_score_case_accepts_any_reviewed_policy_answer():
+    case = RetrievalCase(
+        case_id="R999",
+        query="질문",
+        expected_policy_ids=(100, 200),
+        expected_sections=("지원 내용",),
+        category="benefit",
+    )
+
+    result = score_case(
+        case,
+        [_hit(200, 1, "지원 내용")],
+        top_k=1,
+        elapsed_ms=10,
+    )
+
+    assert result["policy_hit"] is True
+    assert result["section_hit"] is True
+    assert result["policy_rank"] == 1
+
+
 def test_aggregate_metrics_includes_failures_in_denominator():
     case = RetrievalCase(
         case_id="R999",
         query="질문",
-        expected_policy_id=100,
+        expected_policy_ids=(100,),
         expected_sections=("지원 내용",),
         category="benefit",
     )

@@ -27,7 +27,7 @@ DEFAULT_CASES_PATH = Path(__file__).with_name("retrieval_cases.jsonl")
 class RetrievalCase:
     case_id: str
     query: str
-    expected_policy_id: int
+    expected_policy_ids: tuple[int, ...]
     expected_sections: tuple[str, ...]
     category: str
 
@@ -43,7 +43,10 @@ def load_cases(path: Path = DEFAULT_CASES_PATH) -> list[RetrievalCase]:
                 RetrievalCase(
                     case_id=str(payload["case_id"]),
                     query=str(payload["query"]),
-                    expected_policy_id=int(payload["expected_policy_id"]),
+                    expected_policy_ids=tuple(
+                        int(policy_id)
+                        for policy_id in payload["expected_policy_ids"]
+                    ),
                     expected_sections=tuple(payload["expected_sections"]),
                     category=str(payload["category"]),
                 )
@@ -54,6 +57,13 @@ def load_cases(path: Path = DEFAULT_CASES_PATH) -> list[RetrievalCase]:
     case_ids = [case.case_id for case in cases]
     if len(case_ids) != len(set(case_ids)):
         raise ValueError("retrieval case_id values must be unique")
+    if any(not case.expected_policy_ids for case in cases):
+        raise ValueError("each retrieval case needs an expected policy")
+    if any(
+        len(case.expected_policy_ids) != len(set(case.expected_policy_ids))
+        for case in cases
+    ):
+        raise ValueError("expected policy ids must be unique per case")
     return cases
 
 
@@ -103,12 +113,12 @@ def score_case(
     ranked_hits = list(hits[:top_k])
     policy_rank = _first_rank(
         ranked_hits,
-        lambda hit: hit.policy_id == case.expected_policy_id,
+        lambda hit: hit.policy_id in case.expected_policy_ids,
     )
     section_rank = _first_rank(
         ranked_hits,
         lambda hit: (
-            hit.policy_id == case.expected_policy_id
+            hit.policy_id in case.expected_policy_ids
             and hit.section in case.expected_sections
         ),
     )
@@ -116,7 +126,7 @@ def score_case(
         "case_id": case.case_id,
         "category": case.category,
         "query": case.query,
-        "expected_policy_id": case.expected_policy_id,
+        "expected_policy_ids": list(case.expected_policy_ids),
         "expected_sections": list(case.expected_sections),
         "policy_hit": policy_rank is not None,
         "section_hit": section_rank is not None,
