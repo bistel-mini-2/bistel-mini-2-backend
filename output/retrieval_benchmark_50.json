@@ -11,9 +11,9 @@
         "section_hit_at_k_pct": 12.0,
         "mrr": 0.0957,
         "error_rate_pct": 0.0,
-        "latency_mean_ms": 1293.714,
-        "latency_p50_ms": 1292.865,
-        "latency_p95_ms": 1789.117,
+        "latency_mean_ms": 1246.379,
+        "latency_p50_ms": 1251.276,
+        "latency_p95_ms": 1711.936,
         "by_category": {
           "application": {
             "case_count": 10,
@@ -54,7 +54,7 @@
           "policy_rank": null,
           "section_rank": null,
           "reciprocal_rank": 0.0,
-          "elapsed_ms": 1278.836,
+          "elapsed_ms": 880.072,
           "error": null,
           "retrieved": [
             {
@@ -109,7 +109,7 @@
           "policy_rank": null,
           "section_rank": null,
           "reciprocal_rank": 0.0,
-          "elapsed_ms": 690.333,
+          "elapsed_ms": 652.819,
           "error": null,
           "retrieved": [
             {
@@ -164,7 +164,7 @@
           "policy_rank": null,
           "section_rank": null,
           "reciprocal_rank": 0.0,
-          "elapsed_ms": 992.325,
+          "elapsed_ms": 949.579,
           "error": null,
           "retrieved": [
             {
@@ -219,7 +219,7 @@
           "policy_rank": null,
           "section_rank": null,
           "reciprocal_rank": 0.0,
-          "elapsed_ms": 628.53,
+          "elapsed_ms": 604.165,
           "error": null,
           "retrieved": [
             {
@@ -275,7 +275,7 @@
           "policy_rank": 1,
           "section_rank": 1,
           "reciprocal_rank": 1.0,
-          "elapsed_ms": 846.246,
+          "elapsed_ms": 814.254,
           "error": null,
           "retrieved": [
             {
@@ -331,7 +331,7 @@
           "policy_rank": null,
           "section_rank": null,
           "reciprocal_rank": 0.0,
-          "elapsed_ms": 1000.06,
+          "elapsed_ms": 1089.662,
           "error": null,
           "retrieved": [
             {
@@ -386,7 +386,7 @@
           "policy_rank": null,
           "section_rank": null,
           "reciprocal_rank": 0.0,
-          "elapsed_ms": 1003.554,
+          "elapsed_ms": 807.053,
           "error": null,
           "retrieved": [
             {
@@ -442,7 +442,7 @@
           "policy_rank": null,
           "section_rank": null,
           "reciprocal_rank": 0.0,
-          "elapsed_ms": 902.816,
+          "elapsed_ms": 739.139,
           "error": null,
           "retrieved": [
             {
@@ -497,7 +497,7 @@
           "policy_rank": null,
           "section_rank": null,
           "reciprocal_rank": 0.0,
-          "elapsed_ms": 722.476,
+          "elapsed_ms": 713.331,
           "error": null,
           "retrieved": [
             {
@@ -553,7 +553,7 @@
           "policy_rank": null,
           "section_rank": null,
           "reciprocal_rank": 0.0,
-          "elapsed_ms": 1199.934,
+          "elapsed_ms": 1165.629,
           "error": null,
           "retrieved": [
             {
@@ -609,7 +609,7 @@
           "policy_rank": null,
           "section_rank": null,
           "reciprocal_rank": 0.0,
-          "elapsed_ms": 1513.989,
+          "elapsed_ms": 1431.496,
           "error": null,
           "retrieved": [
             {
@@ -666,7 +666,7 @@
           "policy_rank": null,
           "section_rank": null,
           "reciprocal_rank": 0.0,
-          "elapsed_ms": 1136.081,
+          "elapsed_ms": 1141.912,
           "error": null,
           "retrieved": [
             {
@@ -721,7 +721,7 @@
           "policy_rank": null,
           "section_rank": null,
           "reciprocal_rank": 0.0,
-          "elapsed_ms": 1421.67,
+          "elapsed_ms": 1358.985,
           "error": null,
           "retrieved": [
             {
@@ -776,7 +776,7 @@
           "policy_rank": 3,
           "section_rank": null,
           "reciprocal_rank": 0.3333333333333333,
-          "elapsed_ms": 1196.09,
+          "elapsed_ms": 1176.68,
           "error": null,
           "retrieved": [
             {
@@ -831,7 +831,7 @@
           "policy_rank": 4,
           "section_rank": null,
           "reciprocal_rank": 0.25,
-          "elapsed_ms": 1172.67,
+          "elapsed_ms": 1139.233,
           "error": null,
           "retrieved": [
             {
@@ -887,7 +887,7 @@
           "policy_rank": 1,
           "section_rank": 1,
           "reciprocal_rank": 1.0,
-          "elapsed_ms": 1301.268,
+          "elapsed_ms": 1141.625,
           "error": null,
           "retrieved": [
             {
@@ -942,7 +942,7 @@
           "policy_rank": null,
           "section_rank": null,
           "reciprocal_rank": 0.0,
-          "elapsed_ms": 1293.95,
+          "elapsed_ms": 1228.306,
           "error": null,
           "retrieved": [
             {
@@ -998,7 +998,7 @@
           "policy_rank": null,
           "section_rank": null,
           "reciprocal_rank": 0.0,
-          "elapsed_ms": 1215.549,
+          "elapsed_ms": 1188.408,
           "error": null,
           "retrieved": [
             {
@@ -1053,7 +1053,7 @@
           "policy_rank": null,
           "section_rank": null,
           "reciprocal_rank": 0.0,
-          "elapsed_ms": 1147.177,
+          "elapsed_ms": 1171.543,
           "error": null,
           "retrieved": [
             {
@@ -1108,7 +1108,7 @@
           "policy_rank": 5,
           "section_rank": null,
           "reciprocal_rank": 0.2,
-          "elapsed_ms": 1087.337,
+          "elapsed_ms": 1046.679,
           "error": null,
           "retrieved": [
             {
@@ -1164,7 +1164,7 @@
           "policy_rank": null,
           "section_rank": null,
           "reciprocal_rank": 0.0,
-          "elapsed_ms": 1465.147,
+          "elapsed_ms": 1504.97,
           "error": null,
           "retrieved": [
             {
@@ -1220,7 +1220,7 @@
           "policy_rank": 2,
           "section_rank": 2,
           "reciprocal_rank": 0.5,
-          "elapsed_ms": 1573.026,
+          "elapsed_ms": 1578.492,
           "error": null,
           "retrieved": [
             {
@@ -1276,7 +1276,7 @@
           "policy_rank": null,
           "section_rank": null,
           "reciprocal_rank": 0.0,
-          "elapsed_ms": 1789.117,
+          "elapsed_ms": 1626.794,
           "error": null,
           "retrieved": [
             {
@@ -1332,7 +1332,7 @@
           "policy_rank": 2,
           "section_rank": 2,
           "reciprocal_rank": 0.5,
-          "elapsed_ms": 1263.943,
+          "elapsed_ms": 1248.417,
           "error": null,
           "retrieved": [
             {
@@ -1387,7 +1387,7 @@
           "policy_rank": null,
           "section_rank": null,
           "reciprocal_rank": 0.0,
-          "elapsed_ms": 1246.751,
+          "elapsed_ms": 1185.979,
           "error": null,
           "retrieved": [
             {
@@ -1443,7 +1443,7 @@
           "policy_rank": null,
           "section_rank": null,
           "reciprocal_rank": 0.0,
-          "elapsed_ms": 1285.759,
+          "elapsed_ms": 1309.805,
           "error": null,
           "retrieved": [
             {
@@ -1498,7 +1498,7 @@
           "policy_rank": null,
           "section_rank": null,
           "reciprocal_rank": 0.0,
-          "elapsed_ms": 1939.852,
+          "elapsed_ms": 1831.948,
           "error": null,
           "retrieved": [
             {
@@ -1554,7 +1554,7 @@
           "policy_rank": null,
           "section_rank": null,
           "reciprocal_rank": 0.0,
-          "elapsed_ms": 1291.78,
+          "elapsed_ms": 1254.135,
           "error": null,
           "retrieved": [
             {
@@ -1610,7 +1610,7 @@
           "policy_rank": 2,
           "section_rank": 2,
           "reciprocal_rank": 0.5,
-          "elapsed_ms": 1318.587,
+          "elapsed_ms": 1313.465,
           "error": null,
           "retrieved": [
             {
@@ -1665,7 +1665,7 @@
           "policy_rank": null,
           "section_rank": null,
           "reciprocal_rank": 0.0,
-          "elapsed_ms": 1193.152,
+          "elapsed_ms": 1170.445,
           "error": null,
           "retrieved": [
             {
@@ -1721,7 +1721,7 @@
           "policy_rank": null,
           "section_rank": null,
           "reciprocal_rank": 0.0,
-          "elapsed_ms": 1371.494,
+          "elapsed_ms": 1335.648,
           "error": null,
           "retrieved": [
             {
@@ -1777,7 +1777,7 @@
           "policy_rank": null,
           "section_rank": null,
           "reciprocal_rank": 0.0,
-          "elapsed_ms": 1388.292,
+          "elapsed_ms": 1364.451,
           "error": null,
           "retrieved": [
             {
@@ -1833,7 +1833,7 @@
           "policy_rank": null,
           "section_rank": null,
           "reciprocal_rank": 0.0,
-          "elapsed_ms": 1477.724,
+          "elapsed_ms": 1463.876,
           "error": null,
           "retrieved": [
             {
@@ -1888,7 +1888,7 @@
           "policy_rank": null,
           "section_rank": null,
           "reciprocal_rank": 0.0,
-          "elapsed_ms": 1158.62,
+          "elapsed_ms": 1147.502,
           "error": null,
           "retrieved": [
             {
@@ -1943,7 +1943,7 @@
           "policy_rank": null,
           "section_rank": null,
           "reciprocal_rank": 0.0,
-          "elapsed_ms": 1301.343,
+          "elapsed_ms": 1331.203,
           "error": null,
           "retrieved": [
             {
@@ -1999,7 +1999,7 @@
           "policy_rank": null,
           "section_rank": null,
           "reciprocal_rank": 0.0,
-          "elapsed_ms": 1439.279,
+          "elapsed_ms": 1417.652,
           "error": null,
           "retrieved": [
             {
@@ -2057,7 +2057,7 @@
           "policy_rank": null,
           "section_rank": null,
           "reciprocal_rank": 0.0,
-          "elapsed_ms": 1416.535,
+          "elapsed_ms": 1384.21,
           "error": null,
           "retrieved": [
             {
@@ -2112,7 +2112,7 @@
           "policy_rank": null,
           "section_rank": null,
           "reciprocal_rank": 0.0,
-          "elapsed_ms": 1577.45,
+          "elapsed_ms": 1410.243,
           "error": null,
           "retrieved": [
             {
@@ -2167,7 +2167,7 @@
           "policy_rank": null,
           "section_rank": null,
           "reciprocal_rank": 0.0,
-          "elapsed_ms": 1294.253,
+          "elapsed_ms": 1295.054,
           "error": null,
           "retrieved": [
             {
@@ -2222,7 +2222,7 @@
           "policy_rank": null,
           "section_rank": null,
           "reciprocal_rank": 0.0,
-          "elapsed_ms": 1580.236,
+          "elapsed_ms": 1547.603,
           "error": null,
           "retrieved": [
             {
@@ -2278,7 +2278,7 @@
           "policy_rank": null,
           "section_rank": null,
           "reciprocal_rank": 0.0,
-          "elapsed_ms": 1394.23,
+          "elapsed_ms": 1339.931,
           "error": null,
           "retrieved": [
             {
@@ -2333,7 +2333,7 @@
           "policy_rank": null,
           "section_rank": null,
           "reciprocal_rank": 0.0,
-          "elapsed_ms": 1152.465,
+          "elapsed_ms": 1145.311,
           "error": null,
           "retrieved": [
             {
@@ -2388,7 +2388,7 @@
           "policy_rank": null,
           "section_rank": null,
           "reciprocal_rank": 0.0,
-          "elapsed_ms": 1499.913,
+          "elapsed_ms": 1465.419,
           "error": null,
           "retrieved": [
             {
@@ -2444,7 +2444,7 @@
           "policy_rank": 2,
           "section_rank": 2,
           "reciprocal_rank": 0.5,
-          "elapsed_ms": 1242.477,
+          "elapsed_ms": 1224.197,
           "error": null,
           "retrieved": [
             {
@@ -2499,7 +2499,7 @@
           "policy_rank": null,
           "section_rank": null,
           "reciprocal_rank": 0.0,
-          "elapsed_ms": 1193.474,
+          "elapsed_ms": 1174.937,
           "error": null,
           "retrieved": [
             {
@@ -2555,7 +2555,7 @@
           "policy_rank": null,
           "section_rank": null,
           "reciprocal_rank": 0.0,
-          "elapsed_ms": 1383.633,
+          "elapsed_ms": 1333.139,
           "error": null,
           "retrieved": [
             {
@@ -2610,7 +2610,7 @@
           "policy_rank": null,
           "section_rank": null,
           "reciprocal_rank": 0.0,
-          "elapsed_ms": 1943.134,
+          "elapsed_ms": 1900.612,
           "error": null,
           "retrieved": [
             {
@@ -2666,7 +2666,7 @@
           "policy_rank": null,
           "section_rank": null,
           "reciprocal_rank": 0.0,
-          "elapsed_ms": 1571.559,
+          "elapsed_ms": 1505.336,
           "error": null,
           "retrieved": [
             {
@@ -2721,7 +2721,7 @@
           "policy_rank": null,
           "section_rank": null,
           "reciprocal_rank": 0.0,
-          "elapsed_ms": 1457.911,
+          "elapsed_ms": 1355.657,
           "error": null,
           "retrieved": [
             {
@@ -2776,7 +2776,7 @@
           "policy_rank": null,
           "section_rank": null,
           "reciprocal_rank": 0.0,
-          "elapsed_ms": 1723.689,
+          "elapsed_ms": 1711.936,
           "error": null,
           "retrieved": [
             {
@@ -2826,9 +2826,9 @@
         "section_hit_at_k_pct": 78.0,
         "mrr": 0.7497,
         "error_rate_pct": 0.0,
-        "latency_mean_ms": 864.092,
-        "latency_p50_ms": 747.106,
-        "latency_p95_ms": 1070.204,
+        "latency_mean_ms": 850.749,
+        "latency_p50_ms": 775.259,
+        "latency_p95_ms": 1071.743,
         "by_category": {
           "application": {
             "case_count": 10,
@@ -2869,7 +2869,7 @@
           "policy_rank": 1,
           "section_rank": 1,
           "reciprocal_rank": 1.0,
-          "elapsed_ms": 4486.58,
+          "elapsed_ms": 2905.807,
           "error": null,
           "retrieved": [
             {
@@ -2924,7 +2924,7 @@
           "policy_rank": null,
           "section_rank": null,
           "reciprocal_rank": 0.0,
-          "elapsed_ms": 939.407,
+          "elapsed_ms": 1071.743,
           "error": null,
           "retrieved": [
             {
@@ -2979,7 +2979,7 @@
           "policy_rank": 1,
           "section_rank": 3,
           "reciprocal_rank": 1.0,
-          "elapsed_ms": 1136.518,
+          "elapsed_ms": 1012.823,
           "error": null,
           "retrieved": [
             {
@@ -3034,7 +3034,7 @@
           "policy_rank": 2,
           "section_rank": 2,
           "reciprocal_rank": 0.5,
-          "elapsed_ms": 595.355,
+          "elapsed_ms": 849.018,
           "error": null,
           "retrieved": [
             {
@@ -3090,7 +3090,7 @@
           "policy_rank": 1,
           "section_rank": 1,
           "reciprocal_rank": 1.0,
-          "elapsed_ms": 1047.898,
+          "elapsed_ms": 1031.87,
           "error": null,
           "retrieved": [
             {
@@ -3098,35 +3098,35 @@
               "policy_id": 237,
               "chunk_id": 23790000003,
               "section": "지원 내용",
-              "score": 0.692715
+              "score": 0.692676
             },
             {
               "rank": 2,
               "policy_id": 237,
               "chunk_id": 23790000002,
               "section": "공식 지원대상 원문",
-              "score": 0.673691
+              "score": 0.673601
             },
             {
               "rank": 3,
               "policy_id": 245,
               "chunk_id": 24530010121,
               "section": "제2장 장애인 지역사회 복지사업",
-              "score": 0.664839
+              "score": 0.664723
             },
             {
               "rank": 4,
               "policy_id": 237,
               "chunk_id": 23790000000,
               "section": "정리된 지원 조건",
-              "score": 0.660353
+              "score": 0.660309
             },
             {
               "rank": 5,
               "policy_id": 245,
               "chunk_id": 24530010061,
               "section": null,
-              "score": 0.659943
+              "score": 0.659934
             }
           ]
         },
@@ -3146,7 +3146,7 @@
           "policy_rank": 1,
           "section_rank": null,
           "reciprocal_rank": 1.0,
-          "elapsed_ms": 1059.86,
+          "elapsed_ms": 1006.248,
           "error": null,
           "retrieved": [
             {
@@ -3201,7 +3201,7 @@
           "policy_rank": 1,
           "section_rank": 1,
           "reciprocal_rank": 1.0,
-          "elapsed_ms": 806.454,
+          "elapsed_ms": 971.331,
           "error": null,
           "retrieved": [
             {
@@ -3257,7 +3257,7 @@
           "policy_rank": null,
           "section_rank": null,
           "reciprocal_rank": 0.0,
-          "elapsed_ms": 607.639,
+          "elapsed_ms": 998.012,
           "error": null,
           "retrieved": [
             {
@@ -3265,35 +3265,35 @@
               "policy_id": 307,
               "chunk_id": 30730010013,
               "section": null,
-              "score": 0.662416
+              "score": 0.66243
             },
             {
               "rank": 2,
               "policy_id": 290,
               "chunk_id": 29030010338,
               "section": null,
-              "score": 0.661734
+              "score": 0.661751
             },
             {
               "rank": 3,
               "policy_id": 315,
               "chunk_id": 31530010342,
               "section": null,
-              "score": 0.661734
+              "score": 0.661751
             },
             {
               "rank": 4,
               "policy_id": 325,
               "chunk_id": 32530010339,
               "section": null,
-              "score": 0.661734
+              "score": 0.661751
             },
             {
               "rank": 5,
               "policy_id": 326,
               "chunk_id": 32630010337,
               "section": null,
-              "score": 0.661734
+              "score": 0.661751
             }
           ]
         },
@@ -3312,7 +3312,7 @@
           "policy_rank": 5,
           "section_rank": 5,
           "reciprocal_rank": 0.2,
-          "elapsed_ms": 737.258,
+          "elapsed_ms": 763.32,
           "error": null,
           "retrieved": [
             {
@@ -3368,7 +3368,7 @@
           "policy_rank": 1,
           "section_rank": 1,
           "reciprocal_rank": 1.0,
-          "elapsed_ms": 941.774,
+          "elapsed_ms": 755.774,
           "error": null,
           "retrieved": [
             {
@@ -3424,7 +3424,7 @@
           "policy_rank": 1,
           "section_rank": 1,
           "reciprocal_rank": 1.0,
-          "elapsed_ms": 1031.862,
+          "elapsed_ms": 832.435,
           "error": null,
           "retrieved": [
             {
@@ -3432,35 +3432,35 @@
               "policy_id": 240,
               "chunk_id": 24090000004,
               "section": "공식 지원대상 원문",
-              "score": 0.740866
+              "score": 0.740789
             },
             {
               "rank": 2,
               "policy_id": 240,
               "chunk_id": 24090000005,
               "section": "지원 내용",
-              "score": 0.726322
+              "score": 0.726277
             },
             {
               "rank": 3,
               "policy_id": 240,
               "chunk_id": 24090000000,
               "section": "정리된 지원 조건",
-              "score": 0.725823
+              "score": 0.725806
             },
             {
               "rank": 4,
               "policy_id": 240,
               "chunk_id": 24090000008,
               "section": "유의 사항",
-              "score": 0.706924
+              "score": 0.706834
             },
             {
               "rank": 5,
               "policy_id": 240,
               "chunk_id": 24090000001,
               "section": "조건 구조",
-              "score": 0.704786
+              "score": 0.70474
             }
           ]
         },
@@ -3481,7 +3481,7 @@
           "policy_rank": 1,
           "section_rank": 1,
           "reciprocal_rank": 1.0,
-          "elapsed_ms": 740.413,
+          "elapsed_ms": 624.545,
           "error": null,
           "retrieved": [
             {
@@ -3536,7 +3536,7 @@
           "policy_rank": 1,
           "section_rank": 4,
           "reciprocal_rank": 1.0,
-          "elapsed_ms": 748.809,
+          "elapsed_ms": 722.83,
           "error": null,
           "retrieved": [
             {
@@ -3591,7 +3591,7 @@
           "policy_rank": 1,
           "section_rank": 2,
           "reciprocal_rank": 1.0,
-          "elapsed_ms": 420.956,
+          "elapsed_ms": 618.255,
           "error": null,
           "retrieved": [
             {
@@ -3646,7 +3646,7 @@
           "policy_rank": 1,
           "section_rank": 2,
           "reciprocal_rank": 1.0,
-          "elapsed_ms": 653.775,
+          "elapsed_ms": 860.847,
           "error": null,
           "retrieved": [
             {
@@ -3702,7 +3702,7 @@
           "policy_rank": 1,
           "section_rank": 1,
           "reciprocal_rank": 1.0,
-          "elapsed_ms": 859.105,
+          "elapsed_ms": 738.145,
           "error": null,
           "retrieved": [
             {
@@ -3757,7 +3757,7 @@
           "policy_rank": 1,
           "section_rank": 1,
           "reciprocal_rank": 1.0,
-          "elapsed_ms": 840.489,
+          "elapsed_ms": 676.846,
           "error": null,
           "retrieved": [
             {
@@ -3765,35 +3765,35 @@
               "policy_id": 242,
               "chunk_id": 24290000003,
               "section": "지원 내용",
-              "score": 0.632304
+              "score": 0.632294
             },
             {
               "rank": 2,
               "policy_id": 329,
               "chunk_id": 32930010033,
               "section": "2. 무주택자인 근로자가 주거를 목적으로 「민법」 제303조에 따른 전세금 또는 「주택임대차보호법」",
-              "score": 0.614827
+              "score": 0.614819
             },
             {
               "rank": 3,
               "policy_id": 242,
               "chunk_id": 24290000004,
               "section": "신청 방법",
-              "score": 0.607687
+              "score": 0.60769
             },
             {
               "rank": 4,
               "policy_id": 242,
               "chunk_id": 24290000002,
               "section": "공식 지원대상 원문",
-              "score": 0.607596
+              "score": 0.607594
             },
             {
               "rank": 5,
               "policy_id": 245,
               "chunk_id": 24530010289,
               "section": "나. 제출 서류",
-              "score": 0.60624
+              "score": 0.606229
             }
           ]
         },
@@ -3813,7 +3813,7 @@
           "policy_rank": 1,
           "section_rank": 3,
           "reciprocal_rank": 1.0,
-          "elapsed_ms": 1026.357,
+          "elapsed_ms": 707.632,
           "error": null,
           "retrieved": [
             {
@@ -3868,7 +3868,7 @@
           "policy_rank": 1,
           "section_rank": null,
           "reciprocal_rank": 1.0,
-          "elapsed_ms": 720.67,
+          "elapsed_ms": 549.975,
           "error": null,
           "retrieved": [
             {
@@ -3923,7 +3923,7 @@
           "policy_rank": 1,
           "section_rank": 1,
           "reciprocal_rank": 1.0,
-          "elapsed_ms": 853.646,
+          "elapsed_ms": 882.813,
           "error": null,
           "retrieved": [
             {
@@ -3979,7 +3979,7 @@
           "policy_rank": 1,
           "section_rank": 1,
           "reciprocal_rank": 1.0,
-          "elapsed_ms": 969.351,
+          "elapsed_ms": 542.054,
           "error": null,
           "retrieved": [
             {
@@ -3987,35 +3987,35 @@
               "policy_id": 246,
               "chunk_id": 24690000004,
               "section": "지원 내용",
-              "score": 0.697272
+              "score": 0.697239
             },
             {
               "rank": 2,
               "policy_id": 246,
               "chunk_id": 24690000003,
               "section": "공식 지원대상 원문",
-              "score": 0.68498
+              "score": 0.684963
             },
             {
               "rank": 3,
               "policy_id": 246,
               "chunk_id": 24690000001,
               "section": "조건 구조",
-              "score": 0.68345
+              "score": 0.683444
             },
             {
               "rank": 4,
               "policy_id": 265,
               "chunk_id": 26590000004,
               "section": null,
-              "score": 0.676595
+              "score": 0.676566
             },
             {
               "rank": 5,
               "policy_id": 258,
               "chunk_id": 25890000006,
               "section": "신청 기간",
-              "score": 0.672366
+              "score": 0.672361
             }
           ]
         },
@@ -4035,7 +4035,7 @@
           "policy_rank": 2,
           "section_rank": 2,
           "reciprocal_rank": 0.5,
-          "elapsed_ms": 771.093,
+          "elapsed_ms": 679.139,
           "error": null,
           "retrieved": [
             {
@@ -4091,7 +4091,7 @@
           "policy_rank": null,
           "section_rank": null,
           "reciprocal_rank": 0.0,
-          "elapsed_ms": 936.616,
+          "elapsed_ms": 801.365,
           "error": null,
           "retrieved": [
             {
@@ -4099,35 +4099,35 @@
               "policy_id": 265,
               "chunk_id": 26590000004,
               "section": null,
-              "score": 0.673319
+              "score": 0.672995
             },
             {
               "rank": 2,
               "policy_id": 265,
               "chunk_id": 26590000005,
               "section": "지원 내용",
-              "score": 0.672819
+              "score": 0.672484
             },
             {
               "rank": 3,
               "policy_id": 252,
               "chunk_id": 25290000003,
               "section": "공식 지원대상 원문",
-              "score": 0.665094
+              "score": 0.66497
             },
             {
               "rank": 4,
               "policy_id": 258,
               "chunk_id": 25890000003,
               "section": "공식 지원대상 원문",
-              "score": 0.660207
+              "score": 0.660077
             },
             {
               "rank": 5,
               "policy_id": 252,
               "chunk_id": 25290000000,
               "section": "정리된 지원 조건",
-              "score": 0.659422
+              "score": 0.659358
             }
           ]
         },
@@ -4147,7 +4147,7 @@
           "policy_rank": 1,
           "section_rank": null,
           "reciprocal_rank": 1.0,
-          "elapsed_ms": 745.403,
+          "elapsed_ms": 662.82,
           "error": null,
           "retrieved": [
             {
@@ -4202,7 +4202,7 @@
           "policy_rank": null,
           "section_rank": null,
           "reciprocal_rank": 0.0,
-          "elapsed_ms": 750.224,
+          "elapsed_ms": 732.455,
           "error": null,
           "retrieved": [
             {
@@ -4210,35 +4210,35 @@
               "policy_id": 258,
               "chunk_id": 25890000006,
               "section": "신청 기간",
-              "score": 0.708545
+              "score": 0.70852
             },
             {
               "rank": 2,
               "policy_id": 252,
               "chunk_id": 25290000003,
               "section": "공식 지원대상 원문",
-              "score": 0.704981
+              "score": 0.704972
             },
             {
               "rank": 3,
               "policy_id": 258,
               "chunk_id": 25890000005,
               "section": "신청 방법",
-              "score": 0.695242
+              "score": 0.695226
             },
             {
               "rank": 4,
               "policy_id": 258,
               "chunk_id": 25890000003,
               "section": "공식 지원대상 원문",
-              "score": 0.693865
+              "score": 0.693838
             },
             {
               "rank": 5,
               "policy_id": 252,
               "chunk_id": 25290000006,
               "section": "신청 기간",
-              "score": 0.692257
+              "score": 0.692244
             }
           ]
         },
@@ -4258,7 +4258,7 @@
           "policy_rank": 1,
           "section_rank": 1,
           "reciprocal_rank": 1.0,
-          "elapsed_ms": 718.41,
+          "elapsed_ms": 771.13,
           "error": null,
           "retrieved": [
             {
@@ -4313,7 +4313,7 @@
           "policy_rank": 1,
           "section_rank": 1,
           "reciprocal_rank": 1.0,
-          "elapsed_ms": 638.487,
+          "elapsed_ms": 765.05,
           "error": null,
           "retrieved": [
             {
@@ -4369,7 +4369,7 @@
           "policy_rank": 5,
           "section_rank": 5,
           "reciprocal_rank": 0.2,
-          "elapsed_ms": 834.517,
+          "elapsed_ms": 1062.232,
           "error": null,
           "retrieved": [
             {
@@ -4425,7 +4425,7 @@
           "policy_rank": null,
           "section_rank": null,
           "reciprocal_rank": 0.0,
-          "elapsed_ms": 734.917,
+          "elapsed_ms": 1085.161,
           "error": null,
           "retrieved": [
             {
@@ -4433,35 +4433,35 @@
               "policy_id": 259,
               "chunk_id": 25990000005,
               "section": "지원 내용",
-              "score": 0.685648
+              "score": 0.685638
             },
             {
               "rank": 2,
               "policy_id": 258,
               "chunk_id": 25890000003,
               "section": "공식 지원대상 원문",
-              "score": 0.683537
+              "score": 0.683552
             },
             {
               "rank": 3,
               "policy_id": 250,
               "chunk_id": 25090000004,
               "section": "지원 내용",
-              "score": 0.681696
+              "score": 0.681752
             },
             {
               "rank": 4,
               "policy_id": 279,
               "chunk_id": 27990000005,
               "section": "신청 방법",
-              "score": 0.674941
+              "score": 0.67509
             },
             {
               "rank": 5,
               "policy_id": 316,
               "chunk_id": 31690000005,
               "section": "지원 내용",
-              "score": 0.674098
+              "score": 0.674245
             }
           ]
         },
@@ -4480,7 +4480,7 @@
           "policy_rank": 2,
           "section_rank": null,
           "reciprocal_rank": 0.5,
-          "elapsed_ms": 675.288,
+          "elapsed_ms": 919.236,
           "error": null,
           "retrieved": [
             {
@@ -4536,7 +4536,7 @@
           "policy_rank": 1,
           "section_rank": 1,
           "reciprocal_rank": 1.0,
-          "elapsed_ms": 684.798,
+          "elapsed_ms": 919.545,
           "error": null,
           "retrieved": [
             {
@@ -4592,7 +4592,7 @@
           "policy_rank": 1,
           "section_rank": 1,
           "reciprocal_rank": 1.0,
-          "elapsed_ms": 687.981,
+          "elapsed_ms": 673.301,
           "error": null,
           "retrieved": [
             {
@@ -4648,7 +4648,7 @@
           "policy_rank": 1,
           "section_rank": 1,
           "reciprocal_rank": 1.0,
-          "elapsed_ms": 614.415,
+          "elapsed_ms": 862.702,
           "error": null,
           "retrieved": [
             {
@@ -4703,7 +4703,7 @@
           "policy_rank": 1,
           "section_rank": 1,
           "reciprocal_rank": 1.0,
-          "elapsed_ms": 438.563,
+          "elapsed_ms": 773.288,
           "error": null,
           "retrieved": [
             {
@@ -4758,7 +4758,7 @@
           "policy_rank": 1,
           "section_rank": 2,
           "reciprocal_rank": 1.0,
-          "elapsed_ms": 764.77,
+          "elapsed_ms": 997.303,
           "error": null,
           "retrieved": [
             {
@@ -4766,35 +4766,35 @@
               "policy_id": 251,
               "chunk_id": 25190000003,
               "section": "공식 지원대상 원문",
-              "score": 0.661857
+              "score": 0.662052
             },
             {
               "rank": 2,
               "policy_id": 251,
               "chunk_id": 25190000005,
               "section": "신청 방법",
-              "score": 0.648971
+              "score": 0.649021
             },
             {
               "rank": 3,
               "policy_id": 251,
               "chunk_id": 25190000004,
               "section": "지원 내용",
-              "score": 0.647333
+              "score": 0.647439
             },
             {
               "rank": 4,
               "policy_id": 251,
               "chunk_id": 25190000000,
               "section": "정리된 지원 조건",
-              "score": 0.638398
+              "score": 0.638426
             },
             {
               "rank": 5,
               "policy_id": 326,
               "chunk_id": 32630010087,
               "section": "Ⅱ. 어린이집의 운영",
-              "score": 0.633555
+              "score": 0.633623
             }
           ]
         },
@@ -4814,7 +4814,7 @@
           "policy_rank": 1,
           "section_rank": 1,
           "reciprocal_rank": 1.0,
-          "elapsed_ms": 679.704,
+          "elapsed_ms": 629.632,
           "error": null,
           "retrieved": [
             {
@@ -4872,7 +4872,7 @@
           "policy_rank": 3,
           "section_rank": 3,
           "reciprocal_rank": 0.3333333333333333,
-          "elapsed_ms": 953.007,
+          "elapsed_ms": 705.473,
           "error": null,
           "retrieved": [
             {
@@ -4880,35 +4880,35 @@
               "policy_id": 331,
               "chunk_id": 33190000003,
               "section": "공식 지원대상 원문",
-              "score": 0.646635
+              "score": 0.646563
             },
             {
               "rank": 2,
               "policy_id": 326,
               "chunk_id": 32630010345,
               "section": "가. 추진배경",
-              "score": 0.646364
+              "score": 0.646311
             },
             {
               "rank": 3,
               "policy_id": 287,
               "chunk_id": 28790000005,
               "section": "지원 내용",
-              "score": 0.645141
+              "score": 0.645135
             },
             {
               "rank": 4,
               "policy_id": 303,
               "chunk_id": 30390000007,
               "section": "지원 내용",
-              "score": 0.644855
+              "score": 0.644876
             },
             {
               "rank": 5,
               "policy_id": 327,
               "chunk_id": 32730010363,
               "section": "Ⅹ. 보육예산지원(어린이집별 지원)",
-              "score": 0.643665
+              "score": 0.643568
             }
           ]
         },
@@ -4927,7 +4927,7 @@
           "policy_rank": 1,
           "section_rank": 1,
           "reciprocal_rank": 1.0,
-          "elapsed_ms": 708.839,
+          "elapsed_ms": 789.038,
           "error": null,
           "retrieved": [
             {
@@ -4982,7 +4982,7 @@
           "policy_rank": null,
           "section_rank": null,
           "reciprocal_rank": 0.0,
-          "elapsed_ms": 978.274,
+          "elapsed_ms": 583.656,
           "error": null,
           "retrieved": [
             {
@@ -4990,35 +4990,35 @@
               "policy_id": 327,
               "chunk_id": 32730010230,
               "section": "다. 급여신청 장소 및 시기",
-              "score": 0.700747
+              "score": 0.700564
             },
             {
               "rank": 2,
               "policy_id": 325,
               "chunk_id": 32530010231,
               "section": "다. 급여신청 장소 및 시기",
-              "score": 0.699629
+              "score": 0.699504
             },
             {
               "rank": 3,
               "policy_id": 326,
               "chunk_id": 32630010230,
               "section": "다. 급여신청 장소 및 시기",
-              "score": 0.695463
+              "score": 0.695293
             },
             {
               "rank": 4,
               "policy_id": 315,
               "chunk_id": 31530010233,
               "section": "다. 급여신청 장소 및 시기",
-              "score": 0.694907
+              "score": 0.694791
             },
             {
               "rank": 5,
               "policy_id": 328,
               "chunk_id": 32830010230,
               "section": "다. 급여신청 장소 및 시기",
-              "score": 0.693762
+              "score": 0.693588
             }
           ]
         },
@@ -5037,7 +5037,7 @@
           "policy_rank": 4,
           "section_rank": 4,
           "reciprocal_rank": 0.25,
-          "elapsed_ms": 1070.204,
+          "elapsed_ms": 777.23,
           "error": null,
           "retrieved": [
             {
@@ -5045,35 +5045,35 @@
               "policy_id": 240,
               "chunk_id": 24090000005,
               "section": "지원 내용",
-              "score": 0.698595
+              "score": 0.698556
             },
             {
               "rank": 2,
               "policy_id": 240,
               "chunk_id": 24090000004,
               "section": "공식 지원대상 원문",
-              "score": 0.696479
+              "score": 0.696432
             },
             {
               "rank": 3,
               "policy_id": 287,
               "chunk_id": 28730010157,
               "section": null,
-              "score": 0.695635
+              "score": 0.695586
             },
             {
               "rank": 4,
               "policy_id": 255,
               "chunk_id": 25590000004,
               "section": "지원 내용",
-              "score": 0.691204
+              "score": 0.691185
             },
             {
               "rank": 5,
               "policy_id": 258,
               "chunk_id": 25890000003,
               "section": "공식 지원대상 원문",
-              "score": 0.687189
+              "score": 0.68711
             }
           ]
         },
@@ -5093,7 +5093,7 @@
           "policy_rank": 2,
           "section_rank": 2,
           "reciprocal_rank": 0.5,
-          "elapsed_ms": 892.471,
+          "elapsed_ms": 692.608,
           "error": null,
           "retrieved": [
             {
@@ -5101,35 +5101,35 @@
               "policy_id": 287,
               "chunk_id": 28730010158,
               "section": "1. 신청서(별지 제2호서식)",
-              "score": 0.666825
+              "score": 0.666815
             },
             {
               "rank": 2,
               "policy_id": 289,
               "chunk_id": 28990000003,
               "section": "공식 지원대상 원문",
-              "score": 0.665993
+              "score": 0.666008
             },
             {
               "rank": 3,
               "policy_id": 287,
               "chunk_id": 28730010129,
               "section": "6. 기초생활보장 신청 후 전기･도시가스･지역난방･등유 등 구입을 지원받을 수 있는 에너지바우처 안내 및 신청을 희망하는",
-              "score": 0.66531
+              "score": 0.665322
             },
             {
               "rank": 4,
               "policy_id": 289,
               "chunk_id": 28990000000,
               "section": "정리된 지원 조건",
-              "score": 0.664315
+              "score": 0.664325
             },
             {
               "rank": 5,
               "policy_id": 288,
               "chunk_id": 28830010057,
               "section": "6. 기초생활보장 신청 후 전기･도시가스･지역난방･등유 등 구입을 지원받을 수 있는 에너지바우처 안내 및 신청을",
-              "score": 0.663668
+              "score": 0.663681
             }
           ]
         },
@@ -5148,7 +5148,7 @@
           "policy_rank": 1,
           "section_rank": 1,
           "reciprocal_rank": 1.0,
-          "elapsed_ms": 641.153,
+          "elapsed_ms": 1028.415,
           "error": null,
           "retrieved": [
             {
@@ -5156,35 +5156,35 @@
               "policy_id": 289,
               "chunk_id": 28990000004,
               "section": "지원 내용",
-              "score": 0.703639
+              "score": 0.70369
             },
             {
               "rank": 2,
               "policy_id": 245,
               "chunk_id": 24530010069,
               "section": null,
-              "score": 0.649577
+              "score": 0.649583
             },
             {
               "rank": 3,
               "policy_id": 289,
               "chunk_id": 28990000003,
               "section": "공식 지원대상 원문",
-              "score": 0.641634
+              "score": 0.641651
             },
             {
               "rank": 4,
               "policy_id": 245,
               "chunk_id": 24530010300,
               "section": null,
-              "score": 0.631904
+              "score": 0.631877
             },
             {
               "rank": 5,
               "policy_id": 289,
               "chunk_id": 28990000006,
               "section": "신청 기간",
-              "score": 0.606292
+              "score": 0.606297
             }
           ]
         },
@@ -5203,7 +5203,7 @@
           "policy_rank": 1,
           "section_rank": 1,
           "reciprocal_rank": 1.0,
-          "elapsed_ms": 712.363,
+          "elapsed_ms": 726.344,
           "error": null,
           "retrieved": [
             {
@@ -5259,7 +5259,7 @@
           "policy_rank": null,
           "section_rank": null,
           "reciprocal_rank": 0.0,
-          "elapsed_ms": 1064.527,
+          "elapsed_ms": 993.19,
           "error": null,
           "retrieved": [
             {
@@ -5314,7 +5314,7 @@
           "policy_rank": 2,
           "section_rank": 2,
           "reciprocal_rank": 0.5,
-          "elapsed_ms": 649.466,
+          "elapsed_ms": 882.489,
           "error": null,
           "retrieved": [
             {
@@ -5370,7 +5370,7 @@
           "policy_rank": 1,
           "section_rank": 1,
           "reciprocal_rank": 1.0,
-          "elapsed_ms": 977.222,
+          "elapsed_ms": 580.748,
           "error": null,
           "retrieved": [
             {
@@ -5378,35 +5378,35 @@
               "policy_id": 292,
               "chunk_id": 29290000000,
               "section": "정리된 지원 조건",
-              "score": 0.720054
+              "score": 0.72006
             },
             {
               "rank": 2,
               "policy_id": 292,
               "chunk_id": 29290000004,
               "section": "지원 내용",
-              "score": 0.704556
+              "score": 0.704519
             },
             {
               "rank": 3,
               "policy_id": 292,
               "chunk_id": 29290000003,
               "section": "공식 지원대상 원문",
-              "score": 0.70285
+              "score": 0.702834
             },
             {
               "rank": 4,
               "policy_id": 292,
               "chunk_id": 29290000001,
               "section": "조건 구조",
-              "score": 0.664326
+              "score": 0.664308
             },
             {
               "rank": 5,
               "policy_id": 292,
               "chunk_id": 29290000007,
               "section": "유의 사항",
-              "score": 0.659021
+              "score": 0.659009
             }
           ]
         },
@@ -5425,7 +5425,7 @@
           "policy_rank": 1,
           "section_rank": 1,
           "reciprocal_rank": 1.0,
-          "elapsed_ms": 705.438,
+          "elapsed_ms": 1007.449,
           "error": null,
           "retrieved": [
             {
@@ -5433,35 +5433,35 @@
               "policy_id": 292,
               "chunk_id": 29290000004,
               "section": "지원 내용",
-              "score": 0.740643
+              "score": 0.740679
             },
             {
               "rank": 2,
               "policy_id": 292,
               "chunk_id": 29290000003,
               "section": "공식 지원대상 원문",
-              "score": 0.704742
+              "score": 0.704746
             },
             {
               "rank": 3,
               "policy_id": 292,
               "chunk_id": 29290000000,
               "section": "정리된 지원 조건",
-              "score": 0.678323
+              "score": 0.678444
             },
             {
               "rank": 4,
               "policy_id": 317,
               "chunk_id": 31790000005,
               "section": "신청 기간",
-              "score": 0.667625
+              "score": 0.667639
             },
             {
               "rank": 5,
               "policy_id": 292,
               "chunk_id": 29290000007,
               "section": "유의 사항",
-              "score": 0.659282
+              "score": 0.659335
             }
           ]
         },
@@ -5481,7 +5481,7 @@
           "policy_rank": 1,
           "section_rank": 2,
           "reciprocal_rank": 1.0,
-          "elapsed_ms": 568.552,
+          "elapsed_ms": 655.031,
           "error": null,
           "retrieved": [
             {
@@ -5536,7 +5536,7 @@
           "policy_rank": 1,
           "section_rank": 1,
           "reciprocal_rank": 1.0,
-          "elapsed_ms": 657.467,
+          "elapsed_ms": 657.127,
           "error": null,
           "retrieved": [
             {
@@ -5591,7 +5591,7 @@
           "policy_rank": 1,
           "section_rank": 1,
           "reciprocal_rank": 1.0,
-          "elapsed_ms": 726.244,
+          "elapsed_ms": 1001.992,
           "error": null,
           "retrieved": [
             {
@@ -5599,35 +5599,35 @@
               "policy_id": 292,
               "chunk_id": 29290000004,
               "section": "지원 내용",
-              "score": 0.724618
+              "score": 0.725055
             },
             {
               "rank": 2,
               "policy_id": 292,
               "chunk_id": 29290000003,
               "section": "공식 지원대상 원문",
-              "score": 0.673277
+              "score": 0.673875
             },
             {
               "rank": 3,
               "policy_id": 288,
               "chunk_id": 28830010214,
               "section": null,
-              "score": 0.670434
+              "score": 0.670313
             },
             {
               "rank": 4,
               "policy_id": 288,
               "chunk_id": 28830010213,
               "section": null,
-              "score": 0.669908
+              "score": 0.669496
             },
             {
               "rank": 5,
               "policy_id": 305,
               "chunk_id": 30530010053,
               "section": "나) 방문교육서비스 제공",
-              "score": 0.66876
+              "score": 0.668499
             }
           ]
         }
@@ -5637,23 +5637,23 @@
       "strategy": "hybrid",
       "metrics": {
         "case_count": 50,
-        "policy_hit_at_k_pct": 86.0,
+        "policy_hit_at_k_pct": 88.0,
         "section_hit_at_k_pct": 78.0,
-        "mrr": 0.684,
+        "mrr": 0.7757,
         "error_rate_pct": 0.0,
-        "latency_mean_ms": 1326.807,
-        "latency_p50_ms": 1304.954,
-        "latency_p95_ms": 1825.477,
+        "latency_mean_ms": 1324.105,
+        "latency_p50_ms": 1336.956,
+        "latency_p95_ms": 1783.528,
         "by_category": {
           "application": {
             "case_count": 10,
-            "policy_hit_at_k_pct": 70.0,
+            "policy_hit_at_k_pct": 80.0,
             "section_hit_at_k_pct": 60.0
           },
           "benefit": {
             "case_count": 21,
             "policy_hit_at_k_pct": 90.48,
-            "section_hit_at_k_pct": 85.71
+            "section_hit_at_k_pct": 90.48
           },
           "caution": {
             "case_count": 4,
@@ -5663,7 +5663,7 @@
           "target": {
             "case_count": 15,
             "policy_hit_at_k_pct": 86.67,
-            "section_hit_at_k_pct": 73.33
+            "section_hit_at_k_pct": 66.67
           }
         }
       },
@@ -5684,7 +5684,7 @@
           "policy_rank": 1,
           "section_rank": 1,
           "reciprocal_rank": 1.0,
-          "elapsed_ms": 1524.239,
+          "elapsed_ms": 1553.221,
           "error": null,
           "retrieved": [
             {
@@ -5696,31 +5696,31 @@
             },
             {
               "rank": 2,
-              "policy_id": 290,
-              "chunk_id": 29030010375,
-              "section": null,
-              "score": 0.016393
-            },
-            {
-              "rank": 3,
               "policy_id": 237,
               "chunk_id": 23790000003,
               "section": "지원 내용",
               "score": 0.016129
             },
             {
+              "rank": 3,
+              "policy_id": 245,
+              "chunk_id": 24530010271,
+              "section": "라. 종사자 채용시 유의사항",
+              "score": 0.015385
+            },
+            {
               "rank": 4,
-              "policy_id": 315,
-              "chunk_id": 31530010379,
-              "section": null,
-              "score": 0.016129
+              "policy_id": 245,
+              "chunk_id": 24530010121,
+              "section": "제2장 장애인 지역사회 복지사업",
+              "score": 0.015152
             },
             {
               "rank": 5,
-              "policy_id": 237,
-              "chunk_id": 23790000000,
-              "section": "정리된 지원 조건",
-              "score": 0.015873
+              "policy_id": 290,
+              "chunk_id": 29030010375,
+              "section": null,
+              "score": 0.004098
             }
           ]
         },
@@ -5739,43 +5739,43 @@
           "policy_rank": null,
           "section_rank": null,
           "reciprocal_rank": 0.0,
-          "elapsed_ms": 906.599,
+          "elapsed_ms": 683.407,
           "error": null,
           "retrieved": [
             {
               "rank": 1,
-              "policy_id": 242,
-              "chunk_id": 24290000002,
-              "section": "공식 지원대상 원문",
-              "score": 0.016393
-            },
-            {
-              "rank": 2,
               "policy_id": 327,
               "chunk_id": 32730010251,
               "section": "가. 지원대상",
               "score": 0.016393
             },
             {
-              "rank": 3,
-              "policy_id": 245,
-              "chunk_id": 24530010038,
-              "section": "제1장 장애인 복지사업 개요",
-              "score": 0.016129
-            },
-            {
-              "rank": 4,
+              "rank": 2,
               "policy_id": 315,
               "chunk_id": 31530010254,
               "section": "가. 지원대상",
               "score": 0.016129
             },
             {
-              "rank": 5,
-              "policy_id": 245,
-              "chunk_id": 24530010201,
-              "section": "제4장 장애인 편의증진",
+              "rank": 3,
+              "policy_id": 325,
+              "chunk_id": 32530010255,
+              "section": null,
               "score": 0.015873
+            },
+            {
+              "rank": 4,
+              "policy_id": 326,
+              "chunk_id": 32630010254,
+              "section": null,
+              "score": 0.015625
+            },
+            {
+              "rank": 5,
+              "policy_id": 327,
+              "chunk_id": 32730010254,
+              "section": null,
+              "score": 0.015385
             }
           ]
         },
@@ -5792,9 +5792,9 @@
           "policy_hit": true,
           "section_hit": true,
           "policy_rank": 1,
-          "section_rank": 5,
+          "section_rank": 3,
           "reciprocal_rank": 1.0,
-          "elapsed_ms": 983.577,
+          "elapsed_ms": 1751.747,
           "error": null,
           "retrieved": [
             {
@@ -5806,31 +5806,31 @@
             },
             {
               "rank": 2,
-              "policy_id": 299,
-              "chunk_id": 29930010094,
-              "section": "Ⅰ. 사업 운영",
-              "score": 0.016393
-            },
-            {
-              "rank": 3,
               "policy_id": 245,
               "chunk_id": 24530010119,
               "section": "가. 장애인동료상담사 자격 개요",
               "score": 0.016129
             },
             {
-              "rank": 4,
-              "policy_id": 305,
-              "chunk_id": 30530010094,
-              "section": "Ⅰ. 사업 운영",
-              "score": 0.016129
-            },
-            {
-              "rank": 5,
+              "rank": 3,
               "policy_id": 237,
               "chunk_id": 23790000003,
               "section": "지원 내용",
               "score": 0.015873
+            },
+            {
+              "rank": 4,
+              "policy_id": 245,
+              "chunk_id": 24530010120,
+              "section": "제2장 장애인 지역사회 복지사업",
+              "score": 0.015625
+            },
+            {
+              "rank": 5,
+              "policy_id": 290,
+              "chunk_id": 29030010252,
+              "section": null,
+              "score": 0.014493
             }
           ]
         },
@@ -5846,46 +5846,46 @@
           ],
           "policy_hit": true,
           "section_hit": true,
-          "policy_rank": 3,
-          "section_rank": 3,
-          "reciprocal_rank": 0.3333333333333333,
-          "elapsed_ms": 1202.904,
+          "policy_rank": 2,
+          "section_rank": 2,
+          "reciprocal_rank": 0.5,
+          "elapsed_ms": 781.225,
           "error": null,
           "retrieved": [
             {
               "rank": 1,
-              "policy_id": 245,
-              "chunk_id": 24530010066,
-              "section": "제1장 장애인 복지사업 개요",
-              "score": 0.016393
-            },
-            {
-              "rank": 2,
               "policy_id": 324,
               "chunk_id": 32490000007,
               "section": "신청 방법",
               "score": 0.016393
             },
             {
-              "rank": 3,
+              "rank": 2,
               "policy_id": 237,
               "chunk_id": 23790000004,
               "section": "신청 방법",
               "score": 0.016129
             },
             {
-              "rank": 4,
-              "policy_id": 245,
-              "chunk_id": 24530010079,
-              "section": "제2장 장애인 지역사회 복지사업",
-              "score": 0.016129
-            },
-            {
-              "rank": 5,
+              "rank": 3,
               "policy_id": 290,
               "chunk_id": 29030010255,
               "section": "다. 지원단가",
               "score": 0.015873
+            },
+            {
+              "rank": 4,
+              "policy_id": 327,
+              "chunk_id": 32730010255,
+              "section": "다. 지원단가",
+              "score": 0.015625
+            },
+            {
+              "rank": 5,
+              "policy_id": 326,
+              "chunk_id": 32630010255,
+              "section": "다. 지원단가",
+              "score": 0.015385
             }
           ]
         },
@@ -5905,39 +5905,32 @@
           "policy_rank": 1,
           "section_rank": 1,
           "reciprocal_rank": 1.0,
-          "elapsed_ms": 866.312,
+          "elapsed_ms": 1045.995,
           "error": null,
           "retrieved": [
             {
               "rank": 1,
               "policy_id": 237,
-              "chunk_id": 23790000002,
-              "section": "공식 지원대상 원문",
-              "score": 0.032522
+              "chunk_id": 23790000003,
+              "section": "지원 내용",
+              "score": 0.020426
             },
             {
               "rank": 2,
               "policy_id": 237,
-              "chunk_id": 23790000003,
-              "section": "지원 내용",
-              "score": 0.032522
+              "chunk_id": 23790000002,
+              "section": "공식 지원대상 원문",
+              "score": 0.020227
             },
             {
               "rank": 3,
               "policy_id": 245,
               "chunk_id": 24530010061,
               "section": null,
-              "score": 0.029877
+              "score": 0.019008
             },
             {
               "rank": 4,
-              "policy_id": 245,
-              "chunk_id": 24530010038,
-              "section": "제1장 장애인 복지사업 개요",
-              "score": 0.015873
-            },
-            {
-              "rank": 5,
               "policy_id": 245,
               "chunk_id": 24530010121,
               "section": "제2장 장애인 지역사회 복지사업",
@@ -5961,7 +5954,7 @@
           "policy_rank": 1,
           "section_rank": null,
           "reciprocal_rank": 1.0,
-          "elapsed_ms": 1802.02,
+          "elapsed_ms": 972.05,
           "error": null,
           "retrieved": [
             {
@@ -5973,31 +5966,31 @@
             },
             {
               "rank": 2,
-              "policy_id": 283,
-              "chunk_id": 28330010187,
-              "section": null,
-              "score": 0.016393
-            },
-            {
-              "rank": 3,
-              "policy_id": 284,
-              "chunk_id": 28430010187,
-              "section": null,
-              "score": 0.016129
-            },
-            {
-              "rank": 4,
               "policy_id": 326,
               "chunk_id": 32630010228,
               "section": "3) 농어업인 기준",
               "score": 0.016129
             },
             {
-              "rank": 5,
-              "policy_id": 238,
-              "chunk_id": 23890000004,
-              "section": "지원 내용",
+              "rank": 3,
+              "policy_id": 315,
+              "chunk_id": 31530010231,
+              "section": "3) 농어업인 기준",
               "score": 0.015873
+            },
+            {
+              "rank": 4,
+              "policy_id": 328,
+              "chunk_id": 32830010228,
+              "section": "3) 농어업인 기준",
+              "score": 0.015625
+            },
+            {
+              "rank": 5,
+              "policy_id": 327,
+              "chunk_id": 32730010228,
+              "section": "3) 농어업인 기준",
+              "score": 0.015385
             }
           ]
         },
@@ -6016,7 +6009,7 @@
           "policy_rank": 1,
           "section_rank": 1,
           "reciprocal_rank": 1.0,
-          "elapsed_ms": 1001.688,
+          "elapsed_ms": 1430.718,
           "error": null,
           "retrieved": [
             {
@@ -6028,31 +6021,31 @@
             },
             {
               "rank": 2,
-              "policy_id": 245,
-              "chunk_id": 24530010200,
-              "section": "제4장 장애인 편의증진",
-              "score": 0.016393
-            },
-            {
-              "rank": 3,
               "policy_id": 238,
               "chunk_id": 23890000000,
               "section": "정리된 지원 조건",
               "score": 0.016129
             },
             {
-              "rank": 4,
-              "policy_id": 309,
-              "chunk_id": 30930010134,
+              "rank": 3,
+              "policy_id": 325,
+              "chunk_id": 32530010344,
               "section": null,
-              "score": 0.016129
+              "score": 0.015873
+            },
+            {
+              "rank": 4,
+              "policy_id": 326,
+              "chunk_id": 32630010342,
+              "section": null,
+              "score": 0.015625
             },
             {
               "rank": 5,
-              "policy_id": 237,
-              "chunk_id": 23790000002,
-              "section": "공식 지원대상 원문",
-              "score": 0.015873
+              "policy_id": 327,
+              "chunk_id": 32730010342,
+              "section": null,
+              "score": 0.015385
             }
           ]
         },
@@ -6072,7 +6065,7 @@
           "policy_rank": null,
           "section_rank": null,
           "reciprocal_rank": 0.0,
-          "elapsed_ms": 987.225,
+          "elapsed_ms": 750.11,
           "error": null,
           "retrieved": [
             {
@@ -6080,35 +6073,35 @@
               "policy_id": 307,
               "chunk_id": 30730010013,
               "section": null,
-              "score": 0.030886
+              "score": 0.020017
             },
             {
               "rank": 2,
-              "policy_id": 245,
-              "chunk_id": 24530010075,
-              "section": "제1장 장애인 복지사업 개요",
-              "score": 0.016393
-            },
-            {
-              "rank": 3,
-              "policy_id": 245,
-              "chunk_id": 24530010091,
-              "section": null,
-              "score": 0.016129
-            },
-            {
-              "rank": 4,
               "policy_id": 290,
               "chunk_id": 29030010338,
               "section": null,
               "score": 0.016129
             },
             {
-              "rank": 5,
-              "policy_id": 245,
-              "chunk_id": 24530010268,
-              "section": "제5장 장애인 차별금지 및 권익옹호",
+              "rank": 3,
+              "policy_id": 315,
+              "chunk_id": 31530010342,
+              "section": null,
               "score": 0.015873
+            },
+            {
+              "rank": 4,
+              "policy_id": 325,
+              "chunk_id": 32530010339,
+              "section": null,
+              "score": 0.015625
+            },
+            {
+              "rank": 5,
+              "policy_id": 326,
+              "chunk_id": 32630010337,
+              "section": null,
+              "score": 0.015385
             }
           ]
         },
@@ -6122,48 +6115,48 @@
           "expected_sections": [
             "신청 방법"
           ],
-          "policy_hit": false,
-          "section_hit": false,
-          "policy_rank": null,
-          "section_rank": null,
-          "reciprocal_rank": 0.0,
-          "elapsed_ms": 887.706,
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 5,
+          "section_rank": 5,
+          "reciprocal_rank": 0.2,
+          "elapsed_ms": 1193.323,
           "error": null,
           "retrieved": [
             {
               "rank": 1,
-              "policy_id": 245,
-              "chunk_id": 24530010024,
-              "section": "가. 대여대상",
-              "score": 0.016393
-            },
-            {
-              "rank": 2,
               "policy_id": 297,
               "chunk_id": 29730010070,
               "section": "1. 신청지원 대상 및 추진체계",
               "score": 0.016393
             },
             {
-              "rank": 3,
-              "policy_id": 245,
-              "chunk_id": 24530010106,
-              "section": "제2장 장애인 지역사회 복지사업",
-              "score": 0.016129
-            },
-            {
-              "rank": 4,
+              "rank": 2,
               "policy_id": 301,
               "chunk_id": 30190000007,
               "section": "신청 기간",
               "score": 0.016129
             },
             {
-              "rank": 5,
-              "policy_id": 245,
-              "chunk_id": 24530010228,
-              "section": "제5장 장애인 차별금지 및 권익옹호",
+              "rank": 3,
+              "policy_id": 300,
+              "chunk_id": 30090000005,
+              "section": "신청 기간",
               "score": 0.015873
+            },
+            {
+              "rank": 4,
+              "policy_id": 251,
+              "chunk_id": 25190000005,
+              "section": "신청 방법",
+              "score": 0.015625
+            },
+            {
+              "rank": 5,
+              "policy_id": 238,
+              "chunk_id": 23890000005,
+              "section": "신청 방법",
+              "score": 0.015385
             }
           ]
         },
@@ -6183,7 +6176,7 @@
           "policy_rank": 1,
           "section_rank": 1,
           "reciprocal_rank": 1.0,
-          "elapsed_ms": 2305.815,
+          "elapsed_ms": 1311.768,
           "error": null,
           "retrieved": [
             {
@@ -6195,31 +6188,31 @@
             },
             {
               "rank": 2,
-              "policy_id": 245,
-              "chunk_id": 24530010156,
-              "section": "제4장 장애인 편의증진",
-              "score": 0.016393
-            },
-            {
-              "rank": 3,
               "policy_id": 283,
               "chunk_id": 28330010029,
               "section": null,
               "score": 0.016129
             },
             {
-              "rank": 4,
-              "policy_id": 283,
-              "chunk_id": 28330010074,
+              "rank": 3,
+              "policy_id": 284,
+              "chunk_id": 28430010029,
               "section": null,
-              "score": 0.016129
+              "score": 0.015873
+            },
+            {
+              "rank": 4,
+              "policy_id": 238,
+              "chunk_id": 23890000004,
+              "section": "지원 내용",
+              "score": 0.015625
             },
             {
               "rank": 5,
-              "policy_id": 283,
-              "chunk_id": 28330010150,
+              "policy_id": 294,
+              "chunk_id": 29430010029,
               "section": null,
-              "score": 0.015873
+              "score": 0.015385
             }
           ]
         },
@@ -6239,7 +6232,7 @@
           "policy_rank": 1,
           "section_rank": 1,
           "reciprocal_rank": 1.0,
-          "elapsed_ms": 986.1,
+          "elapsed_ms": 1438.371,
           "error": null,
           "retrieved": [
             {
@@ -6251,31 +6244,31 @@
             },
             {
               "rank": 2,
-              "policy_id": 245,
-              "chunk_id": 24530010352,
-              "section": "제6장 장애인 생활안정지원",
-              "score": 0.016393
-            },
-            {
-              "rank": 3,
               "policy_id": 240,
               "chunk_id": 24090000005,
               "section": "지원 내용",
               "score": 0.016129
             },
             {
+              "rank": 3,
+              "policy_id": 258,
+              "chunk_id": 25890000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.014493
+            },
+            {
               "rank": 4,
-              "policy_id": 245,
-              "chunk_id": 24530010355,
-              "section": "제6장 장애인 생활안정지원",
-              "score": 0.016129
+              "policy_id": 258,
+              "chunk_id": 25890000000,
+              "section": "정리된 지원 조건",
+              "score": 0.014286
             },
             {
               "rank": 5,
-              "policy_id": 240,
-              "chunk_id": 24090000000,
-              "section": "정리된 지원 조건",
-              "score": 0.015873
+              "policy_id": 245,
+              "chunk_id": 24530010352,
+              "section": "제6장 장애인 생활안정지원",
+              "score": 0.004098
             }
           ]
         },
@@ -6296,7 +6289,7 @@
           "policy_rank": 1,
           "section_rank": 1,
           "reciprocal_rank": 1.0,
-          "elapsed_ms": 672.482,
+          "elapsed_ms": 792.175,
           "error": null,
           "retrieved": [
             {
@@ -6308,31 +6301,31 @@
             },
             {
               "rank": 2,
-              "policy_id": 283,
-              "chunk_id": 28330010026,
-              "section": null,
-              "score": 0.016393
-            },
-            {
-              "rank": 3,
               "policy_id": 258,
               "chunk_id": 25890000000,
               "section": "정리된 지원 조건",
               "score": 0.016129
             },
             {
-              "rank": 4,
-              "policy_id": 283,
-              "chunk_id": 28330010047,
-              "section": "2. 사후지원방식(’08. 3. 1일부터 시행)",
-              "score": 0.016129
-            },
-            {
-              "rank": 5,
+              "rank": 3,
               "policy_id": 259,
               "chunk_id": 25990000005,
               "section": "지원 내용",
               "score": 0.015873
+            },
+            {
+              "rank": 4,
+              "policy_id": 240,
+              "chunk_id": 24090000005,
+              "section": "지원 내용",
+              "score": 0.015385
+            },
+            {
+              "rank": 5,
+              "policy_id": 240,
+              "chunk_id": 24090000004,
+              "section": "공식 지원대상 원문",
+              "score": 0.014925
             }
           ]
         },
@@ -6347,11 +6340,11 @@
             "지원 내용"
           ],
           "policy_hit": true,
-          "section_hit": false,
+          "section_hit": true,
           "policy_rank": 1,
-          "section_rank": null,
+          "section_rank": 4,
           "reciprocal_rank": 1.0,
-          "elapsed_ms": 885.71,
+          "elapsed_ms": 884.521,
           "error": null,
           "retrieved": [
             {
@@ -6363,31 +6356,31 @@
             },
             {
               "rank": 2,
-              "policy_id": 288,
-              "chunk_id": 28830010150,
-              "section": "Ⅷ. 예산집행 및 정산",
-              "score": 0.016393
-            },
-            {
-              "rank": 3,
-              "policy_id": 288,
-              "chunk_id": 28830010305,
-              "section": "Ⅷ. 예산집행 및 정산",
-              "score": 0.016129
-            },
-            {
-              "rank": 4,
               "policy_id": 329,
               "chunk_id": 32930010014,
               "section": null,
               "score": 0.016129
             },
             {
-              "rank": 5,
-              "policy_id": 290,
-              "chunk_id": 29030010116,
-              "section": "라. 비용 및 국고보조금 지원 기준 위반시 조치사항",
+              "rank": 3,
+              "policy_id": 314,
+              "chunk_id": 31490000003,
+              "section": "공식 지원대상 원문",
               "score": 0.015873
+            },
+            {
+              "rank": 4,
+              "policy_id": 240,
+              "chunk_id": 24090000005,
+              "section": "지원 내용",
+              "score": 0.015625
+            },
+            {
+              "rank": 5,
+              "policy_id": 320,
+              "chunk_id": 32090000005,
+              "section": "지원 내용",
+              "score": 0.015385
             }
           ]
         },
@@ -6402,11 +6395,11 @@
             "신청 방법"
           ],
           "policy_hit": true,
-          "section_hit": true,
+          "section_hit": false,
           "policy_rank": 1,
-          "section_rank": 4,
+          "section_rank": null,
           "reciprocal_rank": 1.0,
-          "elapsed_ms": 1218.799,
+          "elapsed_ms": 698.355,
           "error": null,
           "retrieved": [
             {
@@ -6414,35 +6407,35 @@
               "policy_id": 240,
               "chunk_id": 24090000004,
               "section": "공식 지원대상 원문",
-              "score": 0.032266
+              "score": 0.020362
             },
             {
               "rank": 2,
               "policy_id": 240,
               "chunk_id": 24090000005,
               "section": "지원 내용",
-              "score": 0.03125
+              "score": 0.019531
             },
             {
               "rank": 3,
-              "policy_id": 288,
-              "chunk_id": 28830010176,
-              "section": "4. 서비스 개시 및 이용",
-              "score": 0.016393
+              "policy_id": 258,
+              "chunk_id": 25890000005,
+              "section": "신청 방법",
+              "score": 0.015385
             },
             {
               "rank": 4,
-              "policy_id": 240,
-              "chunk_id": 24090000006,
-              "section": "신청 방법",
-              "score": 0.016129
+              "policy_id": 287,
+              "chunk_id": 28730010157,
+              "section": null,
+              "score": 0.015152
             },
             {
               "rank": 5,
-              "policy_id": 288,
-              "chunk_id": 28830010186,
-              "section": "4. 서비스 개시 및 이용",
-              "score": 0.016129
+              "policy_id": 258,
+              "chunk_id": 25890000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.014925
             }
           ]
         },
@@ -6459,9 +6452,9 @@
           "policy_hit": true,
           "section_hit": true,
           "policy_rank": 1,
-          "section_rank": 3,
+          "section_rank": 2,
           "reciprocal_rank": 1.0,
-          "elapsed_ms": 763.02,
+          "elapsed_ms": 637.731,
           "error": null,
           "retrieved": [
             {
@@ -6469,35 +6462,35 @@
               "policy_id": 240,
               "chunk_id": 24090000004,
               "section": "공식 지원대상 원문",
-              "score": 0.032018
+              "score": 0.0203
             },
             {
               "rank": 2,
-              "policy_id": 283,
-              "chunk_id": 28330010159,
-              "section": "나. 급여계좌예외｣에 따라 ‘지방생활보장위원회 심의･의결’을 통하여 혈족 이외 제3자 중 이해관계자(실제",
-              "score": 0.016393
-            },
-            {
-              "rank": 3,
               "policy_id": 240,
               "chunk_id": 24090000005,
               "section": "지원 내용",
               "score": 0.016129
             },
             {
-              "rank": 4,
-              "policy_id": 284,
-              "chunk_id": 28430010159,
-              "section": "나. 급여계좌예외｣에 따라 ‘지방생활보장위원회 심의･의결’을 통하여 혈족 이외 제3자 중 이해관계자(실제",
-              "score": 0.016129
-            },
-            {
-              "rank": 5,
+              "rank": 3,
               "policy_id": 258,
               "chunk_id": 25890000003,
               "section": "공식 지원대상 원문",
               "score": 0.015873
+            },
+            {
+              "rank": 4,
+              "policy_id": 257,
+              "chunk_id": 25790000008,
+              "section": "유의 사항",
+              "score": 0.015625
+            },
+            {
+              "rank": 5,
+              "policy_id": 279,
+              "chunk_id": 27990000004,
+              "section": "지원 내용",
+              "score": 0.015385
             }
           ]
         },
@@ -6517,43 +6510,43 @@
           "policy_rank": 1,
           "section_rank": 1,
           "reciprocal_rank": 1.0,
-          "elapsed_ms": 1145.638,
+          "elapsed_ms": 1125.742,
           "error": null,
           "retrieved": [
             {
               "rank": 1,
               "policy_id": 242,
-              "chunk_id": 24290000002,
-              "section": "공식 지원대상 원문",
-              "score": 0.032266
+              "chunk_id": 24290000003,
+              "section": "지원 내용",
+              "score": 0.02024
             },
             {
               "rank": 2,
               "policy_id": 242,
-              "chunk_id": 24290000003,
-              "section": "지원 내용",
-              "score": 0.031778
+              "chunk_id": 24290000001,
+              "section": "조건 구조",
+              "score": 0.020035
             },
             {
               "rank": 3,
-              "policy_id": 242,
-              "chunk_id": 24290000001,
-              "section": "조건 구조",
-              "score": 0.031754
+              "policy_id": 322,
+              "chunk_id": 32230010093,
+              "section": "1) 예산 현황 및 집행 기준",
+              "score": 0.014706
             },
             {
               "rank": 4,
-              "policy_id": 242,
-              "chunk_id": 24290000000,
-              "section": "정리된 지원 조건",
-              "score": 0.031025
+              "policy_id": 287,
+              "chunk_id": 28730010052,
+              "section": null,
+              "score": 0.014493
             },
             {
               "rank": 5,
-              "policy_id": 245,
-              "chunk_id": 24530010304,
-              "section": "2) 사업일정란 기재요령 [신청자]",
-              "score": 0.016129
+              "policy_id": 283,
+              "chunk_id": 28330010106,
+              "section": null,
+              "score": 0.014286
             }
           ]
         },
@@ -6572,7 +6565,7 @@
           "policy_rank": 1,
           "section_rank": 1,
           "reciprocal_rank": 1.0,
-          "elapsed_ms": 1323.298,
+          "elapsed_ms": 1362.243,
           "error": null,
           "retrieved": [
             {
@@ -6584,31 +6577,31 @@
             },
             {
               "rank": 2,
-              "policy_id": 245,
-              "chunk_id": 24530010156,
-              "section": "제4장 장애인 편의증진",
-              "score": 0.016393
-            },
-            {
-              "rank": 3,
-              "policy_id": 245,
-              "chunk_id": 24530010233,
-              "section": "4. 장애인권익옹호기관 운영법인의 외부임원(이사 등)이 조사대상의 기관장인 경우",
-              "score": 0.016129
-            },
-            {
-              "rank": 4,
               "policy_id": 329,
               "chunk_id": 32930010033,
               "section": "2. 무주택자인 근로자가 주거를 목적으로 「민법」 제303조에 따른 전세금 또는 「주택임대차보호법」",
               "score": 0.016129
             },
             {
-              "rank": 5,
+              "rank": 3,
               "policy_id": 242,
               "chunk_id": 24290000004,
               "section": "신청 방법",
               "score": 0.015873
+            },
+            {
+              "rank": 4,
+              "policy_id": 245,
+              "chunk_id": 24530010289,
+              "section": "나. 제출 서류",
+              "score": 0.015385
+            },
+            {
+              "rank": 5,
+              "policy_id": 288,
+              "chunk_id": 28830010175,
+              "section": "1. 귀하가 신청한 사회서비스 조사･심의 결과 사회서비스 이용권(바우처) 대상자로 결정되었음을 알려드립니다.",
+              "score": 0.015152
             }
           ]
         },
@@ -6624,11 +6617,11 @@
             "공식 지원대상 원문"
           ],
           "policy_hit": true,
-          "section_hit": true,
+          "section_hit": false,
           "policy_rank": 1,
-          "section_rank": 5,
+          "section_rank": null,
           "reciprocal_rank": 1.0,
-          "elapsed_ms": 1294.483,
+          "elapsed_ms": 1333.691,
           "error": null,
           "retrieved": [
             {
@@ -6640,31 +6633,31 @@
             },
             {
               "rank": 2,
-              "policy_id": 245,
-              "chunk_id": 24530010000,
-              "section": "관련 문서",
-              "score": 0.016393
-            },
-            {
-              "rank": 3,
               "policy_id": 242,
               "chunk_id": 24290000001,
               "section": "조건 구조",
               "score": 0.016129
             },
             {
-              "rank": 4,
+              "rank": 3,
               "policy_id": 283,
-              "chunk_id": 28330010135,
-              "section": "아. 그 밖에 보건복지부장관이 필요하다고 인정하는 기준",
-              "score": 0.016129
+              "chunk_id": 28330010117,
+              "section": null,
+              "score": 0.014925
+            },
+            {
+              "rank": 4,
+              "policy_id": 284,
+              "chunk_id": 28430010117,
+              "section": null,
+              "score": 0.014706
             },
             {
               "rank": 5,
-              "policy_id": 242,
-              "chunk_id": 24290000002,
-              "section": "공식 지원대상 원문",
-              "score": 0.015873
+              "policy_id": 294,
+              "chunk_id": 29430010117,
+              "section": null,
+              "score": 0.014493
             }
           ]
         },
@@ -6683,7 +6676,7 @@
           "policy_rank": 1,
           "section_rank": null,
           "reciprocal_rank": 1.0,
-          "elapsed_ms": 1252.329,
+          "elapsed_ms": 1382.839,
           "error": null,
           "retrieved": [
             {
@@ -6695,31 +6688,31 @@
             },
             {
               "rank": 2,
-              "policy_id": 245,
-              "chunk_id": 24530010057,
-              "section": "제1장 장애인 복지사업 개요",
-              "score": 0.016393
-            },
-            {
-              "rank": 3,
               "policy_id": 242,
               "chunk_id": 24290000002,
               "section": "공식 지원대상 원문",
               "score": 0.016129
             },
             {
+              "rank": 3,
+              "policy_id": 238,
+              "chunk_id": 23890000005,
+              "section": "신청 방법",
+              "score": 0.014925
+            },
+            {
               "rank": 4,
-              "policy_id": 245,
-              "chunk_id": 24530010083,
-              "section": "1. 예산현황",
-              "score": 0.016129
+              "policy_id": 238,
+              "chunk_id": 23890000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.014493
             },
             {
               "rank": 5,
-              "policy_id": 242,
-              "chunk_id": 24290000006,
-              "section": "유의 사항",
-              "score": 0.015873
+              "policy_id": 245,
+              "chunk_id": 24530010057,
+              "section": "제1장 장애인 복지사업 개요",
+              "score": 0.004098
             }
           ]
         },
@@ -6738,7 +6731,7 @@
           "policy_rank": 1,
           "section_rank": 1,
           "reciprocal_rank": 1.0,
-          "elapsed_ms": 1144.498,
+          "elapsed_ms": 1192.401,
           "error": null,
           "retrieved": [
             {
@@ -6746,35 +6739,35 @@
               "policy_id": 242,
               "chunk_id": 24290000003,
               "section": "지원 내용",
-              "score": 0.031545
+              "score": 0.020181
             },
             {
               "rank": 2,
               "policy_id": 242,
               "chunk_id": 24290000002,
               "section": "공식 지원대상 원문",
-              "score": 0.030769
+              "score": 0.019231
             },
             {
               "rank": 3,
-              "policy_id": 283,
-              "chunk_id": 28330010033,
+              "policy_id": 287,
+              "chunk_id": 28730010052,
               "section": null,
-              "score": 0.016393
+              "score": 0.015873
             },
             {
               "rank": 4,
-              "policy_id": 242,
-              "chunk_id": 24290000001,
-              "section": "조건 구조",
-              "score": 0.016129
+              "policy_id": 287,
+              "chunk_id": 28730010051,
+              "section": "4. 주민등록표 등･초본(주소지 관할 가정법원에 신청하는 경우) 1통",
+              "score": 0.014706
             },
             {
               "rank": 5,
-              "policy_id": 284,
-              "chunk_id": 28430010033,
-              "section": null,
-              "score": 0.016129
+              "policy_id": 299,
+              "chunk_id": 29930010164,
+              "section": "18. 「다문화가족지원법」 제2조에 따른 다문화가족의 구성원으로서 배우자와 3년",
+              "score": 0.014286
             }
           ]
         },
@@ -6794,7 +6787,7 @@
           "policy_rank": 1,
           "section_rank": 1,
           "reciprocal_rank": 1.0,
-          "elapsed_ms": 1602.885,
+          "elapsed_ms": 1534.547,
           "error": null,
           "retrieved": [
             {
@@ -6806,31 +6799,31 @@
             },
             {
               "rank": 2,
-              "policy_id": 283,
-              "chunk_id": 28330010047,
-              "section": "2. 사후지원방식(’08. 3. 1일부터 시행)",
-              "score": 0.016393
-            },
-            {
-              "rank": 3,
               "policy_id": 246,
               "chunk_id": 24690000003,
               "section": "공식 지원대상 원문",
               "score": 0.016129
             },
             {
+              "rank": 3,
+              "policy_id": 265,
+              "chunk_id": 26590000004,
+              "section": null,
+              "score": 0.015625
+            },
+            {
               "rank": 4,
-              "policy_id": 284,
-              "chunk_id": 28430010047,
-              "section": "2. 사후지원방식(’08. 3. 1일부터 시행)",
-              "score": 0.016129
+              "policy_id": 258,
+              "chunk_id": 25890000006,
+              "section": "신청 기간",
+              "score": 0.015385
             },
             {
               "rank": 5,
-              "policy_id": 246,
-              "chunk_id": 24690000001,
-              "section": "조건 구조",
-              "score": 0.015873
+              "policy_id": 265,
+              "chunk_id": 26590000005,
+              "section": "지원 내용",
+              "score": 0.015152
             }
           ]
         },
@@ -6850,7 +6843,7 @@
           "policy_rank": 2,
           "section_rank": 2,
           "reciprocal_rank": 0.5,
-          "elapsed_ms": 1708.984,
+          "elapsed_ms": 1764.156,
           "error": null,
           "retrieved": [
             {
@@ -6858,14 +6851,14 @@
               "policy_id": 265,
               "chunk_id": 26590000008,
               "section": "유의 사항",
-              "score": 0.031498
+              "score": 0.019779
             },
             {
               "rank": 2,
               "policy_id": 246,
               "chunk_id": 24690000003,
               "section": "공식 지원대상 원문",
-              "score": 0.030835
+              "score": 0.018958
             },
             {
               "rank": 3,
@@ -6876,17 +6869,17 @@
             },
             {
               "rank": 4,
-              "policy_id": 329,
-              "chunk_id": 32930010030,
-              "section": null,
-              "score": 0.016393
-            },
-            {
-              "rank": 5,
               "policy_id": 246,
               "chunk_id": 24690000001,
               "section": "조건 구조",
               "score": 0.016129
+            },
+            {
+              "rank": 5,
+              "policy_id": 329,
+              "chunk_id": 32930010033,
+              "section": "2. 무주택자인 근로자가 주거를 목적으로 「민법」 제303조에 따른 전세금 또는 「주택임대차보호법」",
+              "score": 0.015625
             }
           ]
         },
@@ -6906,7 +6899,7 @@
           "policy_rank": null,
           "section_rank": null,
           "reciprocal_rank": 0.0,
-          "elapsed_ms": 1662.49,
+          "elapsed_ms": 1715.212,
           "error": null,
           "retrieved": [
             {
@@ -6918,31 +6911,31 @@
             },
             {
               "rank": 2,
-              "policy_id": 290,
-              "chunk_id": 29030010231,
-              "section": "라. 신청 구비서류",
-              "score": 0.016393
-            },
-            {
-              "rank": 3,
               "policy_id": 265,
               "chunk_id": 26590000005,
               "section": "지원 내용",
               "score": 0.016129
             },
             {
-              "rank": 4,
-              "policy_id": 290,
-              "chunk_id": 29030010246,
-              "section": "Ⅸ. 보육예산지원(보육료･가정양육 수당)",
-              "score": 0.016129
-            },
-            {
-              "rank": 5,
+              "rank": 3,
               "policy_id": 252,
               "chunk_id": 25290000003,
               "section": "공식 지원대상 원문",
               "score": 0.015873
+            },
+            {
+              "rank": 4,
+              "policy_id": 258,
+              "chunk_id": 25890000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.015625
+            },
+            {
+              "rank": 5,
+              "policy_id": 252,
+              "chunk_id": 25290000000,
+              "section": "정리된 지원 조건",
+              "score": 0.015385
             }
           ]
         },
@@ -6962,7 +6955,7 @@
           "policy_rank": 1,
           "section_rank": 1,
           "reciprocal_rank": 1.0,
-          "elapsed_ms": 1248.655,
+          "elapsed_ms": 1300.517,
           "error": null,
           "retrieved": [
             {
@@ -6970,35 +6963,35 @@
               "policy_id": 246,
               "chunk_id": 24690000003,
               "section": "공식 지원대상 원문",
-              "score": 0.031281
+              "score": 0.019184
             },
             {
               "rank": 2,
-              "policy_id": 245,
-              "chunk_id": 24530010129,
-              "section": "1) 인공와우는 1set(내부장치, 외부장치)에 한하여 요양급여하되, 분실, 수리가 불가능한",
-              "score": 0.016393
-            },
-            {
-              "rank": 3,
               "policy_id": 246,
               "chunk_id": 24690000006,
               "section": "신청 기간",
               "score": 0.016393
             },
             {
-              "rank": 4,
+              "rank": 3,
               "policy_id": 288,
               "chunk_id": 28830010306,
               "section": null,
               "score": 0.016129
             },
             {
-              "rank": 5,
-              "policy_id": 245,
-              "chunk_id": 24530010127,
-              "section": "제3장 장애인 지역사회 재활사업 운영 및 기타",
+              "rank": 4,
+              "policy_id": 288,
+              "chunk_id": 28830010151,
+              "section": null,
               "score": 0.015873
+            },
+            {
+              "rank": 5,
+              "policy_id": 305,
+              "chunk_id": 30530010060,
+              "section": "13. 임대차계약서, 사용대차확인서 등 임차가구임을 증빙할 수 있는 서류(주거급여 임차",
+              "score": 0.014925
             }
           ]
         },
@@ -7017,7 +7010,7 @@
           "policy_rank": null,
           "section_rank": null,
           "reciprocal_rank": 0.0,
-          "elapsed_ms": 1232.239,
+          "elapsed_ms": 1217.889,
           "error": null,
           "retrieved": [
             {
@@ -7029,31 +7022,31 @@
             },
             {
               "rank": 2,
-              "policy_id": 290,
-              "chunk_id": 29030010060,
-              "section": "Ⅱ. 어린이집의 운영",
-              "score": 0.016393
-            },
-            {
-              "rank": 3,
               "policy_id": 252,
               "chunk_id": 25290000003,
               "section": "공식 지원대상 원문",
               "score": 0.016129
             },
             {
-              "rank": 4,
-              "policy_id": 290,
-              "chunk_id": 29030010145,
-              "section": "2) 채용방법",
-              "score": 0.016129
-            },
-            {
-              "rank": 5,
+              "rank": 3,
               "policy_id": 258,
               "chunk_id": 25890000005,
               "section": "신청 방법",
               "score": 0.015873
+            },
+            {
+              "rank": 4,
+              "policy_id": 252,
+              "chunk_id": 25290000006,
+              "section": "신청 기간",
+              "score": 0.015385
+            },
+            {
+              "rank": 5,
+              "policy_id": 247,
+              "chunk_id": 24790000006,
+              "section": "신청 기간",
+              "score": 0.015152
             }
           ]
         },
@@ -7073,7 +7066,7 @@
           "policy_rank": 1,
           "section_rank": 1,
           "reciprocal_rank": 1.0,
-          "elapsed_ms": 1291.261,
+          "elapsed_ms": 1301.349,
           "error": null,
           "retrieved": [
             {
@@ -7085,31 +7078,31 @@
             },
             {
               "rank": 2,
-              "policy_id": 288,
-              "chunk_id": 28830010073,
-              "section": "6. 서비스 관련 상담자 의견 및 기타사항",
-              "score": 0.016393
-            },
-            {
-              "rank": 3,
-              "policy_id": 245,
-              "chunk_id": 24530010000,
-              "section": "관련 문서",
-              "score": 0.016129
-            },
-            {
-              "rank": 4,
               "policy_id": 309,
               "chunk_id": 30930010201,
               "section": null,
               "score": 0.016129
             },
             {
-              "rank": 5,
-              "policy_id": 245,
-              "chunk_id": 24530010110,
-              "section": "제2장 장애인 지역사회 복지사업",
+              "rank": 3,
+              "policy_id": 247,
+              "chunk_id": 24790000001,
+              "section": "조건 구조",
               "score": 0.015873
+            },
+            {
+              "rank": 4,
+              "policy_id": 287,
+              "chunk_id": 28730010055,
+              "section": "2. 산모가 「위기 임신 및 보호출산 지원과 아동 보호에 관한 특별법」 제2조제3호에 따른 비식별화된",
+              "score": 0.015385
+            },
+            {
+              "rank": 5,
+              "policy_id": 309,
+              "chunk_id": 30930010202,
+              "section": null,
+              "score": 0.015152
             }
           ]
         },
@@ -7128,7 +7121,7 @@
           "policy_rank": 1,
           "section_rank": 1,
           "reciprocal_rank": 1.0,
-          "elapsed_ms": 1825.477,
+          "elapsed_ms": 1941.263,
           "error": null,
           "retrieved": [
             {
@@ -7140,31 +7133,31 @@
             },
             {
               "rank": 2,
-              "policy_id": 287,
-              "chunk_id": 28730010054,
-              "section": null,
-              "score": 0.016393
-            },
-            {
-              "rank": 3,
-              "policy_id": 309,
-              "chunk_id": 30930010147,
-              "section": "3. 가족이 저소득층(기초생활수급대상, 차상위계층)에 속한",
-              "score": 0.016129
-            },
-            {
-              "rank": 4,
               "policy_id": 309,
               "chunk_id": 30930010159,
               "section": null,
               "score": 0.016129
             },
             {
-              "rank": 5,
-              "policy_id": 245,
-              "chunk_id": 24530010240,
-              "section": "다. 지적장애인, 자폐성 장애인을 상담할 때 필요한 의사소통 지원도구를 갖추고 이를 비치할",
+              "rank": 3,
+              "policy_id": 252,
+              "chunk_id": 25290000005,
+              "section": "신청 방법",
               "score": 0.015873
+            },
+            {
+              "rank": 4,
+              "policy_id": 258,
+              "chunk_id": 25890000005,
+              "section": "신청 방법",
+              "score": 0.015625
+            },
+            {
+              "rank": 5,
+              "policy_id": 252,
+              "chunk_id": 25290000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.015385
             }
           ]
         },
@@ -7184,7 +7177,7 @@
           "policy_rank": 1,
           "section_rank": 1,
           "reciprocal_rank": 1.0,
-          "elapsed_ms": 1290.966,
+          "elapsed_ms": 1471.829,
           "error": null,
           "retrieved": [
             {
@@ -7192,35 +7185,35 @@
               "policy_id": 247,
               "chunk_id": 24790000004,
               "section": "지원 내용",
-              "score": 0.03031
+              "score": 0.019116
             },
             {
               "rank": 2,
               "policy_id": 247,
               "chunk_id": 24790000003,
               "section": "공식 지원대상 원문",
-              "score": 0.030303
+              "score": 0.018939
             },
             {
               "rank": 3,
-              "policy_id": 245,
-              "chunk_id": 24530010233,
-              "section": "4. 장애인권익옹호기관 운영법인의 외부임원(이사 등)이 조사대상의 기관장인 경우",
-              "score": 0.016393
-            },
-            {
-              "rank": 4,
               "policy_id": 316,
               "chunk_id": 31690000005,
               "section": "지원 내용",
               "score": 0.016393
             },
             {
-              "rank": 5,
-              "policy_id": 245,
-              "chunk_id": 24530010249,
-              "section": "4. 퇴직금 및 퇴직급여 충당금",
+              "rank": 4,
+              "policy_id": 283,
+              "chunk_id": 28330010129,
+              "section": null,
               "score": 0.016129
+            },
+            {
+              "rank": 5,
+              "policy_id": 284,
+              "chunk_id": 28430010129,
+              "section": null,
+              "score": 0.015873
             }
           ]
         },
@@ -7235,12 +7228,12 @@
             "지원 내용",
             "공식 지원대상 원문"
           ],
-          "policy_hit": true,
-          "section_hit": true,
-          "policy_rank": 4,
-          "section_rank": 4,
-          "reciprocal_rank": 0.25,
-          "elapsed_ms": 1321.37,
+          "policy_hit": false,
+          "section_hit": false,
+          "policy_rank": null,
+          "section_rank": null,
+          "reciprocal_rank": 0.0,
+          "elapsed_ms": 1455.52,
           "error": null,
           "retrieved": [
             {
@@ -7248,35 +7241,35 @@
               "policy_id": 316,
               "chunk_id": 31690000005,
               "section": "지원 내용",
-              "score": 0.03031
+              "score": 0.019116
             },
             {
               "rank": 2,
-              "policy_id": 245,
-              "chunk_id": 24530010228,
-              "section": "제5장 장애인 차별금지 및 권익옹호",
-              "score": 0.016393
-            },
-            {
-              "rank": 3,
               "policy_id": 259,
               "chunk_id": 25990000005,
               "section": "지원 내용",
               "score": 0.016393
             },
             {
-              "rank": 4,
-              "policy_id": 247,
-              "chunk_id": 24790000003,
-              "section": "공식 지원대상 원문",
-              "score": 0.016129
-            },
-            {
-              "rank": 5,
+              "rank": 3,
               "policy_id": 258,
               "chunk_id": 25890000003,
               "section": "공식 지원대상 원문",
               "score": 0.016129
+            },
+            {
+              "rank": 4,
+              "policy_id": 250,
+              "chunk_id": 25090000004,
+              "section": "지원 내용",
+              "score": 0.015873
+            },
+            {
+              "rank": 5,
+              "policy_id": 279,
+              "chunk_id": 27990000005,
+              "section": "신청 방법",
+              "score": 0.015625
             }
           ]
         },
@@ -7292,46 +7285,46 @@
           ],
           "policy_hit": true,
           "section_hit": false,
-          "policy_rank": 3,
+          "policy_rank": 2,
           "section_rank": null,
-          "reciprocal_rank": 0.3333333333333333,
-          "elapsed_ms": 1228.437,
+          "reciprocal_rank": 0.5,
+          "elapsed_ms": 1243.164,
           "error": null,
           "retrieved": [
             {
               "rank": 1,
-              "policy_id": 265,
-              "chunk_id": 26590000001,
-              "section": "조건 구조",
-              "score": 0.016393
-            },
-            {
-              "rank": 2,
               "policy_id": 316,
               "chunk_id": 31690000005,
               "section": "지원 내용",
               "score": 0.016393
             },
             {
-              "rank": 3,
+              "rank": 2,
               "policy_id": 247,
               "chunk_id": 24790000004,
               "section": "지원 내용",
               "score": 0.016129
             },
             {
+              "rank": 3,
+              "policy_id": 283,
+              "chunk_id": 28330010041,
+              "section": "마. 입양숙려기간 모자지원 (법 제3조 및 제17조)",
+              "score": 0.015873
+            },
+            {
               "rank": 4,
-              "policy_id": 265,
-              "chunk_id": 26590000002,
-              "section": "추가 확인 조건",
-              "score": 0.016129
+              "policy_id": 252,
+              "chunk_id": 25290000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.015625
             },
             {
               "rank": 5,
-              "policy_id": 265,
-              "chunk_id": 26590000003,
-              "section": "공식 지원대상 원문",
-              "score": 0.015873
+              "policy_id": 316,
+              "chunk_id": 31690000003,
+              "section": "추가 확인 조건",
+              "score": 0.015385
             }
           ]
         },
@@ -7351,7 +7344,7 @@
           "policy_rank": 1,
           "section_rank": 1,
           "reciprocal_rank": 1.0,
-          "elapsed_ms": 1293.238,
+          "elapsed_ms": 1290.796,
           "error": null,
           "retrieved": [
             {
@@ -7363,31 +7356,31 @@
             },
             {
               "rank": 2,
-              "policy_id": 309,
-              "chunk_id": 30930010143,
-              "section": null,
-              "score": 0.016393
-            },
-            {
-              "rank": 3,
               "policy_id": 251,
               "chunk_id": 25190000001,
               "section": "조건 구조",
               "score": 0.016129
             },
             {
+              "rank": 3,
+              "policy_id": 290,
+              "chunk_id": 29030010086,
+              "section": "12) 감염병의 예방 및 관리에 관한 법률 제12조(그 밖의 신고의무자) 및 동법 시행규칙 제8조(그 밖의 신고대상 감염병)에",
+              "score": 0.015385
+            },
+            {
               "rank": 4,
-              "policy_id": 309,
-              "chunk_id": 30930010145,
-              "section": "2. 지역사회가 빈곤하여 청소년에게 필요한 지원이 이루어지기 어렵다.",
-              "score": 0.016129
+              "policy_id": 253,
+              "chunk_id": 25390000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.015152
             },
             {
               "rank": 5,
-              "policy_id": 251,
-              "chunk_id": 25190000004,
-              "section": "지원 내용",
-              "score": 0.015873
+              "policy_id": 309,
+              "chunk_id": 30930010189,
+              "section": null,
+              "score": 0.014925
             }
           ]
         },
@@ -7407,7 +7400,7 @@
           "policy_rank": 1,
           "section_rank": 1,
           "reciprocal_rank": 1.0,
-          "elapsed_ms": 1414.746,
+          "elapsed_ms": 1340.221,
           "error": null,
           "retrieved": [
             {
@@ -7419,31 +7412,31 @@
             },
             {
               "rank": 2,
-              "policy_id": 283,
-              "chunk_id": 28330010133,
-              "section": "2. 위탁가정 내 위탁아동 형제자매 2명 이상 보호 시 전문아동보호비 지급 방법은?",
-              "score": 0.016393
-            },
-            {
-              "rank": 3,
-              "policy_id": 284,
-              "chunk_id": 28430010133,
-              "section": "2. 위탁가정 내 위탁아동 형제자매 2명 이상 보호 시 전문아동보호비 지급 방법은?",
-              "score": 0.016129
-            },
-            {
-              "rank": 4,
               "policy_id": 297,
               "chunk_id": 29730010019,
               "section": null,
               "score": 0.016129
             },
             {
-              "rank": 5,
+              "rank": 3,
               "policy_id": 251,
               "chunk_id": 25190000004,
               "section": "지원 내용",
               "score": 0.015873
+            },
+            {
+              "rank": 4,
+              "policy_id": 301,
+              "chunk_id": 30190000004,
+              "section": null,
+              "score": 0.015625
+            },
+            {
+              "rank": 5,
+              "policy_id": 302,
+              "chunk_id": 30290000000,
+              "section": "정리된 지원 조건",
+              "score": 0.015385
             }
           ]
         },
@@ -7463,7 +7456,7 @@
           "policy_rank": 1,
           "section_rank": 1,
           "reciprocal_rank": 1.0,
-          "elapsed_ms": 1473.593,
+          "elapsed_ms": 1547.262,
           "error": null,
           "retrieved": [
             {
@@ -7475,31 +7468,31 @@
             },
             {
               "rank": 2,
-              "policy_id": 290,
-              "chunk_id": 29030010085,
-              "section": "Ⅱ. 어린이집의 운영",
-              "score": 0.016393
-            },
-            {
-              "rank": 3,
               "policy_id": 258,
               "chunk_id": 25890000003,
               "section": "공식 지원대상 원문",
               "score": 0.016129
             },
             {
-              "rank": 4,
-              "policy_id": 299,
-              "chunk_id": 29930010107,
-              "section": "제8장 다문화가족 교류소통공간 221",
-              "score": 0.016129
-            },
-            {
-              "rank": 5,
+              "rank": 3,
               "policy_id": 252,
               "chunk_id": 25290000003,
               "section": "공식 지원대상 원문",
               "score": 0.015873
+            },
+            {
+              "rank": 4,
+              "policy_id": 253,
+              "chunk_id": 25390000002,
+              "section": "추가 확인 조건",
+              "score": 0.015625
+            },
+            {
+              "rank": 5,
+              "policy_id": 251,
+              "chunk_id": 25190000000,
+              "section": "정리된 지원 조건",
+              "score": 0.015385
             }
           ]
         },
@@ -7518,7 +7511,7 @@
           "policy_rank": 1,
           "section_rank": 1,
           "reciprocal_rank": 1.0,
-          "elapsed_ms": 1210.669,
+          "elapsed_ms": 1252.801,
           "error": null,
           "retrieved": [
             {
@@ -7530,31 +7523,31 @@
             },
             {
               "rank": 2,
-              "policy_id": 266,
-              "chunk_id": 26690000003,
-              "section": null,
-              "score": 0.016393
-            },
-            {
-              "rank": 3,
               "policy_id": 251,
               "chunk_id": 25190000003,
               "section": "공식 지원대상 원문",
               "score": 0.016129
             },
             {
+              "rank": 3,
+              "policy_id": 328,
+              "chunk_id": 32830010086,
+              "section": "12) 감염병의 예방 및 관리에 관한 법률 제12조(그 밖의 신고의무자) 및 동법 시행규칙 제8조(그 밖의 신고대상 감염병)에",
+              "score": 0.015873
+            },
+            {
               "rank": 4,
-              "policy_id": 266,
-              "chunk_id": 26690000006,
-              "section": "지원 내용",
-              "score": 0.016129
+              "policy_id": 327,
+              "chunk_id": 32730010086,
+              "section": "12) 감염병의 예방 및 관리에 관한 법률 제12조(그 밖의 신고의무자) 및 동법 시행규칙 제8조(그 밖의 신고대상 감염병)에",
+              "score": 0.015625
             },
             {
               "rank": 5,
-              "policy_id": 288,
-              "chunk_id": 28830010043,
-              "section": "Ⅵ. 장애아돌보미의 역할",
-              "score": 0.015873
+              "policy_id": 325,
+              "chunk_id": 32530010087,
+              "section": "12) 감염병의 예방 및 관리에 관한 법률 제12조(그 밖의 신고의무자) 및 동법 시행규칙 제8조(그 밖의 신고대상 감염병)에",
+              "score": 0.015385
             }
           ]
         },
@@ -7571,9 +7564,9 @@
           "policy_hit": true,
           "section_hit": true,
           "policy_rank": 2,
-          "section_rank": 4,
+          "section_rank": 3,
           "reciprocal_rank": 0.5,
-          "elapsed_ms": 1384.259,
+          "elapsed_ms": 1288.889,
           "error": null,
           "retrieved": [
             {
@@ -7581,7 +7574,7 @@
               "policy_id": 290,
               "chunk_id": 29030010087,
               "section": "Ⅱ. 어린이집의 운영",
-              "score": 0.029631
+              "score": 0.018602
             },
             {
               "rank": 2,
@@ -7592,24 +7585,24 @@
             },
             {
               "rank": 3,
-              "policy_id": 290,
-              "chunk_id": 29030010085,
-              "section": "Ⅱ. 어린이집의 운영",
-              "score": 0.016393
-            },
-            {
-              "rank": 4,
               "policy_id": 251,
               "chunk_id": 25190000005,
               "section": "신청 방법",
               "score": 0.016129
             },
             {
+              "rank": 4,
+              "policy_id": 326,
+              "chunk_id": 32630010087,
+              "section": "Ⅱ. 어린이집의 운영",
+              "score": 0.015385
+            },
+            {
               "rank": 5,
               "policy_id": 315,
-              "chunk_id": 31530010087,
+              "chunk_id": 31530010089,
               "section": "Ⅱ. 어린이집의 운영",
-              "score": 0.016129
+              "score": 0.015152
             }
           ]
         },
@@ -7626,46 +7619,46 @@
           ],
           "policy_hit": true,
           "section_hit": true,
-          "policy_rank": 2,
-          "section_rank": 2,
-          "reciprocal_rank": 0.5,
-          "elapsed_ms": 1461.317,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 1444.422,
           "error": null,
           "retrieved": [
             {
               "rank": 1,
-              "policy_id": 245,
-              "chunk_id": 24530010000,
-              "section": "관련 문서",
-              "score": 0.016393
-            },
-            {
-              "rank": 2,
               "policy_id": 255,
               "chunk_id": 25590000003,
               "section": "공식 지원대상 원문",
               "score": 0.016393
             },
             {
-              "rank": 3,
+              "rank": 2,
               "policy_id": 265,
               "chunk_id": 26590000005,
               "section": "지원 내용",
               "score": 0.016129
             },
             {
-              "rank": 4,
-              "policy_id": 287,
-              "chunk_id": 28730010159,
-              "section": "5. 첫만남이용권, 저소득층 기저귀･조제분유 지원을 위하여 아래의 내용과 같이 개인정보를 수집하고, 수집한 개인정보를 보건복지부 및",
-              "score": 0.016129
-            },
-            {
-              "rank": 5,
+              "rank": 3,
               "policy_id": 258,
               "chunk_id": 25890000003,
               "section": "공식 지원대상 원문",
               "score": 0.015873
+            },
+            {
+              "rank": 4,
+              "policy_id": 287,
+              "chunk_id": 28790000004,
+              "section": "공식 지원대상 원문",
+              "score": 0.015625
+            },
+            {
+              "rank": 5,
+              "policy_id": 265,
+              "chunk_id": 26590000004,
+              "section": null,
+              "score": 0.015385
             }
           ]
         },
@@ -7684,46 +7677,46 @@
           ],
           "policy_hit": true,
           "section_hit": true,
-          "policy_rank": 5,
-          "section_rank": 5,
-          "reciprocal_rank": 0.2,
-          "elapsed_ms": 1422.373,
+          "policy_rank": 3,
+          "section_rank": 3,
+          "reciprocal_rank": 0.3333333333333333,
+          "elapsed_ms": 1432.601,
           "error": null,
           "retrieved": [
             {
               "rank": 1,
-              "policy_id": 283,
-              "chunk_id": 28330010109,
-              "section": "Ⅱ. 심리치료지원사업 내용",
-              "score": 0.016393
-            },
-            {
-              "rank": 2,
               "policy_id": 331,
               "chunk_id": 33190000003,
               "section": "공식 지원대상 원문",
               "score": 0.016393
             },
             {
-              "rank": 3,
-              "policy_id": 284,
-              "chunk_id": 28430010109,
-              "section": "Ⅱ. 심리치료지원사업 내용",
-              "score": 0.016129
-            },
-            {
-              "rank": 4,
+              "rank": 2,
               "policy_id": 326,
               "chunk_id": 32630010345,
               "section": "가. 추진배경",
               "score": 0.016129
             },
             {
-              "rank": 5,
+              "rank": 3,
               "policy_id": 287,
               "chunk_id": 28790000005,
               "section": "지원 내용",
               "score": 0.015873
+            },
+            {
+              "rank": 4,
+              "policy_id": 303,
+              "chunk_id": 30390000007,
+              "section": "지원 내용",
+              "score": 0.015625
+            },
+            {
+              "rank": 5,
+              "policy_id": 327,
+              "chunk_id": 32730010363,
+              "section": "Ⅹ. 보육예산지원(어린이집별 지원)",
+              "score": 0.015385
             }
           ]
         },
@@ -7742,7 +7735,7 @@
           "policy_rank": 1,
           "section_rank": 1,
           "reciprocal_rank": 1.0,
-          "elapsed_ms": 1551.562,
+          "elapsed_ms": 1469.902,
           "error": null,
           "retrieved": [
             {
@@ -7754,31 +7747,31 @@
             },
             {
               "rank": 2,
-              "policy_id": 288,
-              "chunk_id": 28830010170,
-              "section": "1. 귀하가 신청한 급여에 대한 조사 결과 기초생활보장 수급자로 결정되었음을 알려드립니다.",
-              "score": 0.016393
-            },
-            {
-              "rank": 3,
               "policy_id": 255,
               "chunk_id": 25590000003,
               "section": "공식 지원대상 원문",
               "score": 0.016129
             },
             {
-              "rank": 4,
-              "policy_id": 288,
-              "chunk_id": 28830010176,
-              "section": "4. 서비스 개시 및 이용",
-              "score": 0.016129
-            },
-            {
-              "rank": 5,
+              "rank": 3,
               "policy_id": 288,
               "chunk_id": 28830010186,
               "section": "4. 서비스 개시 및 이용",
               "score": 0.015873
+            },
+            {
+              "rank": 4,
+              "policy_id": 240,
+              "chunk_id": 24090000005,
+              "section": "지원 내용",
+              "score": 0.015625
+            },
+            {
+              "rank": 5,
+              "policy_id": 240,
+              "chunk_id": 24090000004,
+              "section": "공식 지원대상 원문",
+              "score": 0.015385
             }
           ]
         },
@@ -7797,43 +7790,43 @@
           "policy_rank": null,
           "section_rank": null,
           "reciprocal_rank": 0.0,
-          "elapsed_ms": 1315.426,
+          "elapsed_ms": 1300.749,
           "error": null,
           "retrieved": [
             {
               "rank": 1,
-              "policy_id": 325,
-              "chunk_id": 32530010231,
-              "section": "다. 급여신청 장소 및 시기",
-              "score": 0.031754
-            },
-            {
-              "rank": 2,
-              "policy_id": 290,
-              "chunk_id": 29030010230,
-              "section": "다. 급여신청 장소 및 시기",
-              "score": 0.031545
-            },
-            {
-              "rank": 3,
               "policy_id": 327,
               "chunk_id": 32730010230,
               "section": "다. 급여신청 장소 및 시기",
-              "score": 0.031545
+              "score": 0.020181
+            },
+            {
+              "rank": 2,
+              "policy_id": 325,
+              "chunk_id": 32530010231,
+              "section": "다. 급여신청 장소 및 시기",
+              "score": 0.020035
+            },
+            {
+              "rank": 3,
+              "policy_id": 326,
+              "chunk_id": 32630010230,
+              "section": "다. 급여신청 장소 및 시기",
+              "score": 0.019719
             },
             {
               "rank": 4,
               "policy_id": 315,
               "chunk_id": 31530010233,
               "section": "다. 급여신청 장소 및 시기",
-              "score": 0.031498
+              "score": 0.019593
             },
             {
               "rank": 5,
-              "policy_id": 326,
-              "chunk_id": 32630010230,
+              "policy_id": 290,
+              "chunk_id": 29030010230,
               "section": "다. 급여신청 장소 및 시기",
-              "score": 0.031258
+              "score": 0.01925
             }
           ]
         },
@@ -7847,12 +7840,12 @@
           "expected_sections": [
             "지원 내용"
           ],
-          "policy_hit": false,
-          "section_hit": false,
-          "policy_rank": null,
-          "section_rank": null,
-          "reciprocal_rank": 0.0,
-          "elapsed_ms": 1651.366,
+          "policy_hit": true,
+          "section_hit": true,
+          "policy_rank": 4,
+          "section_rank": 4,
+          "reciprocal_rank": 0.25,
+          "elapsed_ms": 1639.749,
           "error": null,
           "retrieved": [
             {
@@ -7864,31 +7857,31 @@
             },
             {
               "rank": 2,
-              "policy_id": 245,
-              "chunk_id": 24530010000,
-              "section": "관련 문서",
-              "score": 0.016393
-            },
-            {
-              "rank": 3,
               "policy_id": 240,
               "chunk_id": 24090000004,
               "section": "공식 지원대상 원문",
               "score": 0.016129
             },
             {
-              "rank": 4,
-              "policy_id": 283,
-              "chunk_id": 28330010168,
+              "rank": 3,
+              "policy_id": 287,
+              "chunk_id": 28730010157,
               "section": null,
-              "score": 0.016129
+              "score": 0.015873
+            },
+            {
+              "rank": 4,
+              "policy_id": 255,
+              "chunk_id": 25590000004,
+              "section": "지원 내용",
+              "score": 0.015625
             },
             {
               "rank": 5,
-              "policy_id": 284,
-              "chunk_id": 28430010168,
-              "section": null,
-              "score": 0.015873
+              "policy_id": 258,
+              "chunk_id": 25890000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.015385
             }
           ]
         },
@@ -7905,10 +7898,10 @@
           ],
           "policy_hit": true,
           "section_hit": true,
-          "policy_rank": 3,
-          "section_rank": 3,
-          "reciprocal_rank": 0.3333333333333333,
-          "elapsed_ms": 1403.208,
+          "policy_rank": 2,
+          "section_rank": 2,
+          "reciprocal_rank": 0.5,
+          "elapsed_ms": 1476.537,
           "error": null,
           "retrieved": [
             {
@@ -7920,31 +7913,31 @@
             },
             {
               "rank": 2,
-              "policy_id": 290,
-              "chunk_id": 29030010012,
-              "section": "1. 의무사업장 판단기준 관련",
-              "score": 0.016393
-            },
-            {
-              "rank": 3,
               "policy_id": 289,
               "chunk_id": 28990000003,
               "section": "공식 지원대상 원문",
               "score": 0.016129
             },
             {
-              "rank": 4,
-              "policy_id": 315,
-              "chunk_id": 31530010014,
-              "section": "1. 의무사업장 판단기준 관련",
-              "score": 0.016129
-            },
-            {
-              "rank": 5,
+              "rank": 3,
               "policy_id": 287,
               "chunk_id": 28730010129,
               "section": "6. 기초생활보장 신청 후 전기･도시가스･지역난방･등유 등 구입을 지원받을 수 있는 에너지바우처 안내 및 신청을 희망하는",
               "score": 0.015873
+            },
+            {
+              "rank": 4,
+              "policy_id": 289,
+              "chunk_id": 28990000000,
+              "section": "정리된 지원 조건",
+              "score": 0.015625
+            },
+            {
+              "rank": 5,
+              "policy_id": 288,
+              "chunk_id": 28830010057,
+              "section": "6. 기초생활보장 신청 후 전기･도시가스･지역난방･등유 등 구입을 지원받을 수 있는 에너지바우처 안내 및 신청을",
+              "score": 0.015385
             }
           ]
         },
@@ -7960,46 +7953,46 @@
           ],
           "policy_hit": true,
           "section_hit": true,
-          "policy_rank": 2,
-          "section_rank": 2,
-          "reciprocal_rank": 0.5,
-          "elapsed_ms": 1192.304,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 1185.867,
           "error": null,
           "retrieved": [
             {
               "rank": 1,
-              "policy_id": 245,
-              "chunk_id": 24530010266,
-              "section": "제5장 장애인 차별금지 및 권익옹호",
-              "score": 0.016393
-            },
-            {
-              "rank": 2,
               "policy_id": 289,
               "chunk_id": 28990000004,
               "section": "지원 내용",
               "score": 0.016393
             },
             {
-              "rank": 3,
+              "rank": 2,
               "policy_id": 245,
               "chunk_id": 24530010069,
               "section": null,
               "score": 0.016129
             },
             {
+              "rank": 3,
+              "policy_id": 289,
+              "chunk_id": 28990000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.015873
+            },
+            {
               "rank": 4,
               "policy_id": 245,
-              "chunk_id": 24530010279,
-              "section": "제5장 장애인 차별금지 및 권익옹호",
-              "score": 0.016129
+              "chunk_id": 24530010300,
+              "section": null,
+              "score": 0.015625
             },
             {
               "rank": 5,
-              "policy_id": 245,
-              "chunk_id": 24530010352,
-              "section": "제6장 장애인 생활안정지원",
-              "score": 0.015873
+              "policy_id": 299,
+              "chunk_id": 29930010056,
+              "section": null,
+              "score": 0.015152
             }
           ]
         },
@@ -8018,7 +8011,7 @@
           "policy_rank": 1,
           "section_rank": 1,
           "reciprocal_rank": 1.0,
-          "elapsed_ms": 1528.249,
+          "elapsed_ms": 1468.81,
           "error": null,
           "retrieved": [
             {
@@ -8030,31 +8023,31 @@
             },
             {
               "rank": 2,
-              "policy_id": 309,
-              "chunk_id": 30930010195,
-              "section": null,
-              "score": 0.016393
-            },
-            {
-              "rank": 3,
-              "policy_id": 245,
-              "chunk_id": 24530010096,
-              "section": null,
-              "score": 0.016129
-            },
-            {
-              "rank": 4,
               "policy_id": 288,
               "chunk_id": 28830010175,
               "section": "1. 귀하가 신청한 사회서비스 조사･심의 결과 사회서비스 이용권(바우처) 대상자로 결정되었음을 알려드립니다.",
               "score": 0.016129
             },
             {
-              "rank": 5,
-              "policy_id": 255,
-              "chunk_id": 25590000003,
-              "section": "공식 지원대상 원문",
+              "rank": 3,
+              "policy_id": 325,
+              "chunk_id": 32530010238,
+              "section": "나. 지원 방식",
               "score": 0.015873
+            },
+            {
+              "rank": 4,
+              "policy_id": 327,
+              "chunk_id": 32730010237,
+              "section": "나. 지원 방식",
+              "score": 0.015625
+            },
+            {
+              "rank": 5,
+              "policy_id": 289,
+              "chunk_id": 28990000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.015385
             }
           ]
         },
@@ -8074,7 +8067,7 @@
           "policy_rank": 1,
           "section_rank": 1,
           "reciprocal_rank": 1.0,
-          "elapsed_ms": 1323.643,
+          "elapsed_ms": 1261.41,
           "error": null,
           "retrieved": [
             {
@@ -8082,35 +8075,35 @@
               "policy_id": 289,
               "chunk_id": 28990000003,
               "section": "공식 지원대상 원문",
-              "score": 0.031281
+              "score": 0.019184
             },
             {
               "rank": 2,
-              "policy_id": 256,
-              "chunk_id": 25630010000,
-              "section": "관련 문서",
-              "score": 0.016393
-            },
-            {
-              "rank": 3,
               "policy_id": 316,
               "chunk_id": 31690000005,
               "section": "지원 내용",
               "score": 0.016393
             },
             {
-              "rank": 4,
+              "rank": 3,
               "policy_id": 288,
               "chunk_id": 28830010057,
               "section": "6. 기초생활보장 신청 후 전기･도시가스･지역난방･등유 등 구입을 지원받을 수 있는 에너지바우처 안내 및 신청을",
               "score": 0.016129
             },
             {
-              "rank": 5,
-              "policy_id": 299,
-              "chunk_id": 29930010057,
-              "section": "제7장 다문화가족 특성화사업 111",
+              "rank": 4,
+              "policy_id": 317,
+              "chunk_id": 31790000002,
+              "section": "공식 지원대상 원문",
               "score": 0.015873
+            },
+            {
+              "rank": 5,
+              "policy_id": 287,
+              "chunk_id": 28730010129,
+              "section": "6. 기초생활보장 신청 후 전기･도시가스･지역난방･등유 등 구입을 지원받을 수 있는 에너지바우처 안내 및 신청을 희망하는",
+              "score": 0.015625
             }
           ]
         },
@@ -8126,46 +8119,46 @@
           ],
           "policy_hit": true,
           "section_hit": true,
-          "policy_rank": 4,
-          "section_rank": 4,
-          "reciprocal_rank": 0.25,
-          "elapsed_ms": 1191.32,
+          "policy_rank": 2,
+          "section_rank": 2,
+          "reciprocal_rank": 0.5,
+          "elapsed_ms": 1196.767,
           "error": null,
           "retrieved": [
             {
               "rank": 1,
-              "policy_id": 245,
-              "chunk_id": 24530010066,
-              "section": "제1장 장애인 복지사업 개요",
-              "score": 0.016393
-            },
-            {
-              "rank": 2,
               "policy_id": 331,
               "chunk_id": 33190000007,
               "section": "신청 방법",
               "score": 0.016393
             },
             {
-              "rank": 3,
-              "policy_id": 245,
-              "chunk_id": 24530010073,
-              "section": "제1장 장애인 복지사업 개요",
-              "score": 0.016129
-            },
-            {
-              "rank": 4,
+              "rank": 2,
               "policy_id": 289,
               "chunk_id": 28990000005,
               "section": "신청 방법",
               "score": 0.016129
             },
             {
-              "rank": 5,
-              "policy_id": 288,
-              "chunk_id": 28830010177,
-              "section": "6. 지원제한",
+              "rank": 3,
+              "policy_id": 290,
+              "chunk_id": 29030010230,
+              "section": "다. 급여신청 장소 및 시기",
               "score": 0.015873
+            },
+            {
+              "rank": 4,
+              "policy_id": 288,
+              "chunk_id": 28830010057,
+              "section": "6. 기초생활보장 신청 후 전기･도시가스･지역난방･등유 등 구입을 지원받을 수 있는 에너지바우처 안내 및 신청을",
+              "score": 0.015625
+            },
+            {
+              "rank": 5,
+              "policy_id": 327,
+              "chunk_id": 32730010230,
+              "section": "다. 급여신청 장소 및 시기",
+              "score": 0.015385
             }
           ]
         },
@@ -8182,46 +8175,46 @@
           ],
           "policy_hit": true,
           "section_hit": true,
-          "policy_rank": 2,
-          "section_rank": 2,
-          "reciprocal_rank": 0.5,
-          "elapsed_ms": 1328.468,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 1502.035,
           "error": null,
           "retrieved": [
             {
               "rank": 1,
-              "policy_id": 245,
-              "chunk_id": 24530010058,
-              "section": null,
-              "score": 0.016393
-            },
-            {
-              "rank": 2,
               "policy_id": 292,
               "chunk_id": 29290000000,
               "section": "정리된 지원 조건",
               "score": 0.016393
             },
             {
-              "rank": 3,
-              "policy_id": 245,
-              "chunk_id": 24530010057,
-              "section": "제1장 장애인 복지사업 개요",
-              "score": 0.016129
-            },
-            {
-              "rank": 4,
+              "rank": 2,
               "policy_id": 292,
               "chunk_id": 29290000004,
               "section": "지원 내용",
               "score": 0.016129
             },
             {
+              "rank": 3,
+              "policy_id": 294,
+              "chunk_id": 29430010162,
+              "section": null,
+              "score": 0.015152
+            },
+            {
+              "rank": 4,
+              "policy_id": 290,
+              "chunk_id": 29030010255,
+              "section": "다. 지원단가",
+              "score": 0.014706
+            },
+            {
               "rank": 5,
-              "policy_id": 245,
-              "chunk_id": 24530010189,
-              "section": "제4장 장애인 편의증진",
-              "score": 0.015873
+              "policy_id": 287,
+              "chunk_id": 28730010073,
+              "section": "가. 부모급여(보육료) 대상자가 어린이집을 이용하지 않아 실제 보육료가 지원되지",
+              "score": 0.014493
             }
           ]
         },
@@ -8237,46 +8230,46 @@
           ],
           "policy_hit": true,
           "section_hit": true,
-          "policy_rank": 2,
-          "section_rank": 2,
-          "reciprocal_rank": 0.5,
-          "elapsed_ms": 1909.765,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 1964.011,
           "error": null,
           "retrieved": [
             {
               "rank": 1,
-              "policy_id": 245,
-              "chunk_id": 24530010073,
-              "section": "제1장 장애인 복지사업 개요",
-              "score": 0.016393
-            },
-            {
-              "rank": 2,
               "policy_id": 292,
               "chunk_id": 29290000004,
               "section": "지원 내용",
               "score": 0.016393
             },
             {
-              "rank": 3,
-              "policy_id": 283,
-              "chunk_id": 28330010079,
-              "section": null,
-              "score": 0.016129
-            },
-            {
-              "rank": 4,
+              "rank": 2,
               "policy_id": 292,
               "chunk_id": 29290000003,
               "section": "공식 지원대상 원문",
               "score": 0.016129
             },
             {
+              "rank": 3,
+              "policy_id": 317,
+              "chunk_id": 31790000005,
+              "section": "신청 기간",
+              "score": 0.015625
+            },
+            {
+              "rank": 4,
+              "policy_id": 326,
+              "chunk_id": 32630010250,
+              "section": "Ⅸ. 보육예산지원(보육료･가정양육 수당)",
+              "score": 0.015152
+            },
+            {
               "rank": 5,
-              "policy_id": 284,
-              "chunk_id": 28430010079,
-              "section": null,
-              "score": 0.015873
+              "policy_id": 290,
+              "chunk_id": 29030010219,
+              "section": "나. 누리과정 담당 보육교사 지원",
+              "score": 0.014706
             }
           ]
         },
@@ -8293,46 +8286,46 @@
           ],
           "policy_hit": true,
           "section_hit": true,
-          "policy_rank": 2,
-          "section_rank": 4,
-          "reciprocal_rank": 0.5,
-          "elapsed_ms": 1527.655,
+          "policy_rank": 1,
+          "section_rank": 2,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 1601.681,
           "error": null,
           "retrieved": [
             {
               "rank": 1,
-              "policy_id": 245,
-              "chunk_id": 24530010256,
-              "section": "제5장 장애인 차별금지 및 권익옹호",
-              "score": 0.016393
-            },
-            {
-              "rank": 2,
               "policy_id": 292,
               "chunk_id": 29290000000,
               "section": "정리된 지원 조건",
               "score": 0.016393
             },
             {
-              "rank": 3,
-              "policy_id": 245,
-              "chunk_id": 24530010232,
-              "section": "가. 신고접수",
-              "score": 0.016129
-            },
-            {
-              "rank": 4,
+              "rank": 2,
               "policy_id": 292,
               "chunk_id": 29290000003,
               "section": "공식 지원대상 원문",
               "score": 0.016129
             },
             {
+              "rank": 3,
+              "policy_id": 313,
+              "chunk_id": 31390000007,
+              "section": "유의 사항",
+              "score": 0.015385
+            },
+            {
+              "rank": 4,
+              "policy_id": 313,
+              "chunk_id": 31390000003,
+              "section": "공식 지원대상 원문",
+              "score": 0.014925
+            },
+            {
               "rank": 5,
-              "policy_id": 290,
-              "chunk_id": 29030010012,
-              "section": "1. 의무사업장 판단기준 관련",
-              "score": 0.015873
+              "policy_id": 300,
+              "chunk_id": 30090000002,
+              "section": "공식 지원대상 원문",
+              "score": 0.014493
             }
           ]
         },
@@ -8348,46 +8341,46 @@
           ],
           "policy_hit": true,
           "section_hit": true,
-          "policy_rank": 2,
-          "section_rank": 2,
-          "reciprocal_rank": 0.5,
-          "elapsed_ms": 1396.178,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 1490.126,
           "error": null,
           "retrieved": [
             {
               "rank": 1,
-              "policy_id": 245,
-              "chunk_id": 24530010328,
-              "section": "2. 국내거소신고, 외국인등록 사실증명 또는 혼인신고 증명서류(재외동포나 외국인의 경우만 해당합니다)",
-              "score": 0.016393
-            },
-            {
-              "rank": 2,
               "policy_id": 292,
               "chunk_id": 29290000005,
               "section": "신청 방법",
               "score": 0.016393
             },
             {
-              "rank": 3,
-              "policy_id": 256,
-              "chunk_id": 25630010005,
-              "section": "2. 기타 홍보실적(홍보 대상기관 및 인원 등 개조식 작성)",
-              "score": 0.016129
-            },
-            {
-              "rank": 4,
+              "rank": 2,
               "policy_id": 327,
               "chunk_id": 32730010230,
               "section": "다. 급여신청 장소 및 시기",
               "score": 0.016129
             },
             {
-              "rank": 5,
-              "policy_id": 283,
-              "chunk_id": 28330010020,
-              "section": "다. 아동보호 추진체계(예시)",
+              "rank": 3,
+              "policy_id": 292,
+              "chunk_id": 29290000003,
+              "section": "공식 지원대상 원문",
               "score": 0.015873
+            },
+            {
+              "rank": 4,
+              "policy_id": 290,
+              "chunk_id": 29030010230,
+              "section": "다. 급여신청 장소 및 시기",
+              "score": 0.015625
+            },
+            {
+              "rank": 5,
+              "policy_id": 315,
+              "chunk_id": 31530010233,
+              "section": "다. 급여신청 장소 및 시기",
+              "score": 0.015385
             }
           ]
         },
@@ -8403,46 +8396,46 @@
           ],
           "policy_hit": true,
           "section_hit": true,
-          "policy_rank": 2,
-          "section_rank": 2,
-          "reciprocal_rank": 0.5,
-          "elapsed_ms": 1793.819,
+          "policy_rank": 1,
+          "section_rank": 1,
+          "reciprocal_rank": 1.0,
+          "elapsed_ms": 1783.528,
           "error": null,
           "retrieved": [
             {
               "rank": 1,
-              "policy_id": 290,
-              "chunk_id": 29030010013,
-              "section": "Ⅰ. 어린이집의 설치",
-              "score": 0.016393
-            },
-            {
-              "rank": 2,
               "policy_id": 292,
               "chunk_id": 29290000004,
               "section": "지원 내용",
               "score": 0.016393
             },
             {
-              "rank": 3,
+              "rank": 2,
               "policy_id": 292,
               "chunk_id": 29290000003,
               "section": "공식 지원대상 원문",
               "score": 0.016129
             },
             {
-              "rank": 4,
-              "policy_id": 315,
-              "chunk_id": 31530010015,
-              "section": "Ⅰ. 어린이집의 설치",
-              "score": 0.016129
-            },
-            {
-              "rank": 5,
+              "rank": 3,
               "policy_id": 288,
               "chunk_id": 28830010214,
               "section": null,
               "score": 0.015873
+            },
+            {
+              "rank": 4,
+              "policy_id": 288,
+              "chunk_id": 28830010213,
+              "section": null,
+              "score": 0.015625
+            },
+            {
+              "rank": 5,
+              "policy_id": 305,
+              "chunk_id": 30530010053,
+              "section": "나) 방문교육서비스 제공",
+              "score": 0.015385
             }
           ]
         }

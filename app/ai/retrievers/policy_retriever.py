@@ -145,11 +145,17 @@ class HybridPolicyRetriever:
         *,
         rrf_k: int = 60,
         candidate_multiplier: int = 2,
+        keyword_weight: float = 0.25,
+        vector_weight: float = 1.0,
+        max_chunks_per_policy: int | None = 2,
     ) -> None:
         self.keyword_retriever = keyword_retriever or SqlKeywordPolicyRetriever()
         self.vector_retriever = vector_retriever or VectorPolicyRetriever()
         self.rrf_k = rrf_k
         self.candidate_multiplier = candidate_multiplier
+        self.keyword_weight = keyword_weight
+        self.vector_weight = vector_weight
+        self.max_chunks_per_policy = max_chunks_per_policy
 
     async def retrieve(
         self,
@@ -177,25 +183,42 @@ class HybridPolicyRetriever:
 
         fused_scores: dict[int, float] = {}
         hits_by_chunk_id: dict[int, RetrievalHit] = {}
-        for hits in (keyword_hits, vector_hits):
+        for hits, weight in (
+            (keyword_hits, self.keyword_weight),
+            (vector_hits, self.vector_weight),
+        ):
             for rank, hit in enumerate(hits, start=1):
                 hits_by_chunk_id.setdefault(hit.chunk_id, hit)
                 fused_scores[hit.chunk_id] = (
                     fused_scores.get(hit.chunk_id, 0.0)
-                    + 1.0 / (self.rrf_k + rank)
+                    + weight / (self.rrf_k + rank)
                 )
 
         ranked_chunk_ids = sorted(
             fused_scores,
             key=lambda chunk_id: (-fused_scores[chunk_id], chunk_id),
         )
-        return [
+        ranked_hits = [
             replace(
                 hits_by_chunk_id[chunk_id],
                 score=fused_scores[chunk_id],
             )
-            for chunk_id in ranked_chunk_ids[:top_k]
+            for chunk_id in ranked_chunk_ids
         ]
+        if policy_ids or self.max_chunks_per_policy is None:
+            return ranked_hits[:top_k]
+
+        selected: list[RetrievalHit] = []
+        policy_counts: dict[int, int] = {}
+        for hit in ranked_hits:
+            count = policy_counts.get(hit.policy_id, 0)
+            if count >= self.max_chunks_per_policy:
+                continue
+            selected.append(hit)
+            policy_counts[hit.policy_id] = count + 1
+            if len(selected) == top_k:
+                break
+        return selected
 
 
 def build_policy_retriever(

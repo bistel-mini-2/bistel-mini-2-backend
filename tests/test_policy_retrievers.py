@@ -44,10 +44,15 @@ class StubRetriever:
         return self.hits[:top_k]
 
 
-def make_hit(chunk_id: int, score: float = 0.5) -> RetrievalHit:
+def make_hit(
+    chunk_id: int,
+    score: float = 0.5,
+    *,
+    policy_id: int = 100,
+) -> RetrievalHit:
     return RetrievalHit(
         chunk_id=chunk_id,
-        policy_id=100,
+        policy_id=policy_id,
         chunk_text=f"근거 {chunk_id}",
         source_title="테스트 정책",
         source_url="https://example.com/policy",
@@ -205,7 +210,7 @@ def test_sql_keyword_retriever_recovers_section_from_chunk_text():
     assert hit.section == "지원 내용"
 
 
-def test_hybrid_retriever_uses_rrf_and_rewards_shared_hits():
+def test_hybrid_retriever_uses_weighted_rrf_and_rewards_shared_hits():
     keyword = StubRetriever([make_hit(1), make_hit(2)])
     vector = StubRetriever([make_hit(2), make_hit(3)])
     retriever = HybridPolicyRetriever(
@@ -216,10 +221,75 @@ def test_hybrid_retriever_uses_rrf_and_rewards_shared_hits():
 
     hits = asyncio.run(retriever.retrieve("지원", top_k=3, policy_ids=[100]))
 
-    assert [hit.chunk_id for hit in hits] == [2, 1, 3]
+    assert [hit.chunk_id for hit in hits] == [2, 3, 1]
     assert hits[0].score > hits[1].score
     assert keyword.calls[0]["top_k"] == 6
     assert vector.calls[0]["policy_ids"] == [100]
+
+
+def test_hybrid_retriever_prioritizes_vector_channel_by_default():
+    keyword = StubRetriever([make_hit(1, policy_id=101)])
+    vector = StubRetriever([make_hit(2, policy_id=102)])
+
+    hits = asyncio.run(
+        HybridPolicyRetriever(
+            keyword_retriever=keyword,
+            vector_retriever=vector,
+        ).retrieve("지원", top_k=2)
+    )
+
+    assert [hit.chunk_id for hit in hits] == [2, 1]
+
+
+def test_hybrid_retriever_limits_duplicate_policies_for_unscoped_search():
+    keyword = StubRetriever(
+        [
+            make_hit(1, policy_id=101),
+            make_hit(2, policy_id=101),
+            make_hit(3, policy_id=102),
+        ]
+    )
+    vector = StubRetriever(
+        [
+            make_hit(2, policy_id=101),
+            make_hit(4, policy_id=103),
+        ]
+    )
+
+    hits = asyncio.run(
+        HybridPolicyRetriever(
+            keyword_retriever=keyword,
+            vector_retriever=vector,
+        ).retrieve("지원", top_k=4)
+    )
+
+    assert [hit.policy_id for hit in hits] == [101, 103, 101, 102]
+    assert [hit.policy_id for hit in hits].count(101) == 2
+
+
+def test_hybrid_retriever_keeps_multiple_chunks_for_scoped_policy():
+    keyword = StubRetriever(
+        [
+            make_hit(1, policy_id=101),
+            make_hit(2, policy_id=101),
+        ]
+    )
+    vector = StubRetriever(
+        [
+            make_hit(2, policy_id=101),
+            make_hit(3, policy_id=101),
+        ]
+    )
+
+    hits = asyncio.run(
+        HybridPolicyRetriever(
+            keyword_retriever=keyword,
+            vector_retriever=vector,
+        ).retrieve("지원", top_k=3, policy_ids=[101])
+    )
+
+    assert len(hits) == 3
+    assert {hit.policy_id for hit in hits} == {101}
 
 
 def test_factory_exposes_three_retrieval_strategies():
