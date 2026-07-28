@@ -30,6 +30,24 @@ def test_retrieval_goldset_has_exactly_50_unique_cases():
     assert len({case.expected_policy_id for case in cases}) == 10
 
 
+def test_retrieval_queries_do_not_reveal_exact_policy_names():
+    policy_names = {
+        237: "발달장애인 자기주도 재직자 훈련",
+        238: "법문화교육(교육센터)",
+        240: "건강보험 임신출산 진료비(국민행복카드)",
+        242: "무료법률상담",
+        246: "난임치료휴가급여 지원",
+        247: "위기임신 및 보호출산 지원",
+        251: "인플루엔자 국가예방접종 지원사업",
+        255: "첫만남이용권",
+        289: "에너지바우처",
+        292: "스포츠강좌이용권",
+    }
+
+    for case in load_cases(DEFAULT_CASES_PATH):
+        assert policy_names[case.expected_policy_id] not in case.query
+
+
 def test_score_case_tracks_policy_and_section_hit_separately():
     case = RetrievalCase(
         case_id="R999",
