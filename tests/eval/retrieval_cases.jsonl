@@ -1,0 +1,50 @@
+{"case_id":"R001","query":"발달장애가 있는 직장인이 직장 예절과 대인관계 교육을 받을 수 있는 제도는?","expected_policy_id":237,"expected_sections":["정리된 지원 조건","공식 지원대상 원문"],"category":"target"}
+{"case_id":"R002","query":"발달장애 근로자의 직무능력과 기초 소양을 높이는 훈련을 알려줘","expected_policy_id":237,"expected_sections":["지원 내용"],"category":"benefit"}
+{"case_id":"R003","query":"최대 12주 동안 직무 기초와 소양을 배우는 발달장애인 프로그램이 있어?","expected_policy_id":237,"expected_sections":["지원 내용"],"category":"benefit"}
+{"case_id":"R004","query":"발달장애인 재직자 훈련은 어디에서 신청해?","expected_policy_id":237,"expected_sections":["신청 방법"],"category":"application"}
+{"case_id":"R005","query":"표준사업장에서 근무하는 발달장애 직원 교육 지원 정책","expected_policy_id":237,"expected_sections":["공식 지원대상 원문","지원 내용"],"category":"target"}
+{"case_id":"R006","query":"다문화가족과 북한이탈주민이 받을 수 있는 맞춤형 법교육은?","expected_policy_id":238,"expected_sections":["정리된 지원 조건","공식 지원대상 원문"],"category":"target"}
+{"case_id":"R007","query":"농업인이나 청소년 대상 체험형 법률 교육 프로그램을 찾고 있어","expected_policy_id":238,"expected_sections":["지원 내용"],"category":"benefit"}
+{"case_id":"R008","query":"장애인도 참여할 수 있는 법문화 체험 교육이 있나요?","expected_policy_id":238,"expected_sections":["정리된 지원 조건","공식 지원대상 원문"],"category":"target"}
+{"case_id":"R009","query":"대한법률구조공단 법문화교육센터 교육 신청 방법","expected_policy_id":238,"expected_sections":["신청 방법"],"category":"application"}
+{"case_id":"R010","query":"수시로 신청 가능한 다문화가족 법교육","expected_policy_id":238,"expected_sections":["신청 기간","공식 지원대상 원문"],"category":"application"}
+{"case_id":"R011","query":"임신 한 번에 100만원을 국민행복카드로 받는 지원은?","expected_policy_id":240,"expected_sections":["지원 내용","공식 지원대상 원문"],"category":"benefit"}
+{"case_id":"R012","query":"다태아 임산부에게 기본 140만원 진료비를 주는 제도","expected_policy_id":240,"expected_sections":["지원 내용","공식 지원대상 원문"],"category":"benefit"}
+{"case_id":"R013","query":"두 살 미만 영유아 병원비와 약값을 결제할 수 있는 바우처","expected_policy_id":240,"expected_sections":["지원 내용"],"category":"benefit"}
+{"case_id":"R014","query":"임신출산 진료비 카드 지원은 어디에서 신청하나요?","expected_policy_id":240,"expected_sections":["신청 방법"],"category":"application"}
+{"case_id":"R015","query":"분만예정일 이후 2년 동안 쓸 수 있는 임산부 의료비 이용권","expected_policy_id":240,"expected_sections":["지원 내용"],"category":"caution"}
+{"case_id":"R016","query":"손해배상이나 계약 문제를 무료로 상담받을 수 있는 정책","expected_policy_id":242,"expected_sections":["지원 내용","공식 지원대상 원문"],"category":"benefit"}
+{"case_id":"R017","query":"개인회생과 파산 관련 법률 도움을 돈 없이 받고 싶어","expected_policy_id":242,"expected_sections":["지원 내용"],"category":"benefit"}
+{"case_id":"R018","query":"경제적으로 어려운 국민을 위한 무료 법률 지원","expected_policy_id":242,"expected_sections":["정리된 지원 조건","공식 지원대상 원문"],"category":"target"}
+{"case_id":"R019","query":"대한법률구조공단에서 무료 상담을 신청하는 방법","expected_policy_id":242,"expected_sections":["신청 방법"],"category":"application"}
+{"case_id":"R020","query":"임대차와 민사소송 문제를 상담해주는 복지서비스","expected_policy_id":242,"expected_sections":["지원 내용"],"category":"benefit"}
+{"case_id":"R021","query":"난임치료휴가 중 최초 이틀 통상임금을 지원하는 급여","expected_policy_id":246,"expected_sections":["지원 내용","공식 지원대상 원문"],"category":"benefit"}
+{"case_id":"R022","query":"고용보험 피보험 기간 180일 이상인 난임치료 근로자 지원","expected_policy_id":246,"expected_sections":["조건 구조","공식 지원대상 원문"],"category":"target"}
+{"case_id":"R023","query":"우선지원대상기업 직원이 난임 시술 휴가를 쓸 때 받는 돈","expected_policy_id":246,"expected_sections":["정리된 지원 조건","공식 지원대상 원문"],"category":"target"}
+{"case_id":"R024","query":"난임치료휴가가 끝난 뒤 12개월 안에 신청해야 하는 제도","expected_policy_id":246,"expected_sections":["추가 확인 조건","공식 지원대상 원문"],"category":"caution"}
+{"case_id":"R025","query":"고용센터에서 처리하는 난임 휴가 급여 신청","expected_policy_id":246,"expected_sections":["신청 방법"],"category":"application"}
+{"case_id":"R026","query":"신원을 밝히기 어려운 임산부가 가명으로 출산할 수 있는 지원","expected_policy_id":247,"expected_sections":["지원 내용","공식 지원대상 원문"],"category":"benefit"}
+{"case_id":"R027","query":"위기 임산부가 24시간 비밀 상담을 받을 수 있는 서비스","expected_policy_id":247,"expected_sections":["지원 내용"],"category":"benefit"}
+{"case_id":"R028","query":"보호출산 신생아에게 월 100만원씩 최대 3개월 지원","expected_policy_id":247,"expected_sections":["지원 내용","공식 지원대상 원문"],"category":"benefit"}
+{"case_id":"R029","query":"보호출산 산모 의료비 100만원과 숙려기간 비용 지원","expected_policy_id":247,"expected_sections":["지원 내용","공식 지원대상 원문"],"category":"benefit"}
+{"case_id":"R030","query":"나이와 혼인 여부나 소득에 관계없이 위기임신 상담을 받을 수 있나요?","expected_policy_id":247,"expected_sections":["공식 지원대상 원문"],"category":"target"}
+{"case_id":"R031","query":"65세 이상 어르신 무료 독감 예방접종 지원","expected_policy_id":251,"expected_sections":["정리된 지원 조건","공식 지원대상 원문"],"category":"target"}
+{"case_id":"R032","query":"생후 6개월부터 13세 어린이 인플루엔자 접종 정책","expected_policy_id":251,"expected_sections":["정리된 지원 조건","공식 지원대상 원문"],"category":"target"}
+{"case_id":"R033","query":"임신부가 받을 수 있는 국가 독감 예방접종","expected_policy_id":251,"expected_sections":["정리된 지원 조건","공식 지원대상 원문"],"category":"target"}
+{"case_id":"R034","query":"독감 예방접종을 처음 하는 9세 미만 아이는 두 번 지원되나요?","expected_policy_id":251,"expected_sections":["지원 내용"],"category":"benefit"}
+{"case_id":"R035","query":"보건소나 위탁 의료기관에서 받는 인플루엔자 예방접종","expected_policy_id":251,"expected_sections":["신청 방법"],"category":"application"}
+{"case_id":"R036","query":"출생아에게 첫째 200만원 둘째부터 300만원을 주는 바우처","expected_policy_id":255,"expected_sections":["지원 내용","공식 지원대상 원문"],"category":"benefit"}
+{"case_id":"R037","query":"출생신고를 마친 두 살 이하 아동이 받는 생애 초기 지원","expected_policy_id":255,"expected_sections":["정리된 지원 조건","공식 지원대상 원문"],"category":"target"}
+{"case_id":"R038","query":"신생아 국민행복카드 포인트 지급 정책","expected_policy_id":255,"expected_sections":["지원 내용"],"category":"benefit"}
+{"case_id":"R039","query":"출생 아동 지원금을 복지로나 행정복지센터에서 신청하는 방법","expected_policy_id":255,"expected_sections":["신청 방법"],"category":"application"}
+{"case_id":"R040","query":"첫째 아이 200만원과 둘째 아이 300만원 출산 지원","expected_policy_id":255,"expected_sections":["지원 내용"],"category":"benefit"}
+{"case_id":"R041","query":"기초생활수급 세대 중 노인이나 임산부가 있는 가정의 에너지 지원","expected_policy_id":289,"expected_sections":["정리된 지원 조건","공식 지원대상 원문"],"category":"target"}
+{"case_id":"R042","query":"여름 전기요금과 겨울 도시가스 비용을 지원하는 이용권","expected_policy_id":289,"expected_sections":["지원 내용"],"category":"benefit"}
+{"case_id":"R043","query":"국민행복카드나 고지서 자동 차감으로 받는 난방비 지원","expected_policy_id":289,"expected_sections":["지원 내용"],"category":"benefit"}
+{"case_id":"R044","query":"출산 후 6개월 미만 여성도 받을 수 있는 에너지 복지","expected_policy_id":289,"expected_sections":["추가 확인 조건","공식 지원대상 원문"],"category":"target"}
+{"case_id":"R045","query":"주민센터나 복지로에서 에너지 비용 지원 신청하기","expected_policy_id":289,"expected_sections":["신청 방법"],"category":"application"}
+{"case_id":"R046","query":"5세부터 18세 저소득 청소년 스포츠 수강료 지원","expected_policy_id":292,"expected_sections":["정리된 지원 조건","공식 지원대상 원문"],"category":"target"}
+{"case_id":"R047","query":"한 달 10만5천원씩 12개월 운동 강좌비를 주는 이용권","expected_policy_id":292,"expected_sections":["지원 내용"],"category":"benefit"}
+{"case_id":"R048","query":"학교폭력이나 가정폭력 피해 청소년 우선 스포츠 지원","expected_policy_id":292,"expected_sections":["유의 사항","공식 지원대상 원문"],"category":"caution"}
+{"case_id":"R049","query":"국민체육진흥공단 인터넷으로 청소년 체육강좌를 신청하는 법","expected_policy_id":292,"expected_sections":["신청 방법"],"category":"application"}
+{"case_id":"R050","query":"스포츠 수강료가 월 지원 한도를 넘으면 차액은 본인이 내나요?","expected_policy_id":292,"expected_sections":["지원 내용"],"category":"caution"}
