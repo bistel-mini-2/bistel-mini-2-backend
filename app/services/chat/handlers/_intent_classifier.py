@@ -301,7 +301,7 @@ async def classify_intent(
         "pending_intent": intent if pending_active else None,
         "awaiting_slots": awaiting,
         "profile_confirm": profile_confirm,
-        "branch_suggested_actions": suggested_actions,
+        "classifier_suggested_actions": suggested_actions,
         "supervisor_decision": {
             "intent": intent,
             "raw": raw,

@@ -188,10 +188,10 @@ def test_branch_compare_runs_comparison_graph(monkeypatch: pytest.MonkeyPatch) -
     assert "정책 비교 화면" not in result["branch_content"]
     assert [p["slug"] for p in result["branch_policies"]] == ["WLF1", "WLF2"]
 
-    link_result = asyncio.run(extract_policy_links({
-        **result,
-        "supervisor_decision": {"intent": "compare", "raw": "{}"},
-    }))
+    link_result = extract_policy_links(
+        {"supervisor_decision": {"intent": "compare", "raw": "{}"}},
+        result,
+    )
     assert link_result == [
         {"policy_slug": "WLF1", "action_type": "COMPARED"},
         {"policy_slug": "WLF2", "action_type": "COMPARED"},

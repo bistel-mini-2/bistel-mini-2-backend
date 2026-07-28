@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -28,6 +27,7 @@ from app.common.ai_status import RequestStatus
 from app.services.chat.ai._lifecycle_runners import (
     run_recommendation_lifecycle as _run_recommendation_lifecycle,
 )
+from app.services.chat.handlers._handler_result import HandlerResult
 
 logger = logging.getLogger(__name__)
 
@@ -35,63 +35,48 @@ logger = logging.getLogger(__name__)
 async def handle_recommend(
     state: ChatGraphState,
     db: AsyncSession | None = None,
-) -> dict[str, Any]:
+) -> HandlerResult:
     del db
     selected_conditions = _profile_to_selected_conditions(state.get("profile"))
     follow_up_already_asked = _recommend_follow_up_already_asked(
         state.get("slot")
     ) or bool((state.get("profile") or {}).get("db_profile_confirmed"))
 
-    async def _branch(s: ChatGraphState) -> ChatGraphState:
+    async def _branch(retry_count: int = 0) -> tuple[HandlerResult, str]:
+        """(result, flow_status) 반환. flow_status: 'ok' | 'retryable_error' | 'fallback_needed'"""
         snapshot, lifecycle_error = await _run_recommendation_lifecycle(
-            user_id=s["user_id"],
-            user_content=s["user_content"],
+            user_id=state["user_id"],
+            user_content=state["user_content"],
             selected_conditions=selected_conditions or None,
             follow_up_resolved=follow_up_already_asked,
         )
         if lifecycle_error == "temporary_failure":
-            return {
-                **s,
-                "recommend_flow_status": "retryable_error",
-                "recommend_error_message": _RECOMMEND_FALLBACK_ERROR,
-                "recommend_max_retries": _RECOMMEND_MAX_RETRIES,
-                "branch_content": _RECOMMEND_FALLBACK_ERROR,
-                "branch_policies": [],
-                "branch_evidences": [],
-                "branch_apply_card": None,
-            }
+            return (
+                HandlerResult(content=_RECOMMEND_FALLBACK_ERROR),
+                "retryable_error",
+            )
         if snapshot is None:
-            return {
-                **s,
-                "recommend_flow_status": "fallback_needed",
-                "recommend_error_message": _RECOMMEND_FALLBACK_ERROR,
-                "branch_content": _RECOMMEND_FALLBACK_ERROR,
-                "branch_policies": [],
-                "branch_evidences": [],
-                "branch_apply_card": None,
-            }
+            return (
+                HandlerResult(content=_RECOMMEND_FALLBACK_ERROR),
+                "fallback_needed",
+            )
         if snapshot.status == RequestStatus.FOLLOW_UP_REQUIRED:
             if follow_up_already_asked:
-                return {
-                    **s,
-                    "recommend_flow_status": "fallback_needed",
-                    "recommend_error_message": _RECOMMEND_FOLLOW_UP_LIMIT_REACHED,
-                    "branch_content": _RECOMMEND_FOLLOW_UP_LIMIT_REACHED,
-                    "branch_policies": [],
-                    "branch_evidences": [],
-                    "branch_apply_card": None,
-                    "slot_request": None,
-                    "pending": None,
-                }
+                return (
+                    HandlerResult(
+                        content=_RECOMMEND_FOLLOW_UP_LIMIT_REACHED,
+                        slot_request=None,
+                        pending=None,
+                    ),
+                    "fallback_needed",
+                )
             questions = snapshot.questions or []
             if questions:
-                # 엔진이 요청한 질문 목록
                 engine_q_map: dict[str, dict] = {
                     str(q.get("field_name") or f"follow_up_{i + 1}"): q
                     for i, q in enumerate(questions)
                 }
-                # 이미 채워진 슬롯을 제외한 나머지 위저드 필드를 함께 표시 (한 번에 모아서 받기)
-                filled = _filled_slots(s.get("profile"))
+                filled = _filled_slots(state.get("profile"))
                 extra_keys = [
                     f for f in _RECOMMEND_WIZARD_FIELDS
                     if f not in filled and f not in engine_q_map
@@ -128,36 +113,23 @@ async def handle_recommend(
                     "asked": [awaiting[0]] if awaiting else [],
                     "kind": "slot",
                 }
-                return {
-                    **s,
-                    "recommend_flow_status": "ok",
-                    "recommend_error_message": None,
-                    "branch_content": "맞춤 추천을 위해 정보가 조금 더 필요해요.",
-                    "branch_policies": [],
-                    "branch_evidences": [],
-                    "branch_apply_card": None,
-                    "slot_request": slot_request,
-                    "pending": pending,
-                }
-            return {
-                **s,
-                "recommend_flow_status": "fallback_needed",
-                "recommend_error_message": _RECOMMEND_FALLBACK_FOLLOW_UP,
-                "branch_content": _RECOMMEND_FALLBACK_FOLLOW_UP,
-                "branch_policies": [],
-                "branch_evidences": [],
-                "branch_apply_card": None,
-            }
+                return (
+                    HandlerResult(
+                        content="맞춤 추천을 위해 정보가 조금 더 필요해요.",
+                        slot_request=slot_request,
+                        pending=pending,
+                    ),
+                    "ok",
+                )
+            return (
+                HandlerResult(content=_RECOMMEND_FALLBACK_FOLLOW_UP),
+                "fallback_needed",
+            )
         if snapshot.status != RequestStatus.COMPLETED:
-            return {
-                **s,
-                "recommend_flow_status": "fallback_needed",
-                "recommend_error_message": _RECOMMEND_FALLBACK_ERROR,
-                "branch_content": _RECOMMEND_FALLBACK_ERROR,
-                "branch_policies": [],
-                "branch_evidences": [],
-                "branch_apply_card": None,
-            }
+            return (
+                HandlerResult(content=_RECOMMEND_FALLBACK_ERROR),
+                "fallback_needed",
+            )
         policies, evidences = _adapt_recommendation_result(snapshot.result_json)
         policies = _attach_recommendation_context(
             policies,
@@ -165,45 +137,24 @@ async def handle_recommend(
             selected_conditions=selected_conditions,
             merged_condition_json=snapshot.merged_condition_json or selected_conditions,
         )
-        content = await _generate_branch_answer("recommend", s, evidences)
-        return {
-            **s,
-            "recommend_flow_status": "ok",
-            "recommend_error_message": None,
-            "branch_content": content,
-            "branch_policies": policies,
-            "branch_evidences": evidences,
-        }
+        content = await _generate_branch_answer("recommend", state, evidences)
+        return (
+            HandlerResult(content=content, policies=policies, evidences=evidences),
+            "ok",
+        )
 
-    current: ChatGraphState = await _branch(state)
+    result, flow_status = await _branch()
 
-    while current.get("recommend_flow_status") == "retryable_error":
-        retry_count = int(current.get("recommend_retry_count") or 0) + 1
-        current = {**current, "recommend_retry_count": retry_count}
-        max_retries = int(current.get("recommend_max_retries") or 1)
-        if retry_count <= max_retries:
-            current = await _branch(current)
+    retry_count = 0
+    while flow_status == "retryable_error":
+        retry_count += 1
+        if retry_count <= _RECOMMEND_MAX_RETRIES:
+            result, flow_status = await _branch(retry_count)
         else:
-            fallback_message = current.get("recommend_error_message") or _RECOMMEND_FALLBACK_ERROR
-            current = {
-                **current,
-                "recommend_flow_status": "ok",
-                "branch_content": fallback_message,
-                "branch_policies": [],
-                "branch_evidences": [],
-                "branch_apply_card": None,
-            }
+            result = HandlerResult(content=result.content or _RECOMMEND_FALLBACK_ERROR)
             break
 
-    if current.get("recommend_flow_status") == "fallback_needed":
-        fallback_message = current.get("recommend_error_message") or _RECOMMEND_FALLBACK_ERROR
-        current = {
-            **current,
-            "recommend_flow_status": "ok",
-            "branch_content": fallback_message,
-            "branch_policies": [],
-            "branch_evidences": [],
-            "branch_apply_card": None,
-        }
+    if flow_status == "fallback_needed":
+        result = HandlerResult(content=result.content or _RECOMMEND_FALLBACK_ERROR)
 
-    return current
+    return result

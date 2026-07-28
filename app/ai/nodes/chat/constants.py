@@ -18,8 +18,8 @@ INTENT_TO_ACTION_TYPE: dict[Intent, str | None] = {
     "compare": "COMPARED",
     "eligibility": "ELIGIBILITY_TARGET",
     "apply": "APPLY_TARGET",
-    "summary": None,
-    "policy_summary": None,
+    "summary": "VIEWED",
+    "policy_summary": "VIEWED",
     "unclear": None,
 }
 

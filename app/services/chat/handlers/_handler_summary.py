@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 from app.ai.nodes.chat.chat_nodes import _load_policy_detail
 from app.ai.nodes.chat.result_adapters import _adapt_policy_summary_result
@@ -10,6 +9,7 @@ from app.services.chat.ai._graph_clients import get_policy_summary_graph
 from app.services.chat.ai._policy_resolver import (
     resolve_single_policy_target as _resolve_single_policy_target,
 )
+from app.services.chat.handlers._handler_result import HandlerResult
 
 logger = logging.getLogger(__name__)
 
@@ -23,14 +23,13 @@ async def _run_policy_summary_target(
     *,
     policy_slug: str,
     policy_name: str | None,
-    fallback_evidences: list[dict[str, Any]],
-) -> dict[str, Any]:
+    fallback_evidences: list[dict],
+) -> HandlerResult:
     policy = await _load_policy_detail(policy_slug)
     if policy is None:
-        return {
-            **state,
-            "branch_content": "해당 정책 정보를 찾지 못했어요. 정책명을 다시 확인해 주세요.",
-            "branch_policies": [
+        return HandlerResult(
+            content="해당 정책 정보를 찾지 못했어요. 정책명을 다시 확인해 주세요.",
+            policies=[
                 {
                     "policy_id": policy_slug,
                     "slug": policy_slug,
@@ -40,19 +39,17 @@ async def _run_policy_summary_target(
                     "tagTone": None,
                 }
             ],
-            "branch_evidences": fallback_evidences,
-        }
+            evidences=fallback_evidences,
+        )
 
     try:
         summary_result = await get_policy_summary_graph().run(policy)
     except Exception:
         logger.exception("Policy summary graph failed")
-        return {
-            **state,
-            "branch_content": "정책 요약을 만드는 중 문제가 발생했어요. 잠시 후 다시 시도해 주세요.",
-            "branch_policies": [],
-            "branch_evidences": fallback_evidences,
-        }
+        return HandlerResult(
+            content="정책 요약을 만드는 중 문제가 발생했어요. 잠시 후 다시 시도해 주세요.",
+            evidences=fallback_evidences,
+        )
 
     content, easy_summary, key_points, policies, evidences = (
         _adapt_policy_summary_result(
@@ -66,19 +63,18 @@ async def _run_policy_summary_target(
         and easy_summary
     ):
         content = easy_summary
-    return {
-        **state,
-        "branch_content": content,
-        "branch_easy_summary": easy_summary,
-        "branch_key_points": key_points,
-        "branch_policies": policies,
-        "branch_evidences": evidences,
-    }
+    return HandlerResult(
+        content=content,
+        easy_summary=easy_summary,
+        key_points=key_points,
+        policies=policies,
+        evidences=evidences,
+    )
 
 
 async def handle_policy_summary(
     state: ChatGraphState,
-) -> dict[str, Any]:
+) -> HandlerResult:
     policy_slug, policy_name, fallback_evidences, candidates = (
         await _resolve_single_policy_target(state, intent="policy_summary")
     )
@@ -88,13 +84,11 @@ async def handle_policy_summary(
             return _build_policy_selection_response(
                 state, candidates, "policy_summary", fallback_evidences
             )
-        return {
-            **state,
-            "branch_content": _POLICY_SUMMARY_CLARIFICATION_FALLBACK,
-            "branch_policies": [],
-            "branch_evidences": [],
-            "pending": {"intent": "policy_summary", "kind": "clarification"},
-        }
+        return HandlerResult(
+            content=_POLICY_SUMMARY_CLARIFICATION_FALLBACK,
+            evidences=[],
+            pending={"intent": "policy_summary", "kind": "clarification"},
+        )
     return await _run_policy_summary_target(
         state,
         policy_slug=policy_slug,
@@ -105,7 +99,7 @@ async def handle_policy_summary(
 
 async def handle_summary(
     state: ChatGraphState,
-) -> dict[str, Any]:
+) -> HandlerResult:
     policy_slug, policy_name, fallback_evidences, candidates = (
         await _resolve_single_policy_target(state, intent="summary")
     )
@@ -115,13 +109,11 @@ async def handle_summary(
             return _build_policy_selection_response(
                 state, candidates, "summary", fallback_evidences
             )
-        return {
-            **state,
-            "branch_content": _POLICY_SUMMARY_CLARIFICATION_FALLBACK,
-            "branch_policies": [],
-            "branch_evidences": [],
-            "pending": {"intent": "summary", "kind": "clarification"},
-        }
+        return HandlerResult(
+            content=_POLICY_SUMMARY_CLARIFICATION_FALLBACK,
+            evidences=[],
+            pending={"intent": "summary", "kind": "clarification"},
+        )
     return await _run_policy_summary_target(
         state,
         policy_slug=policy_slug,

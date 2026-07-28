@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 from app.ai.nodes.chat.chat_nodes import (
     _summary_mode,
@@ -15,13 +14,14 @@ from app.ai.nodes.chat.slots import (
     SLOT_OPTIONS as _SLOT_OPTIONS,
 )
 from app.ai.states.chat_state import ChatGraphState, Intent, PendingState, ProfileSlot
+from app.services.chat.handlers._handler_result import HandlerResult
 
 logger = logging.getLogger(__name__)
 
 
 async def handle_collect_slots(
     state: ChatGraphState,
-) -> dict[str, Any]:
+) -> HandlerResult:
     awaiting = state.get("awaiting_slots") or []
     profile: ProfileSlot = state.get("profile") or {}
     decision = state.get("supervisor_decision") or {}
@@ -85,19 +85,16 @@ async def handle_collect_slots(
         "chat_slot_request",
         extra={"intent": intent, "awaiting": awaiting, "steps": field_keys},
     )
-    return {
-        **state,
-        "branch_content": content,
-        "branch_policies": [],
-        "branch_evidences": [],
-        "slot_request": slot_request,
-        "pending": pending,
-    }
+    return HandlerResult(
+        content=content,
+        slot_request=slot_request,
+        pending=pending,
+    )
 
 
 async def handle_confirm_profile(
     state: ChatGraphState,
-) -> dict[str, Any]:
+) -> HandlerResult:
     pc = state.get("profile_confirm") or {}
     summary = pc.get("summary") or []
     lines = "\n".join(f"· {item}" for item in summary)
@@ -112,11 +109,8 @@ async def handle_confirm_profile(
         "kind": "confirm",
     }
     logger.info("chat_profile_confirm", extra={"fields": len(summary)})
-    return {
-        **state,
-        "branch_content": content,
-        "branch_policies": [],
-        "branch_evidences": [],
-        "profile_confirm": pc,
-        "pending": pending,
-    }
+    return HandlerResult(
+        content=content,
+        profile_confirm=pc,
+        pending=pending,
+    )

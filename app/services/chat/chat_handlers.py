@@ -24,6 +24,7 @@ from app.services.chat.handlers import (
     _handler_recommend,
     _handler_summary,
 )
+from app.services.chat.handlers._handler_result import HandlerResult
 from app.services.chat.handlers._handler_slot import handle_collect_slots, handle_confirm_profile
 from app.services.chat.handlers import _intent_classifier
 from app.services.chat.ai._lifecycle_runners import (
@@ -123,7 +124,7 @@ def _build_policy_selection_response(
     candidates: list[dict],
     intent: "Intent",
     evidences: list[dict],
-) -> dict[str, Any]:
+) -> HandlerResult:
     """모호한 정책 참조 시 선택지를 구조화된 응답으로 반환한다.
 
     사용자가 다음 턴에 정책을 선택하면 clarification pending을 통해 원래 의도를 재실행한다.
@@ -139,25 +140,23 @@ def _build_policy_selection_response(
         f"현재 대화에서 {policy_names} 등을 살펴보셨어요. "
         "확인하고 싶은 정책을 선택하거나 이름을 알려주세요."
     )
-    return {
-        **state,
-        "branch_content": content,
-        "branch_policies": [],
-        "branch_evidences": evidences,
-        "branch_policy_candidates": candidates,
-        "pending": {
+    return HandlerResult(
+        content=content,
+        evidences=evidences,
+        policy_candidates=candidates,
+        pending={
             "intent": intent,
             "kind": "clarification",
             "awaiting": [],
             "asked": [],
         },
-    }
+    )
 
 
 async def handle_eligibility(
     state: ChatGraphState,
     db=None,
-) -> dict[str, Any]:
+) -> HandlerResult:
     _sync_legacy_patch_points()
     del db
     slug, policy_name, evidences, candidates = await _resolve_single_policy_target(
@@ -167,13 +166,11 @@ async def handle_eligibility(
     if slug is None:
         if candidates:
             return _build_policy_selection_response(state, candidates, "eligibility", evidences)
-        return {
-            **state,
-            "branch_content": await _generate_clarification_answer("eligibility", state),
-            "branch_user_status": None,
-            "branch_policies": [],
-            "branch_evidences": evidences,
-        }
+        return HandlerResult(
+            content=await _generate_clarification_answer("eligibility", state),
+            user_status=None,
+            evidences=evidences,
+        )
     return await _run_eligibility_branch(
         state=state,
         policy_slug=slug,
@@ -184,7 +181,7 @@ async def handle_eligibility(
 
 async def handle_compare(
     state: ChatGraphState,
-) -> dict[str, Any]:
+) -> HandlerResult:
     _sync_legacy_patch_points()
     first, second, evidences = await _resolve_compare_targets(state)
     if first is None or second is None:
@@ -193,12 +190,10 @@ async def handle_compare(
         candidates = _collect_recent_policy_candidates(state.get("slot"))
         if len(candidates) >= 2:
             return _build_policy_selection_response(state, candidates, "compare", evidences)
-        return {
-            **state,
-            "branch_content": await _generate_clarification_answer("compare", state),
-            "branch_policies": [],
-            "branch_evidences": evidences,
-        }
+        return HandlerResult(
+            content=await _generate_clarification_answer("compare", state),
+            evidences=evidences,
+        )
     return await _run_comparison_branch(
         state=state,
         slug_a=first[0],
@@ -209,20 +204,15 @@ async def handle_compare(
 
 async def handle_unclear(
     state: ChatGraphState,
-) -> dict[str, Any]:
+) -> HandlerResult:
     content = await _generate_branch_answer("unclear", state, evidences=[])
-    return {
-        **state,
-        "branch_content": content,
-        "branch_policies": [],
-        "branch_evidences": [],
-    }
+    return HandlerResult(content=content)
 
 
 async def handle_apply(
     state: ChatGraphState,
     db=None,
-) -> dict[str, Any]:
+) -> HandlerResult:
     _sync_legacy_patch_points()
     return await _handler_apply.handle_apply(state, db)
 
@@ -230,21 +220,21 @@ async def handle_apply(
 async def handle_recommend(
     state: ChatGraphState,
     db=None,
-) -> dict[str, Any]:
+) -> HandlerResult:
     _sync_legacy_patch_points()
     return await _handler_recommend.handle_recommend(state, db)
 
 
 async def handle_policy_summary(
     state: ChatGraphState,
-) -> dict[str, Any]:
+) -> HandlerResult:
     _sync_legacy_patch_points()
     return await _handler_summary.handle_policy_summary(state)
 
 
 async def handle_summary(
     state: ChatGraphState,
-) -> dict[str, Any]:
+) -> HandlerResult:
     _sync_legacy_patch_points()
     return await _handler_summary.handle_summary(state)
 
@@ -255,7 +245,7 @@ async def _run_eligibility_branch(
     policy_slug: str,
     policy_name: str | None,
     evidences: list[dict],
-) -> ChatGraphState:
+) -> HandlerResult:
     _sync_legacy_patch_points()
     return await _lifecycle_runners.run_eligibility_branch(
         state=state,

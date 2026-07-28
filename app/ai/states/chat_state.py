@@ -88,15 +88,9 @@ class ChatGraphState(TypedDict):
     awaiting_slots: NotRequired[list[str]]
     slot_request: NotRequired[dict[str, Any] | None]
     profile_confirm: NotRequired[dict[str, Any] | None]
-    branch_content: NotRequired[str]
-    branch_user_status: NotRequired[str | None]
-    branch_easy_summary: NotRequired[str | None]
-    branch_key_points: NotRequired[list[dict[str, Any]]]
-    branch_policies: NotRequired[list[dict[str, Any]]]
-    branch_evidences: NotRequired[list[dict[str, Any]]]
-    branch_apply_card: NotRequired[dict[str, Any] | None]
-    branch_suggested_actions: NotRequired[list[str]]         # secondary_intents → 후속 액션
-    branch_policy_candidates: NotRequired[list[dict[str, Any]]]  # 정책 선택지 (모호한 참조 시)
+    # 분류기 출력 (핸들러 실행 전 단계)
+    classifier_suggested_actions: NotRequired[list[str]]
+    # 라우터 출력 (핸들러 실행 후 단계)
     assistant_payload: NotRequired[dict[str, Any]]
     evidences_to_save: NotRequired[list[dict[str, Any]]]
     policy_links_to_save: NotRequired[list[dict[str, Any]]]

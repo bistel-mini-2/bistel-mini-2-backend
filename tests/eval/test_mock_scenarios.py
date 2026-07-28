@@ -564,7 +564,7 @@ class TestClassifyIntentMultiIntentAndUnclear:
         ))
 
         assert result["supervisor_decision"]["intent"] == "eligibility"
-        suggested = result.get("branch_suggested_actions") or []
+        suggested = result.get("classifier_suggested_actions") or []
         assert "apply" in suggested, f"apply not in suggested_actions: {suggested}"
 
     def test_m35_very_low_confidence_no_pending_unclear(

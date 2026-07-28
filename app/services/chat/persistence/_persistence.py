@@ -112,10 +112,12 @@ def build_assistant_response(
     policy_links: list[dict],
     slug_to_id: dict[str, int],
 ) -> AssistantMessage:
+    _SLOT_ONLY_ACTION_TYPES = frozenset({"VIEWED"})
     slug_to_action = {
         link["policy_slug"]: link["action_type"]
         for link in policy_links
         if link.get("policy_slug") in slug_to_id
+        and link.get("action_type") not in _SLOT_ONLY_ACTION_TYPES
     }
     policies = [
         AssistantMessagePolicy(

@@ -512,13 +512,12 @@ def test_branch_apply_policy_link_extract_emits_apply_target(
     after_branch = asyncio.run(handle_apply(_state()))
 
     state_with_decision = {
-        **after_branch,
         "supervisor_decision": {"intent": "apply", "raw": "{}"},
     }
-    payload_state = asyncio.run(build_assistant_payload(state_with_decision))
-    link_result = asyncio.run(extract_policy_links(state_with_decision))
+    payload_state = asyncio.run(build_assistant_payload(state_with_decision, after_branch))
+    link_result = extract_policy_links(state_with_decision, after_branch)
 
-    assert payload_state["assistant_payload"]["apply_card"]["policy_id"] == "WLF1"
+    assert payload_state["apply_card"]["policy_id"] == "WLF1"
     assert link_result == [
         {"policy_slug": "WLF1", "action_type": "APPLY_TARGET"}
     ]

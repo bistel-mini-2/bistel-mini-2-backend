@@ -136,12 +136,11 @@ def test_branch_policy_summary_runs_graph_and_exposes_summary_payload(
     monkeypatch.setattr(_graph_clients, "_POLICY_SUMMARY_GRAPH", graph)
 
     branch_state = asyncio.run(handle_policy_summary(_state()))
-    payload_state = asyncio.run(build_assistant_payload(branch_state))
-    evidences_list = asyncio.run(extract_evidences(branch_state))
-    link_result = asyncio.run(extract_policy_links(branch_state))
+    payload = asyncio.run(build_assistant_payload(_state(), branch_state))
+    evidences_list = extract_evidences(branch_state)
+    link_result = extract_policy_links(_state(), branch_state)
 
     graph.run.assert_awaited_once_with(_policy())
-    payload = payload_state["assistant_payload"]
     assert "Birth Support" in payload["content"]
     assert payload["easy_summary"] == "Easy summary"
     assert payload["key_points"] == [
@@ -156,7 +155,9 @@ def test_branch_policy_summary_runs_graph_and_exposes_summary_payload(
             "evidence_role": "SUMMARY",
         }
     ]
-    assert link_result == []
+    assert link_result == [
+        {"policy_slug": "WLF1", "action_type": "VIEWED"},
+    ]
 
 
 def test_branch_policy_summary_uses_resolved_slot_without_rag(

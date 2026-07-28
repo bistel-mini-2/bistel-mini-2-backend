@@ -265,7 +265,17 @@ async def resolve_single_policy_target(
     """
     decision = state.get("supervisor_decision") or {}
     resolved_slug = decision.get("resolved_policy_slug")
+    is_context_dependent = bool(decision.get("is_context_dependent"))
     if resolved_slug:
+        # 슬롯에 정책이 2개 이상이고 is_context_dependent이면 모호한 참조 → 선택 유도
+        if is_context_dependent and len(recent_slot_policies(state.get("slot"))) >= 2:
+            candidates = _collect_recent_policy_candidates(state.get("slot"))
+            if candidates:
+                logger.info(
+                    "chat_policy_candidates_found",
+                    extra={"intent": intent, "candidate_count": len(candidates), "resolved_slug_overridden": True},
+                )
+                return None, None, [], candidates
         slot_policy = _find_slot_policy_by_slug(state.get("slot"), resolved_slug)
         logger.info(
             "chat_slot_resolved",
@@ -329,7 +339,6 @@ async def resolve_single_policy_target(
             return slug, policy_name, [], []
 
     # 슬롯에 후보가 여러 개 있고 is_context_dependent → 선택지 제공
-    is_context_dependent = bool(decision.get("is_context_dependent"))
     if is_context_dependent:
         candidates = _collect_recent_policy_candidates(state.get("slot"))
         if candidates:

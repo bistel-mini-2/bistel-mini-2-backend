@@ -5,6 +5,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.chat.ai._follow_up import attach_similar_policies
+from app.services.chat.handlers._handler_result import HandlerResult
 from app.services.chat.handlers._quality_validator import validate_branch_result
 from app.services.chat.persistence._persistence import fallback_payload
 
@@ -41,7 +42,7 @@ async def run_chat(
           ├─ LLM 구조화 출력 (intent, secondary_intents, confidence, ...)
           └─ Python 검증 및 보정
       → 모호성 확인 (profile_confirm / awaiting_slots 여부)
-      → Handler 하나 실행
+      → Handler 하나 실행 → HandlerResult 반환
       → 공통 품질 검증 (validate_branch_result)
       → 공통 Payload 생성 (build_assistant_payload)
       → evidences / policy_links 추출
@@ -86,48 +87,52 @@ async def run_chat(
         token = set_branch_token_callback(on_token)
         progress_token = set_progress_callback(on_progress)
         try:
-            # ── Handler 하나 실행 ──────────────────────────────────────────
+            # ── Handler 하나 실행 → HandlerResult ─────────────────────────
             if state.get("profile_confirm"):
-                branch_result = await handle_confirm_profile(state)
+                result: HandlerResult = await handle_confirm_profile(state)
             elif state.get("awaiting_slots"):
-                branch_result = await handle_collect_slots(state)
+                result = await handle_collect_slots(state)
             else:
                 match intent:
                     case "recommend":
-                        branch_result = await handle_recommend(state, db)
+                        result = await handle_recommend(state, db)
                     case "eligibility":
-                        branch_result = await handle_eligibility(state, db)
+                        result = await handle_eligibility(state, db)
                     case "compare":
-                        branch_result = await handle_compare(state)
+                        result = await handle_compare(state)
                     case "apply":
-                        branch_result = await handle_apply(state, db)
+                        result = await handle_apply(state, db)
                     case "policy_summary":
-                        branch_result = await handle_policy_summary(state)
+                        result = await handle_policy_summary(state)
                     case "summary":
-                        branch_result = await handle_summary(state)
+                        result = await handle_summary(state)
                     case _:
-                        branch_result = await handle_unclear(state)
+                        result = await handle_unclear(state)
         finally:
             reset_branch_token_callback(token)
             reset_progress_callback(progress_token)
 
-        state.update(branch_result)
+        if not isinstance(result, HandlerResult):
+            result = HandlerResult.from_state_patch(result)
 
         # ── 공통 품질 검증 ────────────────────────────────────────────────
-        correction = validate_branch_result(state, intent)
-        if correction is not None:
-            state.update(correction)
+        corrected = validate_branch_result(state, intent, result)
+        if corrected is not None:
+            result = corrected
 
         # ── Payload 생성 ──────────────────────────────────────────────────
-        state.update(await build_assistant_payload(state))
+        assistant_payload = await build_assistant_payload(state, result)
         if decision.get("similar_policy_requested"):
             await attach_similar_policies(db, state)
 
         return {
             **(preseed_result or {}),
             **state,
-            "evidences_to_save": await extract_evidences(state),
-            "policy_links_to_save": await extract_policy_links(state),
+            "assistant_payload": assistant_payload,
+            "evidences_to_save": extract_evidences(result),
+            "policy_links_to_save": extract_policy_links(state, result),
+            "eligibility_slot_update": result.eligibility_slot_update,
+            "pending": result.pending,
         }
     except Exception:
         logger.exception("Chat direct routing failed")
