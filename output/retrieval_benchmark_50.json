@@ -1659,7 +1659,8 @@
             247
           ],
           "expected_sections": [
-            "공식 지원대상 원문"
+            "공식 지원대상 원문",
+            "지원 내용"
           ],
           "policy_hit": false,
           "section_hit": false,
@@ -2824,7 +2825,7 @@
       "metrics": {
         "case_count": 50,
         "policy_hit_at_k_pct": 86.0,
-        "section_hit_at_k_pct": 78.0,
+        "section_hit_at_k_pct": 80.0,
         "mrr": 0.7497,
         "error_rate_pct": 0.0,
         "latency_mean_ms": 819.047,
@@ -2849,7 +2850,7 @@
           "target": {
             "case_count": 15,
             "policy_hit_at_k_pct": 80.0,
-            "section_hit_at_k_pct": 66.67
+            "section_hit_at_k_pct": 73.33
           }
         }
       },
@@ -4474,12 +4475,13 @@
             247
           ],
           "expected_sections": [
-            "공식 지원대상 원문"
+            "공식 지원대상 원문",
+            "지원 내용"
           ],
           "policy_hit": true,
-          "section_hit": false,
+          "section_hit": true,
           "policy_rank": 2,
-          "section_rank": null,
+          "section_rank": 2,
           "reciprocal_rank": 0.5,
           "elapsed_ms": 631.854,
           "error": null,
@@ -5639,7 +5641,7 @@
       "metrics": {
         "case_count": 50,
         "policy_hit_at_k_pct": 88.0,
-        "section_hit_at_k_pct": 78.0,
+        "section_hit_at_k_pct": 80.0,
         "mrr": 0.7757,
         "error_rate_pct": 0.0,
         "latency_mean_ms": 1280.686,
@@ -5664,7 +5666,7 @@
           "target": {
             "case_count": 15,
             "policy_hit_at_k_pct": 86.67,
-            "section_hit_at_k_pct": 66.67
+            "section_hit_at_k_pct": 73.33
           }
         }
       },
@@ -7282,12 +7284,13 @@
             247
           ],
           "expected_sections": [
-            "공식 지원대상 원문"
+            "공식 지원대상 원문",
+            "지원 내용"
           ],
           "policy_hit": true,
-          "section_hit": false,
+          "section_hit": true,
           "policy_rank": 2,
-          "section_rank": null,
+          "section_rank": 2,
           "reciprocal_rank": 0.5,
           "elapsed_ms": 1196.105,
           "error": null,
@@ -8447,7 +8450,7 @@
       "metrics": {
         "case_count": 50,
         "policy_hit_at_k_pct": 86.0,
-        "section_hit_at_k_pct": 78.0,
+        "section_hit_at_k_pct": 80.0,
         "mrr": 0.7497,
         "error_rate_pct": 0.0,
         "latency_mean_ms": 1005.288,
@@ -8472,7 +8475,7 @@
           "target": {
             "case_count": 15,
             "policy_hit_at_k_pct": 80.0,
-            "section_hit_at_k_pct": 66.67
+            "section_hit_at_k_pct": 73.33
           }
         },
         "fallback_count": 7,
@@ -10128,12 +10131,13 @@
             247
           ],
           "expected_sections": [
-            "공식 지원대상 원문"
+            "공식 지원대상 원문",
+            "지원 내용"
           ],
           "policy_hit": true,
-          "section_hit": false,
+          "section_hit": true,
           "policy_rank": 2,
-          "section_rank": null,
+          "section_rank": 2,
           "reciprocal_rank": 0.5,
           "elapsed_ms": 921.939,
           "error": null,

@@ -27,7 +27,7 @@
 {"case_id":"R027","query":"임신 사실 때문에 막막한데 밤에도 비밀로 상담할 수 있는 곳을 찾고 있어요","expected_policy_ids":[247],"expected_sections":["지원 내용"],"category":"benefit"}
 {"case_id":"R028","query":"부득이하게 맡겨진 신생아의 임시 보호 비용도 지원되나요?","expected_policy_ids":[247],"expected_sections":["지원 내용","공식 지원대상 원문"],"category":"benefit"}
 {"case_id":"R029","query":"이름을 밝히지 않고 출산할 때 병원비와 산후 숙려 비용을 도와주나요?","expected_policy_ids":[247],"expected_sections":["지원 내용","공식 지원대상 원문"],"category":"benefit"}
-{"case_id":"R030","query":"미혼이고 소득이 있어도 출산 문제를 비공개로 상담할 수 있나요?","expected_policy_ids":[247],"expected_sections":["공식 지원대상 원문"],"category":"target"}
+{"case_id":"R030","query":"미혼이고 소득이 있어도 출산 문제를 비공개로 상담할 수 있나요?","expected_policy_ids":[247],"expected_sections":["공식 지원대상 원문","지원 내용"],"category":"target"}
 {"case_id":"R031","query":"부모님이 예순다섯이 넘으셨는데 계절 독감 주사를 무료로 맞을 수 있나요?","expected_policy_ids":[251],"expected_sections":["정리된 지원 조건","공식 지원대상 원문"],"category":"target"}
 {"case_id":"R032","query":"어린 아기부터 중학생 나이 아이까지 독감 주사 비용을 지원하나요?","expected_policy_ids":[251],"expected_sections":["정리된 지원 조건","공식 지원대상 원문"],"category":"target"}
 {"case_id":"R033","query":"아기를 가진 사람도 보건 당국에서 지원하는 독감 주사를 맞을 수 있나요?","expected_policy_ids":[251],"expected_sections":["정리된 지원 조건","공식 지원대상 원문"],"category":"target"}

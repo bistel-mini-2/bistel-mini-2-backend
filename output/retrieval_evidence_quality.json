@@ -1,0 +1,1500 @@
+{
+  "evaluation_name": "retrieved_evidence_correctness",
+  "not_evaluated": "generated_answer_faithfulness",
+  "criteria": {
+    "policy_evidence_hit": "top-k contains an expected policy",
+    "section_evidence_hit": "top-k contains an expected policy with an expected section",
+    "answer_ready_evidence": "section_evidence_hit is true and no retrieval error occurred",
+    "answer_quality_risk": "missing expected policy, missing expected section, or error"
+  },
+  "benchmarks": [
+    {
+      "label": "broad",
+      "source_benchmark": "output/retrieval_benchmark_50.json",
+      "scope_to_expected_policy": false,
+      "strategies": [
+        {
+          "strategy": "sql_keyword",
+          "case_count": 50,
+          "policy_evidence_hit_pct": 18.0,
+          "section_evidence_hit_pct": 12.0,
+          "answer_ready_evidence_pct": 12.0,
+          "answer_quality_risk_count": 44,
+          "answer_quality_risk_rate_pct": 88.0,
+          "risk_cases": [
+            {
+              "case_id": "R001",
+              "query": "발달장애가 있는 회사원이 업무에 적응할 수 있게 교육해 주는 제도가 있을까요?",
+              "expected_policy_ids": [
+                237
+              ],
+              "expected_sections": [
+                "정리된 지원 조건",
+                "공식 지원대상 원문"
+              ],
+              "risk": "missing_expected_policy",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 290,
+                "chunk_id": 29030010375,
+                "section": null,
+                "score": 0.3
+              }
+            },
+            {
+              "case_id": "R002",
+              "query": "발달장애가 있는데 직장에서 예절이나 사람들과 지내는 법을 배우고 싶어요",
+              "expected_policy_ids": [
+                237
+              ],
+              "expected_sections": [
+                "지원 내용"
+              ],
+              "risk": "missing_expected_policy",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 242,
+                "chunk_id": 24290000002,
+                "section": "공식 지원대상 원문",
+                "score": 0.111111
+              }
+            },
+            {
+              "case_id": "R003",
+              "query": "개인 역량에 맞춰 석 달 정도 직무를 배울 수 있는 장애인 과정이 있나요?",
+              "expected_policy_ids": [
+                237
+              ],
+              "expected_sections": [
+                "지원 내용"
+              ],
+              "risk": "missing_expected_policy",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 299,
+                "chunk_id": 29930010094,
+                "section": "Ⅰ. 사업 운영",
+                "score": 0.5
+              }
+            },
+            {
+              "case_id": "R004",
+              "query": "회사 다니는 발달장애인이 교육을 받으려면 어디에 문의해야 하나요?",
+              "expected_policy_ids": [
+                237
+              ],
+              "expected_sections": [
+                "신청 방법"
+              ],
+              "risk": "missing_expected_policy",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 245,
+                "chunk_id": 24530010066,
+                "section": "제1장 장애인 복지사업 개요",
+                "score": 0.25
+              }
+            },
+            {
+              "case_id": "R006",
+              "query": "한국 법이 낯선 이주민이나 탈북민이 쉽게 배울 수 있는 과정이 있나요?",
+              "expected_policy_ids": [
+                238
+              ],
+              "expected_sections": [
+                "정리된 지원 조건",
+                "공식 지원대상 원문"
+              ],
+              "risk": "missing_expected_policy",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 283,
+                "chunk_id": 28330010187,
+                "section": null,
+                "score": 0.3
+              }
+            },
+            {
+              "case_id": "R007",
+              "query": "농사를 짓는 사람이나 10대가 체험하면서 생활 법률을 배울 수 있나요?",
+              "expected_policy_ids": [
+                238
+              ],
+              "expected_sections": [
+                "지원 내용"
+              ],
+              "risk": "missing_expected_policy",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 245,
+                "chunk_id": 24530010200,
+                "section": "제4장 장애인 편의증진",
+                "score": 0.222222
+              }
+            },
+            {
+              "case_id": "R008",
+              "query": "장애가 있어도 참여 가능한 쉬운 법 체험 수업을 찾고 있어요",
+              "expected_policy_ids": [
+                238
+              ],
+              "expected_sections": [
+                "정리된 지원 조건",
+                "공식 지원대상 원문"
+              ],
+              "risk": "missing_expected_policy",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 245,
+                "chunk_id": 24530010075,
+                "section": "제1장 장애인 복지사업 개요",
+                "score": 0.333333
+              }
+            },
+            {
+              "case_id": "R009",
+              "query": "취약계층 대상 체험식 법 수업은 어느 기관에 신청하나요?",
+              "expected_policy_ids": [
+                238
+              ],
+              "expected_sections": [
+                "신청 방법"
+              ],
+              "risk": "missing_expected_policy",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 245,
+                "chunk_id": 24530010024,
+                "section": "가. 대여대상",
+                "score": 0.428571
+              }
+            },
+            {
+              "case_id": "R010",
+              "query": "이주 배경 가족이 정해진 모집 기간 없이 법을 배울 수 있는 곳이 있을까요?",
+              "expected_policy_ids": [
+                238
+              ],
+              "expected_sections": [
+                "신청 기간",
+                "공식 지원대상 원문"
+              ],
+              "risk": "missing_expected_policy",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 245,
+                "chunk_id": 24530010156,
+                "section": "제4장 장애인 편의증진",
+                "score": 0.333333
+              }
+            },
+            {
+              "case_id": "R011",
+              "query": "아기를 가진 건강보험 가입자가 병원비로 쓸 카드 포인트를 받을 수 있나요?",
+              "expected_policy_ids": [
+                240
+              ],
+              "expected_sections": [
+                "지원 내용",
+                "공식 지원대상 원문"
+              ],
+              "risk": "missing_expected_policy",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 245,
+                "chunk_id": 24530010352,
+                "section": "제6장 장애인 생활안정지원",
+                "score": 0.444444
+              }
+            },
+            {
+              "case_id": "R012",
+              "query": "쌍둥이를 임신하면 한 명일 때보다 의료비 지원이 더 나오나요?",
+              "expected_policy_ids": [
+                240,
+                258
+              ],
+              "expected_sections": [
+                "지원 내용",
+                "공식 지원대상 원문"
+              ],
+              "risk": "missing_expected_policy",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 283,
+                "chunk_id": 28330010026,
+                "section": null,
+                "score": 0.285714
+              }
+            },
+            {
+              "case_id": "R013",
+              "query": "두 돌 전 아이의 진료비와 처방약 비용을 포인트로 낼 수 있는 제도",
+              "expected_policy_ids": [
+                240
+              ],
+              "expected_sections": [
+                "지원 내용"
+              ],
+              "risk": "missing_expected_policy",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 288,
+                "chunk_id": 28830010150,
+                "section": "Ⅷ. 예산집행 및 정산",
+                "score": 0.428571
+              }
+            },
+            {
+              "case_id": "R014",
+              "query": "임산부 병원비 카드 포인트는 공단이나 카드사 중 어디에서 신청하나요?",
+              "expected_policy_ids": [
+                240
+              ],
+              "expected_sections": [
+                "신청 방법"
+              ],
+              "risk": "missing_expected_section",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 288,
+                "chunk_id": 28830010176,
+                "section": "4. 서비스 개시 및 이용",
+                "score": 0.375
+              }
+            },
+            {
+              "case_id": "R015",
+              "query": "출산하고 남은 의료비 포인트는 언제까지 써야 없어지지 않나요?",
+              "expected_policy_ids": [
+                240
+              ],
+              "expected_sections": [
+                "지원 내용"
+              ],
+              "risk": "missing_expected_section",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 283,
+                "chunk_id": 28330010159,
+                "section": "나. 급여계좌예외｣에 따라 ‘지방생활보장위원회 심의･의결’을 통하여 혈족 이외 제3자 중 이해관계자(실제",
+                "score": 0.25
+              }
+            },
+            {
+              "case_id": "R017",
+              "query": "빚 때문에 회생이나 파산을 알아보는데 돈 없이 도움받을 곳이 있나요?",
+              "expected_policy_ids": [
+                242
+              ],
+              "expected_sections": [
+                "지원 내용"
+              ],
+              "risk": "missing_expected_policy",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 245,
+                "chunk_id": 24530010156,
+                "section": "제4장 장애인 편의증진",
+                "score": 0.25
+              }
+            },
+            {
+              "case_id": "R018",
+              "query": "형편이 어렵고 법을 잘 몰라도 전문가에게 도움을 받을 수 있을까요?",
+              "expected_policy_ids": [
+                242
+              ],
+              "expected_sections": [
+                "정리된 지원 조건",
+                "공식 지원대상 원문"
+              ],
+              "risk": "missing_expected_policy",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 245,
+                "chunk_id": 24530010000,
+                "section": "관련 문서",
+                "score": 0.25
+              }
+            },
+            {
+              "case_id": "R019",
+              "query": "법률 문제를 무료로 물어보려면 어떤 기관을 찾아가야 하나요?",
+              "expected_policy_ids": [
+                242
+              ],
+              "expected_sections": [
+                "신청 방법"
+              ],
+              "risk": "missing_expected_policy",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 245,
+                "chunk_id": 24530010057,
+                "section": "제1장 장애인 복지사업 개요",
+                "score": 0.25
+              }
+            },
+            {
+              "case_id": "R020",
+              "query": "집주인과의 분쟁이나 민사 재판 문제를 상담받고 싶어요",
+              "expected_policy_ids": [
+                242
+              ],
+              "expected_sections": [
+                "지원 내용"
+              ],
+              "risk": "missing_expected_section",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 283,
+                "chunk_id": 28330010033,
+                "section": null,
+                "score": 0.285714
+              }
+            },
+            {
+              "case_id": "R021",
+              "query": "임신을 준비하는 치료 때문에 쉰 날도 급여를 일부 받을 수 있나요?",
+              "expected_policy_ids": [
+                246
+              ],
+              "expected_sections": [
+                "지원 내용",
+                "공식 지원대상 원문"
+              ],
+              "risk": "missing_expected_policy",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 283,
+                "chunk_id": 28330010047,
+                "section": "2. 사후지원방식(’08. 3. 1일부터 시행)",
+                "score": 0.444444
+              }
+            },
+            {
+              "case_id": "R023",
+              "query": "규모가 작은 회사 직원도 임신 준비 시술을 위해 유급으로 쉴 수 있을까요?",
+              "expected_policy_ids": [
+                246
+              ],
+              "expected_sections": [
+                "정리된 지원 조건",
+                "공식 지원대상 원문"
+              ],
+              "risk": "missing_expected_policy",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 290,
+                "chunk_id": 29030010231,
+                "section": "라. 신청 구비서류",
+                "score": 0.4
+              }
+            },
+            {
+              "case_id": "R025",
+              "query": "임신 준비 시술로 쉰 기간의 임금 보전은 어디에 신청하나요?",
+              "expected_policy_ids": [
+                246
+              ],
+              "expected_sections": [
+                "신청 방법"
+              ],
+              "risk": "missing_expected_policy",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 290,
+                "chunk_id": 29030010060,
+                "section": "Ⅱ. 어린이집의 운영",
+                "score": 0.375
+              }
+            },
+            {
+              "case_id": "R026",
+              "query": "신분을 드러내기 힘든 상황에서도 안전하게 아이를 낳을 방법이 있나요?",
+              "expected_policy_ids": [
+                247
+              ],
+              "expected_sections": [
+                "지원 내용",
+                "공식 지원대상 원문"
+              ],
+              "risk": "missing_expected_policy",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 288,
+                "chunk_id": 28830010073,
+                "section": "6. 서비스 관련 상담자 의견 및 기타사항",
+                "score": 0.222222
+              }
+            },
+            {
+              "case_id": "R027",
+              "query": "임신 사실 때문에 막막한데 밤에도 비밀로 상담할 수 있는 곳을 찾고 있어요",
+              "expected_policy_ids": [
+                247
+              ],
+              "expected_sections": [
+                "지원 내용"
+              ],
+              "risk": "missing_expected_policy",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 287,
+                "chunk_id": 28730010054,
+                "section": null,
+                "score": 0.363636
+              }
+            },
+            {
+              "case_id": "R028",
+              "query": "부득이하게 맡겨진 신생아의 임시 보호 비용도 지원되나요?",
+              "expected_policy_ids": [
+                247
+              ],
+              "expected_sections": [
+                "지원 내용",
+                "공식 지원대상 원문"
+              ],
+              "risk": "missing_expected_policy",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 245,
+                "chunk_id": 24530010233,
+                "section": "4. 장애인권익옹호기관 운영법인의 외부임원(이사 등)이 조사대상의 기관장인 경우",
+                "score": 0.285714
+              }
+            },
+            {
+              "case_id": "R030",
+              "query": "미혼이고 소득이 있어도 출산 문제를 비공개로 상담할 수 있나요?",
+              "expected_policy_ids": [
+                247
+              ],
+              "expected_sections": [
+                "공식 지원대상 원문",
+                "지원 내용"
+              ],
+              "risk": "missing_expected_policy",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 265,
+                "chunk_id": 26590000001,
+                "section": "조건 구조",
+                "score": 0.25
+              }
+            },
+            {
+              "case_id": "R031",
+              "query": "부모님이 예순다섯이 넘으셨는데 계절 독감 주사를 무료로 맞을 수 있나요?",
+              "expected_policy_ids": [
+                251
+              ],
+              "expected_sections": [
+                "정리된 지원 조건",
+                "공식 지원대상 원문"
+              ],
+              "risk": "missing_expected_policy",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 309,
+                "chunk_id": 30930010143,
+                "section": null,
+                "score": 0.222222
+              }
+            },
+            {
+              "case_id": "R032",
+              "query": "어린 아기부터 중학생 나이 아이까지 독감 주사 비용을 지원하나요?",
+              "expected_policy_ids": [
+                251
+              ],
+              "expected_sections": [
+                "정리된 지원 조건",
+                "공식 지원대상 원문"
+              ],
+              "risk": "missing_expected_policy",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 283,
+                "chunk_id": 28330010133,
+                "section": "2. 위탁가정 내 위탁아동 형제자매 2명 이상 보호 시 전문아동보호비 지급 방법은?",
+                "score": 0.222222
+              }
+            },
+            {
+              "case_id": "R033",
+              "query": "아기를 가진 사람도 보건 당국에서 지원하는 독감 주사를 맞을 수 있나요?",
+              "expected_policy_ids": [
+                251
+              ],
+              "expected_sections": [
+                "정리된 지원 조건",
+                "공식 지원대상 원문"
+              ],
+              "risk": "missing_expected_policy",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 290,
+                "chunk_id": 29030010085,
+                "section": "Ⅱ. 어린이집의 운영",
+                "score": 0.3
+              }
+            },
+            {
+              "case_id": "R034",
+              "query": "아이가 독감 주사를 한 번도 안 맞았다면 이번에 몇 번 접종해야 하나요?",
+              "expected_policy_ids": [
+                251
+              ],
+              "expected_sections": [
+                "지원 내용"
+              ],
+              "risk": "missing_expected_policy",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 266,
+                "chunk_id": 26690000003,
+                "section": null,
+                "score": 0.125
+              }
+            },
+            {
+              "case_id": "R035",
+              "query": "어르신과 아이 독감 주사는 보건소 말고 동네 병원에서도 지원되나요?",
+              "expected_policy_ids": [
+                251
+              ],
+              "expected_sections": [
+                "신청 방법"
+              ],
+              "risk": "missing_expected_policy",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 290,
+                "chunk_id": 29030010085,
+                "section": "Ⅱ. 어린이집의 운영",
+                "score": 0.333333
+              }
+            },
+            {
+              "case_id": "R036",
+              "query": "둘째가 태어났는데 첫째 때보다 출산 축하 지원을 더 받을 수 있나요?",
+              "expected_policy_ids": [
+                255
+              ],
+              "expected_sections": [
+                "지원 내용",
+                "공식 지원대상 원문"
+              ],
+              "risk": "missing_expected_policy",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 245,
+                "chunk_id": 24530010000,
+                "section": "관련 문서",
+                "score": 0.333333
+              }
+            },
+            {
+              "case_id": "R037",
+              "query": "출생신고를 마친 두 돌 전 아기에게 주는 초기 양육 지원이 궁금해요",
+              "expected_policy_ids": [
+                255,
+                287
+              ],
+              "expected_sections": [
+                "정리된 지원 조건",
+                "공식 지원대상 원문",
+                "지원 내용"
+              ],
+              "risk": "missing_expected_policy",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 283,
+                "chunk_id": 28330010109,
+                "section": "Ⅱ. 심리치료지원사업 내용",
+                "score": 0.375
+              }
+            },
+            {
+              "case_id": "R038",
+              "query": "아기가 태어나면 육아 물품에 쓸 수 있는 카드 포인트가 나오나요?",
+              "expected_policy_ids": [
+                255
+              ],
+              "expected_sections": [
+                "지원 내용"
+              ],
+              "risk": "missing_expected_policy",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 288,
+                "chunk_id": 28830010170,
+                "section": "1. 귀하가 신청한 급여에 대한 조사 결과 기초생활보장 수급자로 결정되었음을 알려드립니다.",
+                "score": 0.375
+              }
+            },
+            {
+              "case_id": "R039",
+              "query": "모든 신생아에게 한 번 나오는 목돈은 온라인이나 동네 행정기관에서 어떻게 신청하나요?",
+              "expected_policy_ids": [
+                255
+              ],
+              "expected_sections": [
+                "신청 방법"
+              ],
+              "risk": "missing_expected_policy",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 290,
+                "chunk_id": 29030010230,
+                "section": "다. 급여신청 장소 및 시기",
+                "score": 0.222222
+              }
+            },
+            {
+              "case_id": "R040",
+              "query": "시설에서 보호받는 아기는 출산 지원을 카드 대신 현금으로 받을 수 있나요?",
+              "expected_policy_ids": [
+                255
+              ],
+              "expected_sections": [
+                "지원 내용"
+              ],
+              "risk": "missing_expected_policy",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 245,
+                "chunk_id": 24530010000,
+                "section": "관련 문서",
+                "score": 0.4
+              }
+            },
+            {
+              "case_id": "R041",
+              "query": "생계 지원을 받는 집에 노인이나 임산부가 있으면 냉난방비도 도움받나요?",
+              "expected_policy_ids": [
+                289
+              ],
+              "expected_sections": [
+                "정리된 지원 조건",
+                "공식 지원대상 원문"
+              ],
+              "risk": "missing_expected_policy",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 290,
+                "chunk_id": 29030010012,
+                "section": "1. 의무사업장 판단기준 관련",
+                "score": 0.444444
+              }
+            },
+            {
+              "case_id": "R042",
+              "query": "여름에는 전기료, 겨울에는 가스나 기름값을 깎아주는 제도가 있나요?",
+              "expected_policy_ids": [
+                289
+              ],
+              "expected_sections": [
+                "지원 내용"
+              ],
+              "risk": "missing_expected_policy",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 245,
+                "chunk_id": 24530010266,
+                "section": "제5장 장애인 차별금지 및 권익옹호",
+                "score": 0.125
+              }
+            },
+            {
+              "case_id": "R043",
+              "query": "난방비 도움을 카드로 결제하거나 고지서에서 바로 빼는 방식 중 고를 수 있나요?",
+              "expected_policy_ids": [
+                289
+              ],
+              "expected_sections": [
+                "지원 내용"
+              ],
+              "risk": "missing_expected_policy",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 309,
+                "chunk_id": 30930010195,
+                "section": null,
+                "score": 0.3
+              }
+            },
+            {
+              "case_id": "R045",
+              "query": "저소득 가정의 냉난방비 도움은 온라인과 주민센터 중 어디서 신청하나요?",
+              "expected_policy_ids": [
+                289
+              ],
+              "expected_sections": [
+                "신청 방법"
+              ],
+              "risk": "missing_expected_policy",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 245,
+                "chunk_id": 24530010066,
+                "section": "제1장 장애인 복지사업 개요",
+                "score": 0.375
+              }
+            },
+            {
+              "case_id": "R046",
+              "query": "형편이 어려운 초중고생이 운동 학원에 다닐 때 수강료를 지원받을 수 있나요?",
+              "expected_policy_ids": [
+                292
+              ],
+              "expected_sections": [
+                "정리된 지원 조건",
+                "공식 지원대상 원문"
+              ],
+              "risk": "missing_expected_policy",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 245,
+                "chunk_id": 24530010058,
+                "section": null,
+                "score": 0.333333
+              }
+            },
+            {
+              "case_id": "R047",
+              "query": "아이 체육 수업 비용을 매달 일정 금액씩 1년 동안 보조해 주는 제도",
+              "expected_policy_ids": [
+                292
+              ],
+              "expected_sections": [
+                "지원 내용"
+              ],
+              "risk": "missing_expected_policy",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 245,
+                "chunk_id": 24530010073,
+                "section": "제1장 장애인 복지사업 개요",
+                "score": 0.333333
+              }
+            },
+            {
+              "case_id": "R048",
+              "query": "폭력 피해를 겪은 청소년은 운동 수업비 지원을 먼저 받을 수 있나요?",
+              "expected_policy_ids": [
+                292
+              ],
+              "expected_sections": [
+                "유의 사항",
+                "공식 지원대상 원문"
+              ],
+              "risk": "missing_expected_policy",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 245,
+                "chunk_id": 24530010256,
+                "section": "제5장 장애인 차별금지 및 권익옹호",
+                "score": 0.4
+              }
+            },
+            {
+              "case_id": "R049",
+              "query": "저소득 청소년 운동비는 시청 방문 말고 인터넷으로도 신청할 수 있나요?",
+              "expected_policy_ids": [
+                292
+              ],
+              "expected_sections": [
+                "신청 방법"
+              ],
+              "risk": "missing_expected_policy",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 245,
+                "chunk_id": 24530010328,
+                "section": "2. 국내거소신고, 외국인등록 사실증명 또는 혼인신고 증명서류(재외동포나 외국인의 경우만 해당합니다)",
+                "score": 0.333333
+              }
+            },
+            {
+              "case_id": "R050",
+              "query": "아이 운동 수업료가 지원 한도보다 비싸면 초과분은 직접 내야 하나요?",
+              "expected_policy_ids": [
+                292
+              ],
+              "expected_sections": [
+                "지원 내용"
+              ],
+              "risk": "missing_expected_policy",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 290,
+                "chunk_id": 29030010013,
+                "section": "Ⅰ. 어린이집의 설치",
+                "score": 0.4
+              }
+            }
+          ]
+        },
+        {
+          "strategy": "vector",
+          "case_count": 50,
+          "policy_evidence_hit_pct": 86.0,
+          "section_evidence_hit_pct": 80.0,
+          "answer_ready_evidence_pct": 80.0,
+          "answer_quality_risk_count": 10,
+          "answer_quality_risk_rate_pct": 20.0,
+          "risk_cases": [
+            {
+              "case_id": "R002",
+              "query": "발달장애가 있는데 직장에서 예절이나 사람들과 지내는 법을 배우고 싶어요",
+              "expected_policy_ids": [
+                237
+              ],
+              "expected_sections": [
+                "지원 내용"
+              ],
+              "risk": "missing_expected_policy",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 327,
+                "chunk_id": 32730010251,
+                "section": "가. 지원대상",
+                "score": 0.636784
+              }
+            },
+            {
+              "case_id": "R006",
+              "query": "한국 법이 낯선 이주민이나 탈북민이 쉽게 배울 수 있는 과정이 있나요?",
+              "expected_policy_ids": [
+                238
+              ],
+              "expected_sections": [
+                "정리된 지원 조건",
+                "공식 지원대상 원문"
+              ],
+              "risk": "missing_expected_section",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 238,
+                "chunk_id": 23890000001,
+                "section": "조건 구조",
+                "score": 0.634556
+              }
+            },
+            {
+              "case_id": "R008",
+              "query": "장애가 있어도 참여 가능한 쉬운 법 체험 수업을 찾고 있어요",
+              "expected_policy_ids": [
+                238
+              ],
+              "expected_sections": [
+                "정리된 지원 조건",
+                "공식 지원대상 원문"
+              ],
+              "risk": "missing_expected_policy",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 307,
+                "chunk_id": 30730010013,
+                "section": null,
+                "score": 0.662416
+              }
+            },
+            {
+              "case_id": "R019",
+              "query": "법률 문제를 무료로 물어보려면 어떤 기관을 찾아가야 하나요?",
+              "expected_policy_ids": [
+                242
+              ],
+              "expected_sections": [
+                "신청 방법"
+              ],
+              "risk": "missing_expected_section",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 242,
+                "chunk_id": 24290000005,
+                "section": "신청 기간",
+                "score": 0.695514
+              }
+            },
+            {
+              "case_id": "R023",
+              "query": "규모가 작은 회사 직원도 임신 준비 시술을 위해 유급으로 쉴 수 있을까요?",
+              "expected_policy_ids": [
+                246
+              ],
+              "expected_sections": [
+                "정리된 지원 조건",
+                "공식 지원대상 원문"
+              ],
+              "risk": "missing_expected_policy",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 265,
+                "chunk_id": 26590000004,
+                "section": null,
+                "score": 0.673319
+              }
+            },
+            {
+              "case_id": "R024",
+              "query": "시술 때문에 사용한 휴가 비용은 언제까지 청구해야 하나요?",
+              "expected_policy_ids": [
+                246
+              ],
+              "expected_sections": [
+                "추가 확인 조건",
+                "공식 지원대상 원문"
+              ],
+              "risk": "missing_expected_section",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 246,
+                "chunk_id": 24690000006,
+                "section": "신청 기간",
+                "score": 0.618695
+              }
+            },
+            {
+              "case_id": "R025",
+              "query": "임신 준비 시술로 쉰 기간의 임금 보전은 어디에 신청하나요?",
+              "expected_policy_ids": [
+                246
+              ],
+              "expected_sections": [
+                "신청 방법"
+              ],
+              "risk": "missing_expected_policy",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 258,
+                "chunk_id": 25890000006,
+                "section": "신청 기간",
+                "score": 0.708545
+              }
+            },
+            {
+              "case_id": "R029",
+              "query": "이름을 밝히지 않고 출산할 때 병원비와 산후 숙려 비용을 도와주나요?",
+              "expected_policy_ids": [
+                247
+              ],
+              "expected_sections": [
+                "지원 내용",
+                "공식 지원대상 원문"
+              ],
+              "risk": "missing_expected_policy",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 259,
+                "chunk_id": 25990000005,
+                "section": "지원 내용",
+                "score": 0.685648
+              }
+            },
+            {
+              "case_id": "R039",
+              "query": "모든 신생아에게 한 번 나오는 목돈은 온라인이나 동네 행정기관에서 어떻게 신청하나요?",
+              "expected_policy_ids": [
+                255
+              ],
+              "expected_sections": [
+                "신청 방법"
+              ],
+              "risk": "missing_expected_policy",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 327,
+                "chunk_id": 32730010230,
+                "section": "다. 급여신청 장소 및 시기",
+                "score": 0.700747
+              }
+            },
+            {
+              "case_id": "R044",
+              "query": "출산한 지 반년이 안 된 수급 가정도 전기와 난방 비용을 지원받나요?",
+              "expected_policy_ids": [
+                289
+              ],
+              "expected_sections": [
+                "추가 확인 조건",
+                "공식 지원대상 원문"
+              ],
+              "risk": "missing_expected_policy",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 316,
+                "chunk_id": 31690000005,
+                "section": "지원 내용",
+                "score": 0.696539
+              }
+            }
+          ]
+        },
+        {
+          "strategy": "hybrid",
+          "case_count": 50,
+          "policy_evidence_hit_pct": 88.0,
+          "section_evidence_hit_pct": 80.0,
+          "answer_ready_evidence_pct": 80.0,
+          "answer_quality_risk_count": 10,
+          "answer_quality_risk_rate_pct": 20.0,
+          "risk_cases": [
+            {
+              "case_id": "R002",
+              "query": "발달장애가 있는데 직장에서 예절이나 사람들과 지내는 법을 배우고 싶어요",
+              "expected_policy_ids": [
+                237
+              ],
+              "expected_sections": [
+                "지원 내용"
+              ],
+              "risk": "missing_expected_policy",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 327,
+                "chunk_id": 32730010251,
+                "section": "가. 지원대상",
+                "score": 0.016393
+              }
+            },
+            {
+              "case_id": "R006",
+              "query": "한국 법이 낯선 이주민이나 탈북민이 쉽게 배울 수 있는 과정이 있나요?",
+              "expected_policy_ids": [
+                238
+              ],
+              "expected_sections": [
+                "정리된 지원 조건",
+                "공식 지원대상 원문"
+              ],
+              "risk": "missing_expected_section",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 238,
+                "chunk_id": 23890000001,
+                "section": "조건 구조",
+                "score": 0.016393
+              }
+            },
+            {
+              "case_id": "R008",
+              "query": "장애가 있어도 참여 가능한 쉬운 법 체험 수업을 찾고 있어요",
+              "expected_policy_ids": [
+                238
+              ],
+              "expected_sections": [
+                "정리된 지원 조건",
+                "공식 지원대상 원문"
+              ],
+              "risk": "missing_expected_policy",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 307,
+                "chunk_id": 30730010013,
+                "section": null,
+                "score": 0.020017
+              }
+            },
+            {
+              "case_id": "R014",
+              "query": "임산부 병원비 카드 포인트는 공단이나 카드사 중 어디에서 신청하나요?",
+              "expected_policy_ids": [
+                240
+              ],
+              "expected_sections": [
+                "신청 방법"
+              ],
+              "risk": "missing_expected_section",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 240,
+                "chunk_id": 24090000004,
+                "section": "공식 지원대상 원문",
+                "score": 0.020362
+              }
+            },
+            {
+              "case_id": "R018",
+              "query": "형편이 어렵고 법을 잘 몰라도 전문가에게 도움을 받을 수 있을까요?",
+              "expected_policy_ids": [
+                242
+              ],
+              "expected_sections": [
+                "정리된 지원 조건",
+                "공식 지원대상 원문"
+              ],
+              "risk": "missing_expected_section",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 242,
+                "chunk_id": 24290000006,
+                "section": "유의 사항",
+                "score": 0.016393
+              }
+            },
+            {
+              "case_id": "R019",
+              "query": "법률 문제를 무료로 물어보려면 어떤 기관을 찾아가야 하나요?",
+              "expected_policy_ids": [
+                242
+              ],
+              "expected_sections": [
+                "신청 방법"
+              ],
+              "risk": "missing_expected_section",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 242,
+                "chunk_id": 24290000005,
+                "section": "신청 기간",
+                "score": 0.016393
+              }
+            },
+            {
+              "case_id": "R023",
+              "query": "규모가 작은 회사 직원도 임신 준비 시술을 위해 유급으로 쉴 수 있을까요?",
+              "expected_policy_ids": [
+                246
+              ],
+              "expected_sections": [
+                "정리된 지원 조건",
+                "공식 지원대상 원문"
+              ],
+              "risk": "missing_expected_policy",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 265,
+                "chunk_id": 26590000004,
+                "section": null,
+                "score": 0.016393
+              }
+            },
+            {
+              "case_id": "R025",
+              "query": "임신 준비 시술로 쉰 기간의 임금 보전은 어디에 신청하나요?",
+              "expected_policy_ids": [
+                246
+              ],
+              "expected_sections": [
+                "신청 방법"
+              ],
+              "risk": "missing_expected_policy",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 258,
+                "chunk_id": 25890000006,
+                "section": "신청 기간",
+                "score": 0.016393
+              }
+            },
+            {
+              "case_id": "R029",
+              "query": "이름을 밝히지 않고 출산할 때 병원비와 산후 숙려 비용을 도와주나요?",
+              "expected_policy_ids": [
+                247
+              ],
+              "expected_sections": [
+                "지원 내용",
+                "공식 지원대상 원문"
+              ],
+              "risk": "missing_expected_policy",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 316,
+                "chunk_id": 31690000005,
+                "section": "지원 내용",
+                "score": 0.019116
+              }
+            },
+            {
+              "case_id": "R039",
+              "query": "모든 신생아에게 한 번 나오는 목돈은 온라인이나 동네 행정기관에서 어떻게 신청하나요?",
+              "expected_policy_ids": [
+                255
+              ],
+              "expected_sections": [
+                "신청 방법"
+              ],
+              "risk": "missing_expected_policy",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 327,
+                "chunk_id": 32730010230,
+                "section": "다. 급여신청 장소 및 시기",
+                "score": 0.020181
+              }
+            }
+          ]
+        },
+        {
+          "strategy": "adaptive",
+          "case_count": 50,
+          "policy_evidence_hit_pct": 86.0,
+          "section_evidence_hit_pct": 80.0,
+          "answer_ready_evidence_pct": 80.0,
+          "answer_quality_risk_count": 10,
+          "answer_quality_risk_rate_pct": 20.0,
+          "risk_cases": [
+            {
+              "case_id": "R002",
+              "query": "발달장애가 있는데 직장에서 예절이나 사람들과 지내는 법을 배우고 싶어요",
+              "expected_policy_ids": [
+                237
+              ],
+              "expected_sections": [
+                "지원 내용"
+              ],
+              "risk": "missing_expected_policy",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 327,
+                "chunk_id": 32730010251,
+                "section": "가. 지원대상",
+                "score": 0.636833
+              }
+            },
+            {
+              "case_id": "R006",
+              "query": "한국 법이 낯선 이주민이나 탈북민이 쉽게 배울 수 있는 과정이 있나요?",
+              "expected_policy_ids": [
+                238
+              ],
+              "expected_sections": [
+                "정리된 지원 조건",
+                "공식 지원대상 원문"
+              ],
+              "risk": "missing_expected_section",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 238,
+                "chunk_id": 23890000001,
+                "section": "조건 구조",
+                "score": 0.634556
+              }
+            },
+            {
+              "case_id": "R008",
+              "query": "장애가 있어도 참여 가능한 쉬운 법 체험 수업을 찾고 있어요",
+              "expected_policy_ids": [
+                238
+              ],
+              "expected_sections": [
+                "정리된 지원 조건",
+                "공식 지원대상 원문"
+              ],
+              "risk": "missing_expected_policy",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 307,
+                "chunk_id": 30730010013,
+                "section": null,
+                "score": 0.66243
+              }
+            },
+            {
+              "case_id": "R019",
+              "query": "법률 문제를 무료로 물어보려면 어떤 기관을 찾아가야 하나요?",
+              "expected_policy_ids": [
+                242
+              ],
+              "expected_sections": [
+                "신청 방법"
+              ],
+              "risk": "missing_expected_section",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 242,
+                "chunk_id": 24290000005,
+                "section": "신청 기간",
+                "score": 0.695896
+              }
+            },
+            {
+              "case_id": "R023",
+              "query": "규모가 작은 회사 직원도 임신 준비 시술을 위해 유급으로 쉴 수 있을까요?",
+              "expected_policy_ids": [
+                246
+              ],
+              "expected_sections": [
+                "정리된 지원 조건",
+                "공식 지원대상 원문"
+              ],
+              "risk": "missing_expected_policy",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 265,
+                "chunk_id": 26590000004,
+                "section": null,
+                "score": 0.672995
+              }
+            },
+            {
+              "case_id": "R024",
+              "query": "시술 때문에 사용한 휴가 비용은 언제까지 청구해야 하나요?",
+              "expected_policy_ids": [
+                246
+              ],
+              "expected_sections": [
+                "추가 확인 조건",
+                "공식 지원대상 원문"
+              ],
+              "risk": "missing_expected_section",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 246,
+                "chunk_id": 24690000006,
+                "section": "신청 기간",
+                "score": 0.61867
+              }
+            },
+            {
+              "case_id": "R025",
+              "query": "임신 준비 시술로 쉰 기간의 임금 보전은 어디에 신청하나요?",
+              "expected_policy_ids": [
+                246
+              ],
+              "expected_sections": [
+                "신청 방법"
+              ],
+              "risk": "missing_expected_policy",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 258,
+                "chunk_id": 25890000006,
+                "section": "신청 기간",
+                "score": 0.708545
+              }
+            },
+            {
+              "case_id": "R029",
+              "query": "이름을 밝히지 않고 출산할 때 병원비와 산후 숙려 비용을 도와주나요?",
+              "expected_policy_ids": [
+                247
+              ],
+              "expected_sections": [
+                "지원 내용",
+                "공식 지원대상 원문"
+              ],
+              "risk": "missing_expected_policy",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 259,
+                "chunk_id": 25990000005,
+                "section": "지원 내용",
+                "score": 0.685638
+              }
+            },
+            {
+              "case_id": "R039",
+              "query": "모든 신생아에게 한 번 나오는 목돈은 온라인이나 동네 행정기관에서 어떻게 신청하나요?",
+              "expected_policy_ids": [
+                255
+              ],
+              "expected_sections": [
+                "신청 방법"
+              ],
+              "risk": "missing_expected_policy",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 327,
+                "chunk_id": 32730010230,
+                "section": "다. 급여신청 장소 및 시기",
+                "score": 0.700564
+              }
+            },
+            {
+              "case_id": "R044",
+              "query": "출산한 지 반년이 안 된 수급 가정도 전기와 난방 비용을 지원받나요?",
+              "expected_policy_ids": [
+                289
+              ],
+              "expected_sections": [
+                "추가 확인 조건",
+                "공식 지원대상 원문"
+              ],
+              "risk": "missing_expected_policy",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 316,
+                "chunk_id": 31690000005,
+                "section": "지원 내용",
+                "score": 0.696539
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "label": "scoped",
+      "source_benchmark": "output/retrieval_benchmark_scoped_50.json",
+      "scope_to_expected_policy": true,
+      "strategies": [
+        {
+          "strategy": "vector",
+          "case_count": 50,
+          "policy_evidence_hit_pct": 100.0,
+          "section_evidence_hit_pct": 98.0,
+          "answer_ready_evidence_pct": 98.0,
+          "answer_quality_risk_count": 1,
+          "answer_quality_risk_rate_pct": 2.0,
+          "risk_cases": [
+            {
+              "case_id": "R019",
+              "query": "법률 문제를 무료로 물어보려면 어떤 기관을 찾아가야 하나요?",
+              "expected_policy_ids": [
+                242
+              ],
+              "expected_sections": [
+                "신청 방법"
+              ],
+              "risk": "missing_expected_section",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 242,
+                "chunk_id": 24290000005,
+                "section": "신청 기간",
+                "score": 0.695514
+              }
+            }
+          ]
+        },
+        {
+          "strategy": "adaptive",
+          "case_count": 50,
+          "policy_evidence_hit_pct": 100.0,
+          "section_evidence_hit_pct": 98.0,
+          "answer_ready_evidence_pct": 98.0,
+          "answer_quality_risk_count": 1,
+          "answer_quality_risk_rate_pct": 2.0,
+          "risk_cases": [
+            {
+              "case_id": "R019",
+              "query": "법률 문제를 무료로 물어보려면 어떤 기관을 찾아가야 하나요?",
+              "expected_policy_ids": [
+                242
+              ],
+              "expected_sections": [
+                "신청 방법"
+              ],
+              "risk": "missing_expected_section",
+              "top_result": {
+                "rank": 1,
+                "policy_id": 242,
+                "chunk_id": 24290000005,
+                "section": "신청 기간",
+                "score": 0.695514
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

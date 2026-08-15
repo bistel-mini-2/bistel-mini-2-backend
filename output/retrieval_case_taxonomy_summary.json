@@ -1,0 +1,233 @@
+{
+  "dataset": "tests/eval/retrieval_cases.jsonl",
+  "source_benchmark": "output/retrieval_benchmark_50.json",
+  "case_count": 50,
+  "counts": {
+    "direct_policy_name": 0,
+    "condition_missing": 10,
+    "similar_policy": 15,
+    "ambiguous_question": 2,
+    "eligibility_or_rule": 10,
+    "other": 13
+  },
+  "strategies": {
+    "sql_keyword": {
+      "ambiguous_question": {
+        "case_count": 2,
+        "policy_hit_at_k_pct": 0.0,
+        "section_hit_at_k_pct": 0.0,
+        "risk_case_ids": [
+          "R012",
+          "R037"
+        ]
+      },
+      "condition_missing": {
+        "case_count": 10,
+        "policy_hit_at_k_pct": 40.0,
+        "section_hit_at_k_pct": 30.0,
+        "risk_case_ids": [
+          "R010",
+          "R015",
+          "R030",
+          "R034",
+          "R040",
+          "R048",
+          "R050"
+        ]
+      },
+      "eligibility_or_rule": {
+        "case_count": 10,
+        "policy_hit_at_k_pct": 10.0,
+        "section_hit_at_k_pct": 10.0,
+        "risk_case_ids": [
+          "R001",
+          "R006",
+          "R018",
+          "R023",
+          "R031",
+          "R032",
+          "R033",
+          "R041",
+          "R046"
+        ]
+      },
+      "other": {
+        "case_count": 13,
+        "policy_hit_at_k_pct": 7.69,
+        "section_hit_at_k_pct": 0.0,
+        "risk_case_ids": [
+          "R004",
+          "R009",
+          "R014",
+          "R019",
+          "R025",
+          "R027",
+          "R035",
+          "R039",
+          "R042",
+          "R043",
+          "R045",
+          "R047",
+          "R049"
+        ]
+      },
+      "similar_policy": {
+        "case_count": 15,
+        "policy_hit_at_k_pct": 20.0,
+        "section_hit_at_k_pct": 13.33,
+        "risk_case_ids": [
+          "R002",
+          "R003",
+          "R007",
+          "R008",
+          "R011",
+          "R013",
+          "R017",
+          "R020",
+          "R021",
+          "R026",
+          "R028",
+          "R036",
+          "R038"
+        ]
+      }
+    },
+    "vector": {
+      "ambiguous_question": {
+        "case_count": 2,
+        "policy_hit_at_k_pct": 100.0,
+        "section_hit_at_k_pct": 100.0,
+        "risk_case_ids": []
+      },
+      "condition_missing": {
+        "case_count": 10,
+        "policy_hit_at_k_pct": 90.0,
+        "section_hit_at_k_pct": 80.0,
+        "risk_case_ids": [
+          "R024",
+          "R044"
+        ]
+      },
+      "eligibility_or_rule": {
+        "case_count": 10,
+        "policy_hit_at_k_pct": 90.0,
+        "section_hit_at_k_pct": 80.0,
+        "risk_case_ids": [
+          "R006",
+          "R023"
+        ]
+      },
+      "other": {
+        "case_count": 13,
+        "policy_hit_at_k_pct": 84.62,
+        "section_hit_at_k_pct": 76.92,
+        "risk_case_ids": [
+          "R019",
+          "R025",
+          "R039"
+        ]
+      },
+      "similar_policy": {
+        "case_count": 15,
+        "policy_hit_at_k_pct": 80.0,
+        "section_hit_at_k_pct": 80.0,
+        "risk_case_ids": [
+          "R002",
+          "R008",
+          "R029"
+        ]
+      }
+    },
+    "hybrid": {
+      "ambiguous_question": {
+        "case_count": 2,
+        "policy_hit_at_k_pct": 100.0,
+        "section_hit_at_k_pct": 100.0,
+        "risk_case_ids": []
+      },
+      "condition_missing": {
+        "case_count": 10,
+        "policy_hit_at_k_pct": 100.0,
+        "section_hit_at_k_pct": 100.0,
+        "risk_case_ids": []
+      },
+      "eligibility_or_rule": {
+        "case_count": 10,
+        "policy_hit_at_k_pct": 90.0,
+        "section_hit_at_k_pct": 70.0,
+        "risk_case_ids": [
+          "R006",
+          "R018",
+          "R023"
+        ]
+      },
+      "other": {
+        "case_count": 13,
+        "policy_hit_at_k_pct": 84.62,
+        "section_hit_at_k_pct": 69.23,
+        "risk_case_ids": [
+          "R014",
+          "R019",
+          "R025",
+          "R039"
+        ]
+      },
+      "similar_policy": {
+        "case_count": 15,
+        "policy_hit_at_k_pct": 80.0,
+        "section_hit_at_k_pct": 80.0,
+        "risk_case_ids": [
+          "R002",
+          "R008",
+          "R029"
+        ]
+      }
+    },
+    "adaptive": {
+      "ambiguous_question": {
+        "case_count": 2,
+        "policy_hit_at_k_pct": 100.0,
+        "section_hit_at_k_pct": 100.0,
+        "risk_case_ids": []
+      },
+      "condition_missing": {
+        "case_count": 10,
+        "policy_hit_at_k_pct": 90.0,
+        "section_hit_at_k_pct": 80.0,
+        "risk_case_ids": [
+          "R024",
+          "R044"
+        ]
+      },
+      "eligibility_or_rule": {
+        "case_count": 10,
+        "policy_hit_at_k_pct": 90.0,
+        "section_hit_at_k_pct": 80.0,
+        "risk_case_ids": [
+          "R006",
+          "R023"
+        ]
+      },
+      "other": {
+        "case_count": 13,
+        "policy_hit_at_k_pct": 84.62,
+        "section_hit_at_k_pct": 76.92,
+        "risk_case_ids": [
+          "R019",
+          "R025",
+          "R039"
+        ]
+      },
+      "similar_policy": {
+        "case_count": 15,
+        "policy_hit_at_k_pct": 80.0,
+        "section_hit_at_k_pct": 80.0,
+        "risk_case_ids": [
+          "R002",
+          "R008",
+          "R029"
+        ]
+      }
+    }
+  }
+}

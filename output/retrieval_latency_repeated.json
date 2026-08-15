@@ -1,0 +1,67 @@
+{
+  "execution_mode": "fixture_from_existing_single_run_benchmarks",
+  "repeat_run_count": 1,
+  "actual_repeated_run_available": false,
+  "why_not_repeated": "This artifact was generated from checked-in benchmark JSON without opening the DB, calling the embedding API, or overwriting the original benchmark files. Run retrieval_eval.py --repeat-runs 5 against a configured DB/API environment for true repeated latency.",
+  "recommended_command": "PYTHONPATH=. .venv/bin/python tests/eval/retrieval_eval.py --repeat-runs 5 --top-k 5 --output output/retrieval_latency_repeated.json",
+  "summaries": [
+    {
+      "label": "broad",
+      "source_benchmark": "output/retrieval_benchmark_50.json",
+      "scope_to_expected_policy": false,
+      "case_count": 50,
+      "strategies": [
+        {
+          "strategy": "sql_keyword",
+          "single_run_latency_p50_ms": 1256.644,
+          "single_run_latency_p95_ms": 1731.826,
+          "fallback_count": null,
+          "fallback_rate_pct": null
+        },
+        {
+          "strategy": "vector",
+          "single_run_latency_p50_ms": 781.577,
+          "single_run_latency_p95_ms": 1093.191,
+          "fallback_count": null,
+          "fallback_rate_pct": null
+        },
+        {
+          "strategy": "hybrid",
+          "single_run_latency_p50_ms": 1291.562,
+          "single_run_latency_p95_ms": 1717.025,
+          "fallback_count": null,
+          "fallback_rate_pct": null
+        },
+        {
+          "strategy": "adaptive",
+          "single_run_latency_p50_ms": 808.613,
+          "single_run_latency_p95_ms": 2290.099,
+          "fallback_count": 7,
+          "fallback_rate_pct": 14.0
+        }
+      ]
+    },
+    {
+      "label": "scoped",
+      "source_benchmark": "output/retrieval_benchmark_scoped_50.json",
+      "scope_to_expected_policy": true,
+      "case_count": 50,
+      "strategies": [
+        {
+          "strategy": "vector",
+          "single_run_latency_p50_ms": 664.753,
+          "single_run_latency_p95_ms": 1026.989,
+          "fallback_count": null,
+          "fallback_rate_pct": null
+        },
+        {
+          "strategy": "adaptive",
+          "single_run_latency_p50_ms": 700.228,
+          "single_run_latency_p95_ms": 951.483,
+          "fallback_count": 1,
+          "fallback_rate_pct": 2.0
+        }
+      ]
+    }
+  ]
+}

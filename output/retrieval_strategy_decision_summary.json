@@ -1,0 +1,22 @@
+{
+  "scope": "current 50-case internal retrieval evaluation",
+  "decision_candidate": "adaptive",
+  "baseline": "vector",
+  "accuracy_latency_tradeoff": {
+    "hybrid_policy_hit_gain_pct_point_vs_vector": 2.0,
+    "hybrid_section_hit_gain_pct_point_vs_vector": 0.0,
+    "hybrid_mrr_gain_vs_vector": 0.026,
+    "hybrid_p50_latency_increase_ms_vs_vector": 509.985,
+    "hybrid_p95_latency_increase_ms_vs_vector": 623.834
+  },
+  "adaptive_quality_preservation": {
+    "broad_policy_hit_delta_pct_point_vs_vector": 0.0,
+    "broad_section_hit_delta_pct_point_vs_vector": 0.0,
+    "broad_fallback_count": 7,
+    "broad_fallback_rate_pct": 14.0,
+    "scoped_section_hit_delta_pct_point_vs_vector": 0.0,
+    "scoped_fallback_count": 1,
+    "scoped_fallback_rate_pct": 2.0
+  },
+  "bounded_decision_sentence": "현재 50문항 내부 평가 조건에서는 Hybrid가 Policy Hit@5와 MRR은 소폭 높지만 p50 latency 증가가 커서 기본값으로 채택하지 않고, Vector 품질을 유지하면서 조건부 SQL 보충만 수행한 Adaptive를 챗봇 기본 검색 전략 후보로 둔다."
+}

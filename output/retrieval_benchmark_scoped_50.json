@@ -1659,12 +1659,13 @@
             247
           ],
           "expected_sections": [
-            "공식 지원대상 원문"
+            "공식 지원대상 원문",
+            "지원 내용"
           ],
           "policy_hit": true,
           "section_hit": true,
           "policy_rank": 1,
-          "section_rank": 2,
+          "section_rank": 1,
           "reciprocal_rank": 1.0,
           "elapsed_ms": 560.202,
           "error": null,
@@ -4505,12 +4506,13 @@
             247
           ],
           "expected_sections": [
-            "공식 지원대상 원문"
+            "공식 지원대상 원문",
+            "지원 내용"
           ],
           "policy_hit": true,
           "section_hit": true,
           "policy_rank": 1,
-          "section_rank": 2,
+          "section_rank": 1,
           "reciprocal_rank": 1.0,
           "elapsed_ms": 591.586,
           "error": null,

@@ -8,6 +8,7 @@ from tests.eval.retrieval_eval import (
     evaluate_strategy,
     load_cases,
     score_case,
+    summarize_repeated_runs,
 )
 
 
@@ -200,3 +201,44 @@ def test_evaluate_strategy_can_scope_search_to_expected_policy(monkeypatch):
 
     assert calls[0]["policy_ids"] == [100]
     assert calls[0]["evidence_role"] == "TARGET"
+
+
+def test_summarize_repeated_runs_preserves_per_run_latency_values():
+    run_template = {
+        "dataset": "tests/eval/retrieval_cases.jsonl",
+        "top_k": 5,
+        "case_count": 1,
+        "scope_to_expected_policy": False,
+        "strategies": [
+            {
+                "strategy": "vector",
+                "metrics": {
+                    "case_count": 1,
+                    "policy_hit_at_k_pct": 100.0,
+                    "section_hit_at_k_pct": 100.0,
+                    "mrr": 1.0,
+                    "latency_p50_ms": 100.0,
+                    "latency_p95_ms": 200.0,
+                },
+            }
+        ],
+    }
+    second_run = {
+        **run_template,
+        "strategies": [
+            {
+                "strategy": "vector",
+                "metrics": {
+                    **run_template["strategies"][0]["metrics"],
+                    "latency_p50_ms": 120.0,
+                    "latency_p95_ms": 260.0,
+                },
+            }
+        ],
+    }
+
+    summary = summarize_repeated_runs([run_template, second_run])
+
+    assert summary["run_count"] == 2
+    assert summary["strategies"][0]["latency_p50_ms_values"] == [100.0, 120.0]
+    assert summary["strategies"][0]["latency_p95_ms"] == 230.0

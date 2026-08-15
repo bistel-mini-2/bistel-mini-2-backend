@@ -1,0 +1,357 @@
+{
+  "note": "Fallback means AdaptivePolicyRetriever issued an additional SQL keyword lookup after vector retrieval. This is retrieval evidence, not generated-answer faithfulness.",
+  "benchmarks": [
+    {
+      "label": "broad",
+      "source_benchmark": "output/retrieval_benchmark_50.json",
+      "scope_to_expected_policy": false,
+      "case_count": 50,
+      "fallback_count": 7,
+      "fallback_rate_pct": 14.0,
+      "cases": [
+        {
+          "case_id": "R002",
+          "category": "benefit",
+          "query": "발달장애가 있는데 직장에서 예절이나 사람들과 지내는 법을 배우고 싶어요",
+          "expected_policy_ids": [
+            237
+          ],
+          "expected_sections": [
+            "지원 내용"
+          ],
+          "policy_hit": false,
+          "section_hit": false,
+          "risk": "missing_expected_policy",
+          "retrieved_summary": [
+            {
+              "rank": 1,
+              "policy_id": 327,
+              "section": "가. 지원대상"
+            },
+            {
+              "rank": 2,
+              "policy_id": 315,
+              "section": "가. 지원대상"
+            },
+            {
+              "rank": 3,
+              "policy_id": 325,
+              "section": null
+            },
+            {
+              "rank": 4,
+              "policy_id": 326,
+              "section": null
+            },
+            {
+              "rank": 5,
+              "policy_id": 327,
+              "section": null
+            }
+          ]
+        },
+        {
+          "case_id": "R006",
+          "category": "target",
+          "query": "한국 법이 낯선 이주민이나 탈북민이 쉽게 배울 수 있는 과정이 있나요?",
+          "expected_policy_ids": [
+            238
+          ],
+          "expected_sections": [
+            "정리된 지원 조건",
+            "공식 지원대상 원문"
+          ],
+          "policy_hit": true,
+          "section_hit": false,
+          "risk": "missing_expected_section",
+          "retrieved_summary": [
+            {
+              "rank": 1,
+              "policy_id": 238,
+              "section": "조건 구조"
+            },
+            {
+              "rank": 2,
+              "policy_id": 326,
+              "section": "3) 농어업인 기준"
+            },
+            {
+              "rank": 3,
+              "policy_id": 315,
+              "section": "3) 농어업인 기준"
+            },
+            {
+              "rank": 4,
+              "policy_id": 328,
+              "section": "3) 농어업인 기준"
+            },
+            {
+              "rank": 5,
+              "policy_id": 327,
+              "section": "3) 농어업인 기준"
+            }
+          ]
+        },
+        {
+          "case_id": "R008",
+          "category": "target",
+          "query": "장애가 있어도 참여 가능한 쉬운 법 체험 수업을 찾고 있어요",
+          "expected_policy_ids": [
+            238
+          ],
+          "expected_sections": [
+            "정리된 지원 조건",
+            "공식 지원대상 원문"
+          ],
+          "policy_hit": false,
+          "section_hit": false,
+          "risk": "missing_expected_policy",
+          "retrieved_summary": [
+            {
+              "rank": 1,
+              "policy_id": 307,
+              "section": null
+            },
+            {
+              "rank": 2,
+              "policy_id": 290,
+              "section": null
+            },
+            {
+              "rank": 3,
+              "policy_id": 315,
+              "section": null
+            },
+            {
+              "rank": 4,
+              "policy_id": 325,
+              "section": null
+            },
+            {
+              "rank": 5,
+              "policy_id": 252,
+              "section": "공식 지원대상 원문"
+            }
+          ]
+        },
+        {
+          "case_id": "R010",
+          "category": "application",
+          "query": "이주 배경 가족이 정해진 모집 기간 없이 법을 배울 수 있는 곳이 있을까요?",
+          "expected_policy_ids": [
+            238
+          ],
+          "expected_sections": [
+            "신청 기간",
+            "공식 지원대상 원문"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "risk": "answer_ready_evidence",
+          "retrieved_summary": [
+            {
+              "rank": 1,
+              "policy_id": 238,
+              "section": "공식 지원대상 원문"
+            },
+            {
+              "rank": 2,
+              "policy_id": 283,
+              "section": null
+            },
+            {
+              "rank": 3,
+              "policy_id": 284,
+              "section": null
+            },
+            {
+              "rank": 4,
+              "policy_id": 238,
+              "section": "지원 내용"
+            },
+            {
+              "rank": 5,
+              "policy_id": 294,
+              "section": null
+            }
+          ]
+        },
+        {
+          "case_id": "R022",
+          "category": "target",
+          "query": "시술 때문에 휴가를 내려는데 고용보험 가입 기간 조건이 있나요?",
+          "expected_policy_ids": [
+            246
+          ],
+          "expected_sections": [
+            "조건 구조",
+            "공식 지원대상 원문"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "risk": "answer_ready_evidence",
+          "retrieved_summary": [
+            {
+              "rank": 1,
+              "policy_id": 261,
+              "section": "추가 확인 조건"
+            },
+            {
+              "rank": 2,
+              "policy_id": 246,
+              "section": "조건 구조"
+            },
+            {
+              "rank": 3,
+              "policy_id": 265,
+              "section": "유의 사항"
+            },
+            {
+              "rank": 4,
+              "policy_id": 329,
+              "section": "2. 무주택자인 근로자가 주거를 목적으로 「민법」 제303조에 따른 전세금 또는 「주택임대차보호법」"
+            },
+            {
+              "rank": 5,
+              "policy_id": 246,
+              "section": "공식 지원대상 원문"
+            }
+          ]
+        },
+        {
+          "case_id": "R039",
+          "category": "application",
+          "query": "모든 신생아에게 한 번 나오는 목돈은 온라인이나 동네 행정기관에서 어떻게 신청하나요?",
+          "expected_policy_ids": [
+            255
+          ],
+          "expected_sections": [
+            "신청 방법"
+          ],
+          "policy_hit": false,
+          "section_hit": false,
+          "risk": "missing_expected_policy",
+          "retrieved_summary": [
+            {
+              "rank": 1,
+              "policy_id": 327,
+              "section": "다. 급여신청 장소 및 시기"
+            },
+            {
+              "rank": 2,
+              "policy_id": 325,
+              "section": "다. 급여신청 장소 및 시기"
+            },
+            {
+              "rank": 3,
+              "policy_id": 326,
+              "section": "다. 급여신청 장소 및 시기"
+            },
+            {
+              "rank": 4,
+              "policy_id": 315,
+              "section": "다. 급여신청 장소 및 시기"
+            },
+            {
+              "rank": 5,
+              "policy_id": 328,
+              "section": "다. 급여신청 장소 및 시기"
+            }
+          ]
+        },
+        {
+          "case_id": "R050",
+          "category": "caution",
+          "query": "아이 운동 수업료가 지원 한도보다 비싸면 초과분은 직접 내야 하나요?",
+          "expected_policy_ids": [
+            292
+          ],
+          "expected_sections": [
+            "지원 내용"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "risk": "answer_ready_evidence",
+          "retrieved_summary": [
+            {
+              "rank": 1,
+              "policy_id": 292,
+              "section": "지원 내용"
+            },
+            {
+              "rank": 2,
+              "policy_id": 292,
+              "section": "공식 지원대상 원문"
+            },
+            {
+              "rank": 3,
+              "policy_id": 288,
+              "section": null
+            },
+            {
+              "rank": 4,
+              "policy_id": 288,
+              "section": null
+            },
+            {
+              "rank": 5,
+              "policy_id": 305,
+              "section": "나) 방문교육서비스 제공"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "label": "scoped",
+      "source_benchmark": "output/retrieval_benchmark_scoped_50.json",
+      "scope_to_expected_policy": true,
+      "case_count": 50,
+      "fallback_count": 1,
+      "fallback_rate_pct": 2.0,
+      "cases": [
+        {
+          "case_id": "R015",
+          "category": "caution",
+          "query": "출산하고 남은 의료비 포인트는 언제까지 써야 없어지지 않나요?",
+          "expected_policy_ids": [
+            240
+          ],
+          "expected_sections": [
+            "지원 내용"
+          ],
+          "policy_hit": true,
+          "section_hit": true,
+          "risk": "answer_ready_evidence",
+          "retrieved_summary": [
+            {
+              "rank": 1,
+              "policy_id": 240,
+              "section": "공식 지원대상 원문"
+            },
+            {
+              "rank": 2,
+              "policy_id": 240,
+              "section": "지원 내용"
+            },
+            {
+              "rank": 3,
+              "policy_id": 240,
+              "section": "제외 조건"
+            },
+            {
+              "rank": 4,
+              "policy_id": 240,
+              "section": "신청 기간"
+            },
+            {
+              "rank": 5,
+              "policy_id": 240,
+              "section": "추가 확인 조건"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

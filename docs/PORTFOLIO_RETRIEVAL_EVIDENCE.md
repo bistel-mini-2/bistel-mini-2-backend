@@ -1,0 +1,184 @@
+# Dodam 검색 품질 근거 보강 리포트
+
+## 평가 목적
+
+Dodam 정책 챗봇 작업을 "RAG 챗봇을 만들었다"가 아니라, 검색 품질을
+측정하고 현재 서비스 조건에 맞는 검색 기본값 후보를 선택한 case study로
+설명하기 위한 근거를 정리한다.
+
+이 문서는 리트리버 평가 근거만 다룬다. 생성 답변의 faithfulness는 아직
+별도 평가가 필요하며, 여기의 evidence correctness와 같은 의미가 아니다.
+
+## 평가 데이터와 골드셋 범위
+
+- 골드셋: `tests/eval/retrieval_cases.jsonl`
+- 문항 수: 50개
+- 기준 정책: 10개 정책, 정책별 5문항
+- 허용 정답 정책: 복수 정답 2문항을 포함해 12개 policy id
+- Top K: 5
+- 정답 라벨: `expected_policy_ids`, `expected_sections`
+- 문항 검수 기록: `docs/RETRIEVAL_GOLDSET_AUDIT.md`
+
+골드셋은 정책 원문 기준으로 검수한 50문항 내부 검색 검증셋이다.
+정책명을 질문에 직접 노출하지 않도록 구성했고, 정답 정책과 근거 섹션을
+분리해 라벨링했다. 다만 외부 평가자 간 일치도를 측정한 공개 표준
+벤치마크는 아니다.
+
+## Broad와 Scoped 조건
+
+Broad 평가는 사용자 자연어 질문만으로 전체 정책 청크에서 정답 정책과 근거
+섹션을 찾는 조건이다. 결과 파일은 `output/retrieval_benchmark_50.json`이다.
+
+Scoped 평가는 실제 정책 요약 흐름처럼 이미 `policy_id`를 알고 있는 상태에서
+해당 정책 안의 답변 근거 섹션을 찾는 조건이다. `policy_summary_graph`는
+정책 요약 전 `search_policy_chunks`에 `policy_ids=[policy["policy_id"]]`를
+넘긴다. 따라서 scoped 평가는 정책 발견 성능이 아니라, 답변에 쓸 섹션
+검색 품질을 해석하는 데 사용한다. 결과 파일은
+`output/retrieval_benchmark_scoped_50.json`이다.
+
+## 검색 전략별 결과 요약
+
+### Broad 전체 정책 검색
+
+| 전략 | Policy Hit@5 | Section Hit@5 | MRR | p50 | p95 | Fallback |
+|---|---:|---:|---:|---:|---:|---:|
+| SQL keyword | 18.0% | 12.0% | 0.0957 | 1,257ms | 1,732ms | - |
+| pgvector | 86.0% | 80.0% | 0.7497 | 782ms | 1,093ms | - |
+| Weighted Hybrid RRF | 88.0% | 80.0% | 0.7757 | 1,292ms | 1,717ms | - |
+| Adaptive fallback | 86.0% | 80.0% | 0.7497 | 809ms | 2,290ms | 7/50, 14.0% |
+
+### Scoped 정책 범위 근거 검색
+
+| 전략 | Policy Hit@5 | Section Hit@5 | MRR | p50 | p95 | Fallback |
+|---|---:|---:|---:|---:|---:|---:|
+| pgvector | 100.0% | 98.0% | 1.0000 | 665ms | 1,027ms | - |
+| Adaptive fallback | 100.0% | 98.0% | 1.0000 | 700ms | 951ms | 1/50, 2.0% |
+
+## 반복 Latency 결과
+
+`tests/eval/retrieval_eval.py`에 `--repeat-runs` 옵션을 추가했다. 실제 DB,
+임베딩 API, 네트워크 설정이 준비된 환경에서는 다음 명령으로 기존 1회
+benchmark 파일을 덮어쓰지 않고 반복 latency를 측정할 수 있다.
+
+```bash
+PYTHONPATH=. .venv/bin/python tests/eval/retrieval_eval.py \
+  --repeat-runs 5 \
+  --top-k 5 \
+  --output output/retrieval_latency_repeated.json
+```
+
+현재 `output/retrieval_latency_repeated.json`은 기존 체크인 benchmark JSON에서
+만든 fixture 기반 산출물이다. DB/API를 새로 호출하지 않았으므로
+`actual_repeated_run_available=false`로 표시했다. 이 파일은 반복 실행
+가능 경로와 현재 1회 측정값을 분리해 문서화하기 위한 것이며, 운영 SLA로
+해석하지 않는다.
+
+## 질문 유형별 결과
+
+원본 골드셋을 직접 수정하지 않고 `tests/eval/retrieval_case_taxonomy.json`에
+별도 taxonomy를 만들었다.
+
+| 유형 | 문항 수 | 기준 |
+|---|---:|---|
+| direct_policy_name | 0 | 정책명을 직접 말하는 질문 |
+| condition_missing | 10 | 기한, 예외, 제한 조건, 누락 조건을 묻는 질문 |
+| similar_policy | 15 | 유사 정책이 많은 도메인에서 정답 정책 구분이 필요한 질문 |
+| ambiguous_question | 2 | 검수된 복수 정답 또는 모호성이 있는 질문 |
+| eligibility_or_rule | 10 | 대상 자격, 조건 구조, 규칙 중심 질문 |
+| other | 13 | 단순 혜택 또는 신청 경로 중심 질문 |
+
+유형별 성능 요약은 `output/retrieval_case_taxonomy_summary.json`에 저장했다.
+Broad 평가에서 pgvector는 ambiguous 2문항을 모두 맞췄고, condition_missing
+유형에서는 Section Hit@5 80.0%, eligibility_or_rule 유형에서도 80.0%였다.
+Hybrid는 condition_missing 유형 Section Hit@5가 100.0%로 높았지만,
+eligibility_or_rule과 other 유형에서는 pgvector보다 낮은 섹션 적중 사례가
+있었다.
+
+## Adaptive Fallback 사례 요약
+
+Adaptive fallback은 vector 결과가 비었거나 요청한 evidence role이 top-k에
+없을 때만 SQL keyword 검색을 추가 실행한다.
+
+- Broad: 7/50문항, 14.0%
+- Scoped: 1/50문항, 2.0%
+- 상세 사례: `output/retrieval_fallback_cases.json`
+
+Broad fallback 발동 문항은 `R002`, `R006`, `R008`, `R010`, `R022`, `R039`,
+`R050`이다. 이 중 `R010`, `R022`, `R050`은 기대 정책과 섹션을 포함했고,
+`R006`은 기대 정책은 포함했지만 기대 섹션이 부족했다. `R002`, `R008`,
+`R039`는 기대 정책 자체가 top-k에 없어 답변 품질 리스크로 남는다.
+
+Scoped fallback은 `R015` 1문항에서만 발동했고, 기대 정책과 기대 섹션을
+포함했다.
+
+## Evidence Correctness 평가 결과
+
+`tests/eval/retrieval_portfolio_evidence.py`는 기존 benchmark 결과를 바탕으로
+검색된 top-k 근거가 답변에 사용할 수 있는지 평가한다. 평가 이름은
+`retrieved_evidence_correctness`이며, 생성 답변 faithfulness와 구분한다.
+
+| 조건 | 전략 | Policy Evidence Hit | Section Evidence Hit | Answer-ready Evidence | Risk Count |
+|---|---|---:|---:|---:|---:|
+| broad | SQL keyword | 18.0% | 12.0% | 12.0% | 44 |
+| broad | pgvector | 86.0% | 80.0% | 80.0% | 10 |
+| broad | Hybrid | 88.0% | 80.0% | 80.0% | 10 |
+| broad | Adaptive | 86.0% | 80.0% | 80.0% | 10 |
+| scoped | pgvector | 100.0% | 98.0% | 98.0% | 1 |
+| scoped | Adaptive | 100.0% | 98.0% | 98.0% | 1 |
+
+검색 실패가 답변 품질 리스크로 이어지는 경로는 단순하다. 기대 정책이 없으면
+답변이 다른 정책을 근거로 삼을 수 있고, 기대 정책은 있어도 기대 섹션이
+없으면 대상, 혜택, 신청 방법, 유의사항 중 필요한 근거가 빠진 답변이 될 수
+있다. 상세 risk case는 `output/retrieval_evidence_quality.json`에 저장했다.
+
+## Hybrid 기본값 미채택 근거
+
+현재 50문항 내부 평가 조건에서는 Hybrid가 pgvector보다 Policy Hit@5가
+2.0%p, MRR이 0.0260 높다. 그러나 Section Hit@5는 80.0%로 같고, p50
+latency는 약 510ms, p95 latency는 약 624ms 증가했다.
+
+Adaptive는 broad에서 pgvector와 같은 Policy Hit@5 86.0%, Section Hit@5
+80.0%를 유지하면서 SQL fallback을 7/50문항으로 제한했다. Scoped에서도
+Section Hit@5 98.0%를 유지하고 fallback은 1/50문항이었다.
+
+따라서 현재 평가 조건에서는 모든 요청에서 Hybrid를 실행하기보다, Vector를
+정상 경로로 두고 근거 역할이 부족할 때만 SQL을 보충하는 Adaptive를 챗봇
+기본 검색 전략 후보로 보는 것이 더 보수적이다. 이 판단은
+`output/retrieval_strategy_decision_summary.json`에 자동 요약했다.
+
+## 한계
+
+- Latency는 1회 또는 fixture 기반 측정이며 운영 SLA가 아니다.
+- 골드셋은 정책 원문 기준으로 검수한 50문항 내부 검색 검증셋이며 공개
+  표준 데이터셋이 아니다.
+- 현재 평가는 검색된 근거의 correctness를 본다. 생성 답변 faithfulness는
+  별도 평가가 필요하다.
+- 이 문서는 팀 프로젝트 결과와 개인 후속 평가를 구분한다. 팀 결과는
+  정책 챗봇 및 검색 구조 구현이고, 이 문서의 taxonomy, fallback 사례 요약,
+  evidence correctness, 전략 판단 요약은 포트폴리오 근거 강화를 위한 개인
+  후속 평가 산출물이다.
+
+## 재현 명령
+
+기존 benchmark 재실행:
+
+```bash
+PYTHONPATH=. .venv/bin/python tests/eval/retrieval_eval.py \
+  --top-k 5 \
+  --output output/retrieval_benchmark_50.json
+```
+
+Scoped benchmark 재실행:
+
+```bash
+PYTHONPATH=. .venv/bin/python tests/eval/retrieval_eval.py \
+  --strategies vector adaptive \
+  --scope-to-expected-policy \
+  --output output/retrieval_benchmark_scoped_50.json
+```
+
+포트폴리오 근거 산출물 재생성:
+
+```bash
+PYTHONPATH=. python3 tests/eval/retrieval_portfolio_evidence.py
+```

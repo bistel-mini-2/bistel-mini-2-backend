@@ -276,17 +276,56 @@ async def run_benchmark(
 ) -> dict[str, Any]:
     await psycopg_pool.open(wait=True, timeout=10)
     try:
-        results = [
-            await evaluate_strategy(
-                strategy,
+        return await _run_benchmark_once(
+            cases,
+            top_k=top_k,
+            strategies=strategies,
+            scope_to_expected_policy=scope_to_expected_policy,
+        )
+    finally:
+        await psycopg_pool.close()
+
+
+async def run_repeated_benchmark(
+    cases: Sequence[RetrievalCase],
+    *,
+    top_k: int,
+    strategies: Sequence[RetrievalStrategy],
+    repeat_runs: int,
+    scope_to_expected_policy: bool = False,
+) -> dict[str, Any]:
+    await psycopg_pool.open(wait=True, timeout=10)
+    try:
+        runs = [
+            await _run_benchmark_once(
                 cases,
                 top_k=top_k,
+                strategies=strategies,
                 scope_to_expected_policy=scope_to_expected_policy,
             )
-            for strategy in strategies
+            for _ in range(repeat_runs)
         ]
     finally:
         await psycopg_pool.close()
+    return runs[0] if repeat_runs == 1 else summarize_repeated_runs(runs)
+
+
+async def _run_benchmark_once(
+    cases: Sequence[RetrievalCase],
+    *,
+    top_k: int,
+    strategies: Sequence[RetrievalStrategy],
+    scope_to_expected_policy: bool,
+) -> dict[str, Any]:
+    results = [
+        await evaluate_strategy(
+            strategy,
+            cases,
+            top_k=top_k,
+            scope_to_expected_policy=scope_to_expected_policy,
+        )
+        for strategy in strategies
+    ]
     return {
         "dataset": "tests/eval/retrieval_cases.jsonl",
         "top_k": top_k,
@@ -296,12 +335,99 @@ async def run_benchmark(
     }
 
 
+def summarize_repeated_runs(runs: Sequence[dict[str, Any]]) -> dict[str, Any]:
+    if not runs:
+        raise ValueError("at least one benchmark run is required")
+
+    first = runs[0]
+    strategy_names = [strategy["strategy"] for strategy in first["strategies"]]
+    summarized_strategies: list[dict[str, Any]] = []
+    for strategy_name in strategy_names:
+        strategy_runs = [
+            next(
+                strategy
+                for strategy in run["strategies"]
+                if strategy["strategy"] == strategy_name
+            )
+            for run in runs
+        ]
+        summarized_strategies.append(
+            {
+                "strategy": strategy_name,
+                "run_count": len(strategy_runs),
+                "case_count": strategy_runs[0]["metrics"]["case_count"],
+                "policy_hit_at_k_pct_values": [
+                    run["metrics"]["policy_hit_at_k_pct"]
+                    for run in strategy_runs
+                ],
+                "section_hit_at_k_pct_values": [
+                    run["metrics"]["section_hit_at_k_pct"]
+                    for run in strategy_runs
+                ],
+                "mrr_values": [
+                    run["metrics"]["mrr"]
+                    for run in strategy_runs
+                ],
+                "latency_p50_ms_values": [
+                    run["metrics"]["latency_p50_ms"]
+                    for run in strategy_runs
+                ],
+                "latency_p95_ms_values": [
+                    run["metrics"]["latency_p95_ms"]
+                    for run in strategy_runs
+                ],
+                "latency_p50_ms": round(
+                    statistics.median(
+                        run["metrics"]["latency_p50_ms"]
+                        for run in strategy_runs
+                    ),
+                    3,
+                ),
+                "latency_p95_ms": round(
+                    statistics.median(
+                        run["metrics"]["latency_p95_ms"]
+                        for run in strategy_runs
+                    ),
+                    3,
+                ),
+                "fallback_count_values": [
+                    run["metrics"].get("fallback_count")
+                    for run in strategy_runs
+                ],
+                "fallback_rate_pct_values": [
+                    run["metrics"].get("fallback_rate_pct")
+                    for run in strategy_runs
+                ],
+            }
+        )
+
+    return {
+        "dataset": first["dataset"],
+        "top_k": first["top_k"],
+        "case_count": first["case_count"],
+        "scope_to_expected_policy": first["scope_to_expected_policy"],
+        "run_count": len(runs),
+        "aggregation_note": (
+            "Repeated latency is summarized with median of per-run p50/p95 "
+            "values; single-run benchmark files are not overwritten."
+        ),
+        "strategies": summarized_strategies,
+        "runs": runs,
+    }
+
+
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--cases", type=Path, default=DEFAULT_CASES_PATH)
     parser.add_argument("--ids", nargs="*")
     parser.add_argument("--top-k", type=int, default=5)
     parser.add_argument("--scope-to-expected-policy", action="store_true")
+    parser.add_argument(
+        "--repeat-runs",
+        type=int,
+        default=1,
+        help="run the same benchmark repeatedly and summarize p50/p95 latency",
+    )
     parser.add_argument(
         "--strategies",
         nargs="+",
@@ -322,14 +448,18 @@ def main() -> None:
         raise SystemExit("no retrieval cases selected")
     if args.top_k <= 0:
         raise SystemExit("--top-k must be positive")
+    if args.repeat_runs <= 0:
+        raise SystemExit("--repeat-runs must be positive")
 
+    selected_strategies = [
+        RetrievalStrategy(strategy) for strategy in args.strategies
+    ]
     result = asyncio.run(
-        run_benchmark(
+        run_repeated_benchmark(
             cases,
             top_k=args.top_k,
-            strategies=[
-                RetrievalStrategy(strategy) for strategy in args.strategies
-            ],
+            strategies=selected_strategies,
+            repeat_runs=args.repeat_runs,
             scope_to_expected_policy=args.scope_to_expected_policy,
         )
     )
