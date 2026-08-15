@@ -9,6 +9,22 @@ Dodam 정책 챗봇 작업을 "RAG 챗봇을 만들었다"가 아니라, 검색 
 이 문서는 리트리버 평가 근거만 다룬다. 생성 답변의 faithfulness는 아직
 별도 평가가 필요하며, 여기의 evidence correctness와 같은 의미가 아니다.
 
+## 변경 사항
+
+- 커밋 `c0b0336`에서 retrieval goldset을 "정책 원문 기준으로 검수한
+  50문항 내부 검색 검증셋"으로 정리했다.
+- `R030`은 비공개 상담 가능 여부를 묻는 문항이므로 `expected_sections`에
+  `지원 내용`을 추가했다. 대상성은 `공식 지원대상 원문`, 비밀상담 가능
+  여부는 `지원 내용`을 근거로 본다.
+- 기존 benchmark JSON은 새 검색 호출 없이 저장된 `retrieved` 결과에
+  수정된 gold label을 재적용해 재채점했다. Broad 평가의 pgvector,
+  Weighted Hybrid RRF, Adaptive fallback Section Hit@5는 80.0%로 정리됐다.
+- 질문 유형 taxonomy, fallback 사례, evidence correctness, 전략 선택 요약,
+  반복 latency fixture 산출물을 추가해 포트폴리오에서 설명 가능한 근거를
+  분리했다.
+- 이 문서는 공개 표준 데이터셋 검증이 아니라 내부 검색 검증셋 기반
+  retrieval evidence 정리로 한정한다.
+
 ## 평가 데이터와 골드셋 범위
 
 - 골드셋: `tests/eval/retrieval_cases.jsonl`
