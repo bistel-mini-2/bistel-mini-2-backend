@@ -518,3 +518,34 @@ def test_summary_normalization_pads_to_exactly_three_lines() -> None:
 
     assert len(result.summary.splitlines()) == 3
     assert result.summary.splitlines()[0] == "첫 번째 줄"
+
+
+def test_summary_phrase_keeps_korean_sentence_endings() -> None:
+    generator = LangChainPolicySummaryGenerator()
+
+    result = generator._fallback(
+        {
+            "name": "예방접종 지원",
+            "condition_profile_target_summary": "65세 이상 어르신이 대상입니다.",
+            "benefit_description": "인플루엔자 예방접종 1회를 지원합니다.",
+        },
+        [],
+    )
+
+    assert "합니이" not in result.summary
+    assert "65세 이상 어르신이 대상입니다." in result.summary
+    assert "인플루엔자 예방접종 1회를 지원합니다." in result.summary
+
+
+def test_policy_summary_response_filters_internal_application_markers() -> None:
+    response = PolicySummaryService._sanitize_evidence(
+        [
+            "신청은 OFFLINE_ONLY이며, 보건소에서 서비스를 제공합니다.",
+            "application_status: OFFLINE_ONLY, application_period_text: 수시",
+            "지원 대상 항목에 '65세 이상 어르신' 내용이 있어 대상 정보를 이렇게 정리했어요.",
+        ]
+    )
+
+    assert response == [
+        "지원 대상 항목에 '65세 이상 어르신' 내용이 있어 대상 정보를 이렇게 정리했어요.",
+    ]

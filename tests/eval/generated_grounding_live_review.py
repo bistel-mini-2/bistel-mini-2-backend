@@ -221,16 +221,8 @@ def build_live_review(capture: dict[str, Any]) -> dict[str, Any]:
                 for claim in reviewed_claims
             )),
         },
-        "portfolio_safe_claims": [
-            "10개 force-refresh live API 응답의 사용자 표시 claim을 수동 rubric으로 검토했다.",
-            "검토된 claim은 모두 policy field 또는 retrieved chunk 근거로 지지됐다.",
-            "다만 내부 필드명 노출과 오탈자성 문장 품질 이슈는 별도 개선 대상으로 남았다.",
-        ],
-        "recommended_next_improvements": [
-            "fallback summary phrase의 '합니이 주요 지원 대상이에요' 오탈자 경로 수정",
-            "evidence sanitizer가 application_status/application_period_text 같은 내부 필드명을 제거하도록 확장",
-            "structured citation 계약 도입 전까지 live review artifact를 release evidence로 유지",
-        ],
+        "portfolio_safe_claims": _portfolio_safe_claims(display_issues),
+        "recommended_next_improvements": _recommended_next_improvements(display_issues),
         "claims": reviewed_claims,
     }
 
@@ -338,6 +330,32 @@ def _validate_review(claims: list[dict[str, Any]]) -> None:
         reference = claim["support_reference"]
         if not reference["policy_fields"] and not reference["chunk_ids"]:
             raise ValueError("reviewed claims require at least one support reference")
+
+
+def _portfolio_safe_claims(display_issues: list[dict[str, Any]]) -> list[str]:
+    claims = [
+        "10개 force-refresh live API 응답의 사용자 표시 claim을 수동 rubric으로 검토했다.",
+        "검토된 claim은 모두 policy field 또는 retrieved chunk 근거로 지지됐다.",
+    ]
+    if display_issues:
+        claims.append("내부 필드명 노출과 오탈자성 문장 품질 이슈는 별도 개선 대상으로 식별했다.")
+    else:
+        claims.append("이번 재실행 기준 내부 필드명 노출과 오탈자성 표시 품질 이슈는 0건이었다.")
+    return claims
+
+
+def _recommended_next_improvements(display_issues: list[dict[str, Any]]) -> list[str]:
+    if display_issues:
+        return [
+            "fallback summary phrase의 '합니이 주요 지원 대상이에요' 오탈자 경로 수정",
+            "evidence sanitizer가 application_status/application_period_text 같은 내부 필드명을 제거하도록 확장",
+            "structured citation 계약 도입 전까지 live review artifact를 release evidence로 유지",
+        ]
+    return [
+        "display quality issue count를 live review regression metric으로 유지",
+        "새 내부 enum 또는 raw field가 생기면 sanitizer marker와 live review marker를 함께 확장",
+        "structured citation 계약 도입 전까지 live review artifact를 release evidence로 유지",
+    ]
 
 
 def _pct(numerator: int, denominator: int) -> float:

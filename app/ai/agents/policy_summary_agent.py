@@ -236,7 +236,7 @@ class LangChainPolicySummaryGenerator:
         caution_phrase = self._summary_phrase(caution, 90)
 
         if target_phrase:
-            lines.append(f"{target_phrase}이 주요 지원 대상이에요.")
+            lines.append(self._target_summary_line(target_phrase))
 
         if benefit_phrase and not any(benefit_phrase in line for line in lines):
             lines.append(self._benefit_summary_line(benefit_phrase))
@@ -318,6 +318,9 @@ class LangChainPolicySummaryGenerator:
             "condition_json",
             "source_text",
             "policy_condition_profile",
+            "application_status",
+            "application_period_text",
+            "offline_only",
             "quality_flags",
             "debug",
             "internal",
@@ -346,11 +349,19 @@ class LangChainPolicySummaryGenerator:
 
     @staticmethod
     def _benefit_summary_line(benefit_phrase: str) -> str:
+        if benefit_phrase.endswith(("합니다", "됩니다", "있습니다", "없습니다")):
+            return f"{benefit_phrase}."
         if benefit_phrase.endswith("지원"):
             return f"{benefit_phrase}해요."
         if benefit_phrase.endswith("제공"):
             return f"{benefit_phrase}해요."
         return f"주요 지원 내용은 {benefit_phrase}이에요."
+
+    @staticmethod
+    def _target_summary_line(target_phrase: str) -> str:
+        if target_phrase.endswith(("입니다", "합니다", "됩니다", "있습니다", "없습니다")):
+            return f"{target_phrase}."
+        return f"{target_phrase}이 주요 지원 대상이에요."
 
     @staticmethod
     def _clean(value: Any) -> str:
@@ -371,6 +382,8 @@ class LangChainPolicySummaryGenerator:
         for marker in ("\n", "다.", "요.", ".", ";", "；"):
             if marker in text:
                 candidate = text.split(marker, 1)[0].strip()
+                if marker in {"다.", "요."}:
+                    candidate = f"{candidate}{marker[0]}".strip()
                 if len(candidate) >= 8:
                     text = candidate
                     break
