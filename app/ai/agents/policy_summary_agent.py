@@ -41,7 +41,13 @@ class LangChainPolicySummaryGenerator:
 
         from langchain_openai import ChatOpenAI
 
-        llm = ChatOpenAI(model=self.model, temperature=0)
+        llm_kwargs: dict[str, Any] = {
+            "model": self.model,
+            "temperature": 0,
+        }
+        if settings.openai_api_key:
+            llm_kwargs["api_key"] = settings.openai_api_key
+        llm = ChatOpenAI(**llm_kwargs)
         structured_llm = llm.with_structured_output(PolicySummaryGeneration)
         messages = [
             (

@@ -362,6 +362,51 @@ def test_summary_fallback_uses_condition_profile_source_text_as_evidence() -> No
     assert "원본 선정기준: 만 2세 미만 아동" in prompt
 
 
+def test_policy_summary_generator_passes_settings_api_key(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    class FakeChatOpenAI:
+        def __init__(self, **kwargs):
+            captured["kwargs"] = kwargs
+
+        def with_structured_output(self, schema):
+            captured["schema"] = schema
+            return self
+
+        async def ainvoke(self, messages):
+            captured["messages"] = messages
+            return PolicySummaryGeneration(
+                summary="지원 대상은 테스트 대상이에요.\n주요 지원 내용은 테스트 혜택이에요.\n신청 전 테스트 방법을 확인해 주세요.",
+                evidence=["지원 대상 항목에 '테스트 대상' 내용이 있어 대상 정보를 이렇게 정리했어요."],
+            )
+
+    monkeypatch.setattr("langchain_openai.ChatOpenAI", FakeChatOpenAI)
+    monkeypatch.setattr(
+        "app.ai.agents.policy_summary_agent.settings.openai_api_key",
+        "test-key",
+    )
+
+    result = asyncio.run(
+        LangChainPolicySummaryGenerator().generate(
+            policy={
+                "name": "테스트 정책",
+                "condition_profile_target_summary": "테스트 대상",
+                "benefit_description": "테스트 혜택",
+                "application_method": "테스트 방법",
+            },
+            evidence_chunks=[],
+        )
+    )
+
+    assert captured["kwargs"] == {
+        "model": "gpt-5.4-mini",
+        "temperature": 0,
+        "api_key": "test-key",
+    }
+    assert captured["schema"] is PolicySummaryGeneration
+    assert result.summary.startswith("지원 대상은 테스트 대상이에요.")
+
+
 def test_policy_summary_graph_uses_condition_profile_for_query_and_key_points(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

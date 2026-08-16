@@ -1,29 +1,28 @@
 {
   "evaluation_name": "generated_grounding_live_api_capture",
   "evaluation_status": "live_response_capture_requires_manual_review",
-  "started_at": "2026-08-16T11:46:48+0900",
-  "capture_method": "PolicySummaryService cached API response model",
+  "started_at": "2026-08-16T11:55:12+0900",
+  "capture_method": "PolicySummaryService force_refresh then API response model",
   "source_context": {
     "db": true,
     "retriever": true,
-    "llm_or_fallback_generator": false,
+    "llm_or_fallback_generator": true,
     "openai_api_key_configured": true,
     "http_endpoint_equivalent": "GET /api/v1/policies/{policy_slug}/summary"
   },
   "metrics": {
     "requested_policy_count": 10,
-    "completed_response_count": 3,
+    "completed_response_count": 10,
     "status_counts": {
-      "loading": 7,
-      "done": 3
+      "done": 10
     },
     "internal_marker_count": 0,
-    "all_completed": false,
+    "all_completed": true,
     "all_clean_display_text": true,
-    "average_elapsed_ms": 11.291
+    "average_elapsed_ms": 2586.65
   },
   "grounding_boundary": {
-    "what_this_proves": "The local DB cache currently returns API response models for the selected policies without a new LLM generation run.",
+    "what_this_proves": "The live DB/retriever/generator path produced API response models for the selected policies.",
     "what_this_does_not_prove": "Manual claim-level grounding has not yet been completed for each captured live response.",
     "next_step": "Split each live summary/evidence response into claims and score it with generated_grounding_manual_rubric.py."
   },
@@ -33,19 +32,23 @@
       "policy_slug": "WLF00006317",
       "policy_name": "발달장애인 자기주도 재직자 훈련",
       "started_status": "loading",
-      "start_summary_id": null,
-      "force_refresh": false,
-      "elapsed_ms": 17.422,
+      "start_summary_id": 526,
+      "force_refresh": true,
+      "elapsed_ms": 5012.212,
       "process_error": null,
-      "cache_status": "PROCESSING",
+      "cache_status": "COMPLETED",
       "cache_error_message": null,
       "api_response_model": {
-        "status": "loading",
-        "summary": null,
-        "evidence": []
+        "status": "done",
+        "summary": "발달장애 근로자가 참여할 수 있는 재직자 훈련입니다. 훈련기관에 직접 신청하는 오프라인 방식이며, 거주지 읍·면·동 주민센터나 한국장애인고용공단을 통해 접수할 수 있습니다. 과정은 소양과정 단독형 또는 직무·소양을 함께 배우는 일반형으로 운영되며, 일반형은 개인 역량에 따라 최대 12주까지 진행됩니다.\n발달장애 근로자를 대상으로 지원합니이 주요 지원 대상이에요.",
+        "evidence": [
+          "대상은 ‘발달장애 근로자’로 안내되어 있고, 참여 희망자가 훈련기관에 신청하는 방식입니다.",
+          "신청은 오프라인으로 하며, 거주지 읍·면·동 주민센터 또는 한국장애인고용공단에서 ‘서비스 신청’으로 접수합니다.",
+          "훈련은 소양과정 단독형과 일반형으로 운영되며, 일반형은 개인별 역량과 상황에 따라 최대 12주 훈련입니다."
+        ]
       },
-      "summary_line_count": 0,
-      "evidence_count": 0,
+      "summary_line_count": 2,
+      "evidence_count": 3,
       "contains_internal_marker": false,
       "requires_manual_grounding_review": true
     },
@@ -54,19 +57,23 @@
       "policy_slug": "WLF00006311",
       "policy_name": "법문화교육(교육센터)",
       "started_status": "loading",
-      "start_summary_id": null,
-      "force_refresh": false,
-      "elapsed_ms": 12.345,
+      "start_summary_id": 528,
+      "force_refresh": true,
+      "elapsed_ms": 2436.258,
       "process_error": null,
-      "cache_status": "PROCESSING",
+      "cache_status": "COMPLETED",
       "cache_error_message": null,
       "api_response_model": {
-        "status": "loading",
-        "summary": null,
-        "evidence": []
+        "status": "done",
+        "summary": "법무부 인권구조과에서 운영하는 법문화교육센터 서비스로, 다문화가족·북한이탈주민·청소년 등에게 맞춤형 체험형 법교육을 제공합니다.\n신청은 거주지 읍·면·동 주민센터 또는 대한법률구조공단 법문화교육센터에서 할 수 있고, 온라인 신청 안내는 없습니다.\n신청 기간은 수시이며, 지원대상에 해당하는지 확인하는 것이 중요합니다.",
+        "evidence": [
+          "대상은 다문화가족, 북한이탈주민, 청소년 등으로 안내되어 있습니다.",
+          "신청은 거주지 읍/면/동 주민센터 또는 대한법률구조공단 법문화교육센터에서 ‘서비스 신청’으로 진행합니다.",
+          "신청 기간은 ‘수시’로 되어 있습니다."
+        ]
       },
-      "summary_line_count": 0,
-      "evidence_count": 0,
+      "summary_line_count": 3,
+      "evidence_count": 3,
       "contains_internal_marker": false,
       "requires_manual_grounding_review": true
     },
@@ -75,19 +82,23 @@
       "policy_slug": "WLF00006313",
       "policy_name": "건강보험 임신출산 진료비(국민행복카드)",
       "started_status": "loading",
-      "start_summary_id": null,
-      "force_refresh": false,
-      "elapsed_ms": 12.614,
+      "start_summary_id": 530,
+      "force_refresh": true,
+      "elapsed_ms": 2838.412,
       "process_error": null,
-      "cache_status": "PROCESSING",
+      "cache_status": "COMPLETED",
       "cache_error_message": null,
       "api_response_model": {
-        "status": "loading",
-        "summary": null,
-        "evidence": []
+        "status": "done",
+        "summary": "임신이 확인된 건강보험 가입자·피부양자와 2세 미만 영유아 관련 대상에게 임신·출산 진료비를 지원하는 정책입니다.\n임신 1회당 100만원을 지원하며, 다태아 임신부는 기본 140만원이고 분만취약지는 20만원이 추가됩니다.\n신청은 수시로 가능하며 주민센터, 국민건강보험공단, 보건소, 일부 카드사 전담 창구에서 오프라인으로 할 수 있습니다.",
+        "evidence": [
+          "지원내용에 임신 1회당 100만원, 다태아 임신부 140만원 기본지급, 분만취약지 20만원 추가지원이 적혀 있습니다.",
+          "사용기관/신청기관에는 거주지 읍·면·동 주민센터, 국민건강보험공단, 보건소, 전담 금융기관(삼성카드·롯데카드·국민카드·신한카드·BC카드 일부)에서 ‘서비스 신청’이 안내되어 있습니다.",
+          "사용기간은 이용권 발급일(포인트 생성일)부터 분만예정일(출산일·유산일·사산일)로부터 2년까지이며, 신청기간은 ‘수시’로 표시되어 있습니다."
+        ]
       },
-      "summary_line_count": 0,
-      "evidence_count": 0,
+      "summary_line_count": 3,
+      "evidence_count": 3,
       "contains_internal_marker": false,
       "requires_manual_grounding_review": true
     },
@@ -96,19 +107,23 @@
       "policy_slug": "WLF00006308",
       "policy_name": "무료법률상담",
       "started_status": "loading",
-      "start_summary_id": null,
-      "force_refresh": false,
-      "elapsed_ms": 11.918,
+      "start_summary_id": 532,
+      "force_refresh": true,
+      "elapsed_ms": 2368.559,
       "process_error": null,
-      "cache_status": "PROCESSING",
+      "cache_status": "COMPLETED",
       "cache_error_message": null,
       "api_response_model": {
-        "status": "loading",
-        "summary": null,
-        "evidence": []
+        "status": "done",
+        "summary": "법률 상담이 필요한 국민에게 무료로 법률상담을 제공하는 서비스입니다.\n임대차, 손해배상, 계약, 민사소송, 개인회생·파산 등 법률 관련 상담을 지원합니다.\n신청은 거주지 읍·면·동 주민센터나 대한법률구조공단 등 안내된 기관에서 수시로 할 수 있습니다.",
+        "evidence": [
+          "대상은 ‘법률 상담이 필요한 국민’으로 정리되어 있습니다.",
+          "지원 내용에 임대차, 손해배상, 계약, 민사소송, 개인회생 및 파산 등이 포함됩니다.",
+          "신청은 거주지 읍·면·동 주민센터 또는 대한법률구조공단 등에서 수시로 진행할 수 있습니다."
+        ]
       },
-      "summary_line_count": 0,
-      "evidence_count": 0,
+      "summary_line_count": 3,
+      "evidence_count": 3,
       "contains_internal_marker": false,
       "requires_manual_grounding_review": true
     },
@@ -117,19 +132,23 @@
       "policy_slug": "WLF00006292",
       "policy_name": "난임치료휴가급여 지원",
       "started_status": "loading",
-      "start_summary_id": null,
-      "force_refresh": false,
-      "elapsed_ms": 10.835,
+      "start_summary_id": 534,
+      "force_refresh": true,
+      "elapsed_ms": 2199.433,
       "process_error": null,
-      "cache_status": "PROCESSING",
+      "cache_status": "COMPLETED",
       "cache_error_message": null,
       "api_response_model": {
-        "status": "loading",
-        "summary": null,
-        "evidence": []
+        "status": "done",
+        "summary": "난임치료휴가를 사용한 근로자에게 휴가급여를 현금으로 지원합니다.\n최초 2일분은 통상임금의 100%를 주며, 상한액은 168,420원입니다.\n신청은 온라인이 아니라 거주지 읍·면·동 주민센터나 고용센터 등에서 수시로 할 수 있습니다.",
+        "evidence": [
+          "난임치료휴가 기간 중 최초 2일분 통상임금 100% 지급(상한액 168,420원)",
+          "신청기관: 거주지 읍/면/동 주민센터, 고용센터",
+          "application_status: OFFLINE_ONLY, application_period_text: 수시"
+        ]
       },
-      "summary_line_count": 0,
-      "evidence_count": 0,
+      "summary_line_count": 3,
+      "evidence_count": 3,
       "contains_internal_marker": false,
       "requires_manual_grounding_review": true
     },
@@ -137,22 +156,24 @@
       "policy_id": 247,
       "policy_slug": "WLF00006289",
       "policy_name": "위기임신 및 보호출산 지원",
-      "started_status": "done",
-      "start_summary_id": null,
-      "force_refresh": false,
-      "elapsed_ms": 9.831,
+      "started_status": "loading",
+      "start_summary_id": 63,
+      "force_refresh": true,
+      "elapsed_ms": 2695.603,
       "process_error": null,
       "cache_status": "COMPLETED",
       "cache_error_message": null,
       "api_response_model": {
         "status": "done",
-        "summary": "위기임신 및 보호출산 지원은 임신 중이거나 출산 후 6개월 미만인 위기임산부와 그 아동을 위한 상담 및 재정 지원 프로그램입니다. 365일 24시간 상담 서비스와 긴급 상황 지원, 의료비 및 주거 지원이 포함됩니다. 지원 대상은 연령, 혼인 여부, 소득에 관계없이 해당됩니다.\n대상: 위기임산부, 보호출산 산모, 보호출산 아동 및 아동의 생부를 대상으로 지원합니다.",
+        "summary": "위기임신 중이거나 출산 후 6개월 미만인 사람을 대상으로, 상담·긴급지원·진료비·양육 연계를 제공합니다.\n보호출산 산모에는 의료비 1인 100만원, 숙려기관은 1일 20만원씩 총 7일을 지원합니다.\n보호출산 신생아는 1인당 월 100만원씩 최대 3개월 지원하며, 신청은 거주지 주민센터나 위기임산부 지역상담기관에서 수시로 할 수 있습니다.",
         "evidence": [
-          "정책 상세 안내에 있는 대상, 혜택, 신청 정보를 읽기 쉬운 문장으로 정리했어요."
+          "대상은 임신 중이거나 분만 후 6개월 미만인 경우입니다.",
+          "보호출산 산모 의료비는 1명당 1백만원, 숙려기관은 1일 20만원씩 총 7일 지원입니다.",
+          "신청은 거주지 읍·면·동 주민센터 또는 위기임산부 지역상담기관에서 가능하고, 신청기간은 수시입니다."
         ]
       },
-      "summary_line_count": 2,
-      "evidence_count": 1,
+      "summary_line_count": 3,
+      "evidence_count": 3,
       "contains_internal_marker": false,
       "requires_manual_grounding_review": true
     },
@@ -161,19 +182,23 @@
       "policy_slug": "WLF00003213",
       "policy_name": "인플루엔자 국가예방접종 지원사업",
       "started_status": "loading",
-      "start_summary_id": null,
-      "force_refresh": false,
-      "elapsed_ms": 8.872,
+      "start_summary_id": 538,
+      "force_refresh": true,
+      "elapsed_ms": 1960.308,
       "process_error": null,
-      "cache_status": "PROCESSING",
+      "cache_status": "COMPLETED",
       "cache_error_message": null,
       "api_response_model": {
-        "status": "loading",
-        "summary": null,
-        "evidence": []
+        "status": "done",
+        "summary": "인플루엔자 국가예방접종 지원사업은 65세 이상 어르신, 생후 6개월~13세 어린이, 임신부에게 독감 예방접종을 지원하는 제도입니다.\n기본적으로 예방접종 1회를 지원하며, 생후 6개월~만 9세 미만 어린이 중 처음 접종하거나 이전 접종력을 모르는 경우 등은 2회 접종을 지원합니다.\n신청은 따로 온라인 신청 없이 보건소나 인플루엔자 위탁 의료기관 등에서 받을 수 있고, 기간은 '수시'로 안내되어 있습니다.",
+        "evidence": [
+          "65세 이상 어르신, 생후 6개월~13세 어린이, 임신부가 지원대상으로 제시되어 있습니다.",
+          "인플루엔자 예방접종 1회를 지원하며, 생후 6개월~만 9세 미만 어린이는 경우에 따라 2회 접종 지원이 가능합니다.",
+          "신청 상태가 OFFLINE_ONLY이고, 보건소·인플루엔자 위탁 의료기관에서 서비스를 제공하며 신청 기간은 '수시'로 되어 있습니다."
+        ]
       },
-      "summary_line_count": 0,
-      "evidence_count": 0,
+      "summary_line_count": 3,
+      "evidence_count": 3,
       "contains_internal_marker": false,
       "requires_manual_grounding_review": true
     },
@@ -181,22 +206,24 @@
       "policy_id": 255,
       "policy_slug": "WLF00004656",
       "policy_name": "첫만남이용권",
-      "started_status": "done",
-      "start_summary_id": null,
-      "force_refresh": false,
-      "elapsed_ms": 9.365,
+      "started_status": "loading",
+      "start_summary_id": 350,
+      "force_refresh": true,
+      "elapsed_ms": 1737.033,
       "process_error": null,
       "cache_status": "COMPLETED",
       "cache_error_message": null,
       "api_response_model": {
         "status": "done",
-        "summary": "첫만남이용권은 출생아에게 200만원 이상의 지원금을 제공하여 아동양육의 경제적 부담을 덜어주는 정책입니다. 2024년 이후 출생한 아동이 대상이며, 신청은 온라인으로 가능하고 1회성으로 지급됩니다.\n출생아로서 출생신고되어 정상적으로 주민등록번호를 부여받은 아동(2024년 이후 출생아로서 주민등록상 생년월일로부터 2년이 초과되지 않는 출생아)을 대상으로 합니이 주요 지원 대상이에요.",
+        "summary": "첫만남이용권은 출생아에게 1회 지급되는 임신·출산 지원 정책입니다. 2024년 이후 출생아는 첫째아 200만원, 둘째아 이상 300만원을 받을 수 있습니다. 신청은 주민센터(읍·면·동)나 복지로 웹사이트/앱에서 가능합니다.\n출생아로서 출생신고되어 정상적으로 주민등록번호를 부여받은 아동(2024년 이후 출생아로서 주민등록상 생년월일로부터 2년이 초과되지 않는 출생아)을 대상으로 합니이 주요 지원 대상이에요.",
         "evidence": [
-          "정책 상세 안내에 있는 대상, 혜택, 신청 정보를 읽기 쉬운 문장으로 정리했어요."
+          "출생아당 200만원 이상의 이용권이며, 24.1.1일 이후 출생한 아동부터는 첫째아 200만원, 둘째아 이상 300만원 지급",
+          "출생신고되어 정상적으로 주민등록번호를 부여받은 아동이 대상입니다.",
+          "거주지 읍/면/동 주민센터, 읍면동 행정복지센터 또는 복지로 웹사이트(PC/모바일앱)에서 ‘서비스 신청’"
         ]
       },
       "summary_line_count": 2,
-      "evidence_count": 1,
+      "evidence_count": 3,
       "contains_internal_marker": false,
       "requires_manual_grounding_review": true
     },
@@ -205,19 +232,23 @@
       "policy_slug": "WLF00000072",
       "policy_name": "에너지바우처",
       "started_status": "loading",
-      "start_summary_id": null,
-      "force_refresh": false,
-      "elapsed_ms": 9.547,
+      "start_summary_id": 542,
+      "force_refresh": true,
+      "elapsed_ms": 2463.397,
       "process_error": null,
-      "cache_status": "PROCESSING",
+      "cache_status": "COMPLETED",
       "cache_error_message": null,
       "api_response_model": {
-        "status": "loading",
-        "summary": null,
-        "evidence": []
+        "status": "done",
+        "summary": "에너지바우처는 기초생활보장급여 수급 세대 중, 노인·영유아·임산부·장애인·한부모가족·다자녀가구 같은 세대원 특성 기준을 함께 충족하는 가구를 지원합니다.\n여름(7~9월)에는 전기요금 차감으로, 겨울(10월~익년 5월)에는 전기·도시가스·지역난방·등유·연탄·LPG 중 하나를 선택해 쓸 수 있습니다.\n신청은 거주지 읍·면·동 주민센터나 복지로 웹사이트(PC/모바일앱)에서 할 수 있고, 온라인 신청도 가능합니다.",
+        "evidence": [
+          "기초생활보장급여 수급 세대와 세대원 특성 기준을 함께 충족해야 지원합니다.",
+          "여름(7~9월) 전기요금 차감, 겨울(10월~익년 5월) 전기·도시가스·지역난방·등유·연탄·LPG 중 선택 사용이 가능합니다.",
+          "거주지 읍·면·동 주민센터 또는 복지로 웹사이트(PC/모바일앱)에서 신청할 수 있습니다."
+        ]
       },
-      "summary_line_count": 0,
-      "evidence_count": 0,
+      "summary_line_count": 3,
+      "evidence_count": 3,
       "contains_internal_marker": false,
       "requires_manual_grounding_review": true
     },
@@ -225,22 +256,24 @@
       "policy_id": 292,
       "policy_slug": "WLF00000076",
       "policy_name": "스포츠강좌이용권",
-      "started_status": "done",
-      "start_summary_id": null,
-      "force_refresh": false,
-      "elapsed_ms": 10.162,
+      "started_status": "loading",
+      "start_summary_id": 421,
+      "force_refresh": true,
+      "elapsed_ms": 2155.285,
       "process_error": null,
       "cache_status": "COMPLETED",
       "cache_error_message": null,
       "api_response_model": {
         "status": "done",
-        "summary": "스포츠강좌이용권은 만 5~18세 저소득층 유청소년에게 월 105,000원 한도 내에서 12개월 동안 스포츠 강좌비를 지원하는 정책입니다. 신청은 거주지 주민센터나 국민체육진흥공단을 통해 가능하며, 지원 대상은 기초생활수급자, 차상위계층, 법정 한부모가정 등입니다.\n만 5~18세 유·청소년 중 기초생활수급자, 차상위계층, 법정 한부모가정 등 저소득층 또는 범죄피해가정 대상자에게 스포츠강좌 수강료를 지원합니이 주요 지원 대상이에요.\n주요 지원 내용은 월 105,000원 범위 내에서 12개월 스포츠활동 강좌비를 지급합니이에요.",
+        "summary": "만 5~18세 유·청소년이 대상이며, 기초생활수급자·차상위계층·법정 한부모가정 등 저소득층과 범죄피해가정이 스포츠강좌이용권 지원을 받을 수 있습니다.\n월 105,000원 범위 내에서 12개월 동안 스포츠활동 강좌비를 전자바우처로 지급하며, 수강료가 105,000원을 넘으면 차액은 본인 부담입니다.\n신청은 거주지 읍·면·동 주민센터, 시·군·구청/지방자치단체 방문 또는 국민체육진흥공단 인터넷으로 할 수 있습니다.",
         "evidence": [
-          "정책 상세 안내에 있는 대상, 혜택, 신청 정보를 읽기 쉬운 문장으로 정리했어요."
+          "만 5~18세 유·청소년 중 기초생활수급자, 차상위계층, 법정 한부모가정 대상",
+          "월 105,000원 범위 내에서 12개월 스포츠활동 강좌비 지급, 105,000원 초과분은 본인 부담",
+          "거주지 읍·면·동 주민센터, 시·군·구청 방문 또는 국민체육진흥공단 인터넷으로 신청"
         ]
       },
       "summary_line_count": 3,
-      "evidence_count": 1,
+      "evidence_count": 3,
       "contains_internal_marker": false,
       "requires_manual_grounding_review": true
     }
