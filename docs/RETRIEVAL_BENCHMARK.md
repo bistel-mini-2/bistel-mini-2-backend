@@ -78,6 +78,34 @@ Broad 평가에서 Adaptive는 7/50문항(14%)에 fallback했고 Vector와 동�
 추가 SQL 조회로 더 높았다. 한 번의 순차 실행이므로 절대 지연시간보다
 fallback 비율과 정확도 보존 여부를 중심으로 해석한다.
 
+## 5회 반복 실행 결과
+
+2026년 8월 16일에 실제 DB와 OpenAI embedding API를 사용해 warm-up 1회,
+측정 5회 반복 실행을 완료했다. 대표 latency는 warm-up을 제외한 실행별
+p50/p95의 중앙값이다. 모든 전략의 error rate는 0.0%였고, 실행별 정확도와
+fallback 비율은 변하지 않았다.
+
+### Broad 반복 실행
+
+| 방식 | Policy Hit@5 | Section Hit@5 | MRR | p50 median | p95 median | Fallback |
+|---|---:|---:|---:|---:|---:|---:|
+| SQL keyword | 18.0% | 12.0% | 0.0957 | 1,396ms | 2,118ms | - |
+| pgvector | 86.0% | 80.0% | 0.7497 | 757ms | 1,181ms | - |
+| Weighted Hybrid RRF | 88.0% | 80.0% | 0.7757 | 1,422ms | 2,129ms | - |
+| Adaptive fallback | 86.0% | 80.0% | 0.7497 | 803ms | 2,711ms | 14.0% |
+
+### Scoped 반복 실행
+
+| 방식 | Section Hit@5 | p50 median | p95 median | Fallback |
+|---|---:|---:|---:|---:|
+| pgvector | 98.0% | 662ms | 972ms | - |
+| Adaptive fallback | 98.0% | 673ms | 1,028ms | 2.0% |
+
+반복 실행 기준으로도 Hybrid는 pgvector보다 Policy Hit@5가 2%p 높지만,
+p50 latency는 약 665ms, p95 latency는 약 948ms 증가했다. Adaptive는
+pgvector와 같은 정확도를 유지하고 fallback을 14.0%로 제한했지만, broad
+p95는 fallback 문항의 추가 SQL 조회로 높다.
+
 ## 정책 범위 지정 근거 검색
 
 실제 챗봇처럼 정책 ID를 이미 알고 해당 정책의 근거 섹션을 찾는 조건도
@@ -109,6 +137,31 @@ PYTHONPATH=. .venv/bin/python tests/eval/retrieval_eval.py \
   --ids R001 R002 R003
 ```
 
+반복 지연시간을 측정할 때는 warm-up 실행과 실제 측정 실행을 분리한다.
+`--warmup-runs` 결과는 JSON에 보존하지만 대표 p50/p95 계산에서는 제외한다.
+`--repeat-runs 1`과 `--warmup-runs 0`의 기본 실행은 기존 단일 실행 JSON shape를
+유지한다. `--repeat-runs`가 2 이상이거나 warm-up이 있으면 반복 실행 요약에
+`execution_mode`, `run_count`, `warmup_run_count`, `total_run_count`,
+`strategies_order`, 실행별 metric 배열, 중앙값 요약, `warmup_runs`, `runs`를
+기록한다.
+외부 embedding API 응답 대기가 길어지는 경우에는 `--case-timeout-seconds`로
+문항 단위 timeout을 걸 수 있다. Timeout은 실패 문항의 `error`와 전략별
+`error_rate_pct`에 기록되며, 성공 수치로 대체하지 않는다.
+긴 반복 실행은 `--checkpoint-output`으로 완료된 전략 단위 결과를 JSONL에
+남길 수 있다. 최종 JSON이 생성되기 전에 실행을 중단해도 checkpoint로
+완료된 구간을 확인한다.
+
+```bash
+PYTHONPATH=. .venv/bin/python tests/eval/retrieval_eval.py \
+  --strategies sql_keyword vector hybrid adaptive \
+  --warmup-runs 1 \
+  --repeat-runs 5 \
+  --case-timeout-seconds 15 \
+  --top-k 5 \
+  --checkpoint-output output/retrieval_benchmark_repeated_broad_5.checkpoint.jsonl \
+  --output output/retrieval_benchmark_repeated_broad_5.json
+```
+
 정책 범위 지정 근거 검색은 다음처럼 실행한다.
 
 ```bash
@@ -118,13 +171,42 @@ PYTHONPATH=. .venv/bin/python tests/eval/retrieval_eval.py \
   --output output/retrieval_benchmark_scoped_50.json
 ```
 
+Scoped 반복 실행은 다음처럼 별도 파일에 저장한다.
+
+```bash
+PYTHONPATH=. .venv/bin/python tests/eval/retrieval_eval.py \
+  --strategies vector adaptive \
+  --scope-to-expected-policy \
+  --warmup-runs 1 \
+  --repeat-runs 5 \
+  --case-timeout-seconds 15 \
+  --top-k 5 \
+  --checkpoint-output output/retrieval_benchmark_repeated_scoped_5.checkpoint.jsonl \
+  --output output/retrieval_benchmark_repeated_scoped_5.json
+```
+
+## Benchmark 실행 병목과 개선 방향
+
+반복 benchmark가 오래 걸리는 주된 이유는 같은 질문 임베딩을 전략별,
+실행별로 재생성하기 때문이다. Broad 반복 실행은 warm-up 포함 6회 × 50문항
+× vector 기반 3전략으로 약 900회 embedding API 호출을 만들고, Scoped 반복
+실행은 약 600회를 추가한다. 각 embedding 뒤에는 pgvector 검색도 순차 실행된다.
+
+이번 보강으로 `--case-timeout-seconds`와 `--checkpoint-output`을 추가해
+장기 대기와 중간 결과 손실을 줄였다. 다음 개선은 평가 전용 query embedding
+cache, embedding/API latency와 DB search latency의 분리 측정, checkpoint에서
+최종 요약을 재구성하는 resume 기능, SQL keyword 기준선의 FTS 또는 trigram
+index 전환이다.
+
 ## 재현성 및 해석 범위
 
 - 원본 실행 결과는 `output/retrieval_benchmark_50.json`에 저장한다.
 - 정책 범위 지정 결과는
   `output/retrieval_benchmark_scoped_50.json`에 저장한다.
+- 반복 실행 결과는 `output/retrieval_benchmark_repeated_broad_5.json`,
+  `output/retrieval_benchmark_repeated_scoped_5.json`에 저장한다.
 - 임베딩 API 네트워크 상태와 DB 부하에 따라 지연시간은 달라질 수 있다.
-- 현재 결과는 한 번의 50문항 실행 결과다. 지연시간을 이력서 수치로
-  사용할 때는 워밍업 후 3회 이상 반복 실행한 중앙값을 권장한다.
+- 단일 실행 결과와 반복 실행 결과를 구분한다. 이력서나 포트폴리오의
+  latency 수치는 워밍업을 제외한 반복 실행 중앙값을 사용한다.
 - 데이터셋은 현재 정책 데이터에 맞춘 내부 골드셋이다. 정책 데이터나
   임베딩 모델이 바뀌면 다시 실행해야 한다.

@@ -79,6 +79,7 @@ async def evaluate_strategy(
     *,
     top_k: int,
     scope_to_expected_policy: bool = False,
+    case_timeout_seconds: float | None = None,
 ) -> dict[str, Any]:
     retriever = build_policy_retriever(strategy)
     case_results: list[dict[str, Any]] = []
@@ -87,7 +88,7 @@ async def evaluate_strategy(
         fallback_count_before = int(getattr(retriever, "fallback_count", 0))
         started_at = time.perf_counter()
         try:
-            hits = await retriever.retrieve(
+            retrieval = retriever.retrieve(
                 case.query,
                 top_k=top_k,
                 policy_ids=(
@@ -97,7 +98,17 @@ async def evaluate_strategy(
                 ),
                 evidence_role=CATEGORY_EVIDENCE_ROLE.get(case.category),
             )
+            if case_timeout_seconds is None:
+                hits = await retrieval
+            else:
+                hits = await asyncio.wait_for(
+                    retrieval,
+                    timeout=case_timeout_seconds,
+                )
             error = None
+        except TimeoutError:
+            hits = []
+            error = f"TimeoutError: case exceeded {case_timeout_seconds:g}s"
         except Exception as exc:
             hits = []
             error = f"{type(exc).__name__}: {exc}"
@@ -292,22 +303,49 @@ async def run_repeated_benchmark(
     top_k: int,
     strategies: Sequence[RetrievalStrategy],
     repeat_runs: int,
+    warmup_runs: int = 0,
     scope_to_expected_policy: bool = False,
+    case_timeout_seconds: float | None = None,
+    checkpoint_output: Path | None = None,
 ) -> dict[str, Any]:
+    validate_run_counts(repeat_runs=repeat_runs, warmup_runs=warmup_runs)
     await psycopg_pool.open(wait=True, timeout=10)
     try:
+        warmups = [
+            await _run_benchmark_once(
+                cases,
+                top_k=top_k,
+                strategies=strategies,
+                scope_to_expected_policy=scope_to_expected_policy,
+                case_timeout_seconds=case_timeout_seconds,
+                checkpoint_output=checkpoint_output,
+                phase="warmup",
+                run_index=run_index,
+            )
+            for run_index in range(1, warmup_runs + 1)
+        ]
         runs = [
             await _run_benchmark_once(
                 cases,
                 top_k=top_k,
                 strategies=strategies,
                 scope_to_expected_policy=scope_to_expected_policy,
+                case_timeout_seconds=case_timeout_seconds,
+                checkpoint_output=checkpoint_output,
+                phase="measured",
+                run_index=run_index,
             )
-            for _ in range(repeat_runs)
+            for run_index in range(1, repeat_runs + 1)
         ]
     finally:
         await psycopg_pool.close()
-    return runs[0] if repeat_runs == 1 else summarize_repeated_runs(runs)
+    if repeat_runs == 1 and warmup_runs == 0:
+        return runs[0]
+    return summarize_repeated_runs(
+        runs,
+        warmup_runs=warmups,
+        case_timeout_seconds=case_timeout_seconds,
+    )
 
 
 async def _run_benchmark_once(
@@ -316,26 +354,60 @@ async def _run_benchmark_once(
     top_k: int,
     strategies: Sequence[RetrievalStrategy],
     scope_to_expected_policy: bool,
+    case_timeout_seconds: float | None = None,
+    checkpoint_output: Path | None = None,
+    phase: str | None = None,
+    run_index: int | None = None,
 ) -> dict[str, Any]:
-    results = [
-        await evaluate_strategy(
+    results = []
+    for strategy_index, strategy in enumerate(strategies, start=1):
+        result = await evaluate_strategy(
             strategy,
             cases,
             top_k=top_k,
             scope_to_expected_policy=scope_to_expected_policy,
+            case_timeout_seconds=case_timeout_seconds,
         )
-        for strategy in strategies
-    ]
+        results.append(result)
+        if checkpoint_output is not None:
+            write_checkpoint_entry(
+                checkpoint_output,
+                {
+                    "phase": phase,
+                    "run_index": run_index,
+                    "strategy_index": strategy_index,
+                    "strategy_count": len(strategies),
+                    "dataset": "tests/eval/retrieval_cases.jsonl",
+                    "top_k": top_k,
+                    "case_count": len(cases),
+                    "scope_to_expected_policy": scope_to_expected_policy,
+                    "case_timeout_seconds": case_timeout_seconds,
+                    "strategy": result["strategy"],
+                    "result": result,
+                },
+            )
     return {
         "dataset": "tests/eval/retrieval_cases.jsonl",
         "top_k": top_k,
         "case_count": len(cases),
         "scope_to_expected_policy": scope_to_expected_policy,
+        "case_timeout_seconds": case_timeout_seconds,
         "strategies": results,
     }
 
 
-def summarize_repeated_runs(runs: Sequence[dict[str, Any]]) -> dict[str, Any]:
+def write_checkpoint_entry(path: Path, entry: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as file:
+        file.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
+
+def summarize_repeated_runs(
+    runs: Sequence[dict[str, Any]],
+    *,
+    warmup_runs: Sequence[dict[str, Any]] = (),
+    case_timeout_seconds: float | None = None,
+) -> dict[str, Any]:
     if not runs:
         raise ValueError("at least one benchmark run is required")
 
@@ -366,6 +438,10 @@ def summarize_repeated_runs(runs: Sequence[dict[str, Any]]) -> dict[str, Any]:
                 ],
                 "mrr_values": [
                     run["metrics"]["mrr"]
+                    for run in strategy_runs
+                ],
+                "error_rate_pct_values": [
+                    run["metrics"]["error_rate_pct"]
                     for run in strategy_runs
                 ],
                 "latency_p50_ms_values": [
@@ -402,18 +478,37 @@ def summarize_repeated_runs(runs: Sequence[dict[str, Any]]) -> dict[str, Any]:
         )
 
     return {
+        "execution_mode": "actual_repeated_benchmark",
         "dataset": first["dataset"],
         "top_k": first["top_k"],
         "case_count": first["case_count"],
         "scope_to_expected_policy": first["scope_to_expected_policy"],
+        "case_timeout_seconds": case_timeout_seconds,
         "run_count": len(runs),
+        "warmup_run_count": len(warmup_runs),
+        "total_run_count": len(warmup_runs) + len(runs),
+        "strategies_order": strategy_names,
         "aggregation_note": (
             "Repeated latency is summarized with median of per-run p50/p95 "
-            "values; single-run benchmark files are not overwritten."
+            "values after excluding warm-up runs; single-run benchmark files "
+            "are not overwritten."
         ),
         "strategies": summarized_strategies,
+        "warmup_runs": list(warmup_runs),
         "runs": runs,
     }
+
+
+def validate_run_counts(*, repeat_runs: int, warmup_runs: int) -> None:
+    if repeat_runs <= 0:
+        raise ValueError("--repeat-runs must be positive")
+    if warmup_runs < 0:
+        raise ValueError("--warmup-runs must be zero or positive")
+
+
+def validate_case_timeout(case_timeout_seconds: float | None) -> None:
+    if case_timeout_seconds is not None and case_timeout_seconds <= 0:
+        raise ValueError("--case-timeout-seconds must be positive")
 
 
 def _parse_args() -> argparse.Namespace:
@@ -427,6 +522,22 @@ def _parse_args() -> argparse.Namespace:
         type=int,
         default=1,
         help="run the same benchmark repeatedly and summarize p50/p95 latency",
+    )
+    parser.add_argument(
+        "--warmup-runs",
+        type=int,
+        default=0,
+        help="run and record warm-up iterations before measured repeat runs",
+    )
+    parser.add_argument(
+        "--case-timeout-seconds",
+        type=float,
+        help="record a retrieval error and continue when one case exceeds this limit",
+    )
+    parser.add_argument(
+        "--checkpoint-output",
+        type=Path,
+        help="append one JSONL checkpoint after each completed strategy run",
     )
     parser.add_argument(
         "--strategies",
@@ -448,8 +559,14 @@ def main() -> None:
         raise SystemExit("no retrieval cases selected")
     if args.top_k <= 0:
         raise SystemExit("--top-k must be positive")
-    if args.repeat_runs <= 0:
-        raise SystemExit("--repeat-runs must be positive")
+    try:
+        validate_run_counts(
+            repeat_runs=args.repeat_runs,
+            warmup_runs=args.warmup_runs,
+        )
+        validate_case_timeout(args.case_timeout_seconds)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
 
     selected_strategies = [
         RetrievalStrategy(strategy) for strategy in args.strategies
@@ -460,7 +577,10 @@ def main() -> None:
             top_k=args.top_k,
             strategies=selected_strategies,
             repeat_runs=args.repeat_runs,
+            warmup_runs=args.warmup_runs,
             scope_to_expected_policy=args.scope_to_expected_policy,
+            case_timeout_seconds=args.case_timeout_seconds,
+            checkpoint_output=args.checkpoint_output,
         )
     )
     serialized = json.dumps(result, ensure_ascii=False, indent=2)

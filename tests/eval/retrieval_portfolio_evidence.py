@@ -17,6 +17,8 @@ from typing import Any
 DEFAULT_CASES_PATH = Path("tests/eval/retrieval_cases.jsonl")
 DEFAULT_BROAD_PATH = Path("output/retrieval_benchmark_50.json")
 DEFAULT_SCOPED_PATH = Path("output/retrieval_benchmark_scoped_50.json")
+DEFAULT_REPEATED_BROAD_PATH = Path("output/retrieval_benchmark_repeated_broad_5.json")
+DEFAULT_REPEATED_SCOPED_PATH = Path("output/retrieval_benchmark_repeated_scoped_5.json")
 
 CASE_TYPE_CRITERIA = {
     "direct_policy_name": (
@@ -216,6 +218,8 @@ def build_evidence_quality(
 def build_strategy_decision_summary(
     broad: dict[str, Any],
     scoped: dict[str, Any],
+    repeated_broad: dict[str, Any] | None = None,
+    repeated_scoped: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     broad_metrics = _metrics_by_strategy(broad)
     scoped_metrics = _metrics_by_strategy(scoped)
@@ -224,7 +228,7 @@ def build_strategy_decision_summary(
     adaptive = broad_metrics["adaptive"]
     scoped_vector = scoped_metrics["vector"]
     scoped_adaptive = scoped_metrics["adaptive"]
-    return {
+    summary = {
         "scope": "current 50-case internal retrieval evaluation",
         "decision_candidate": "adaptive",
         "baseline": "vector",
@@ -268,6 +272,75 @@ def build_strategy_decision_summary(
             "챗봇 기본 검색 전략 후보로 둔다."
         ),
     }
+    if repeated_broad and repeated_scoped:
+        repeated_broad_metrics = _repeated_metrics_by_strategy(repeated_broad)
+        repeated_scoped_metrics = _repeated_metrics_by_strategy(repeated_scoped)
+        repeated_vector = repeated_broad_metrics["vector"]
+        repeated_hybrid = repeated_broad_metrics["hybrid"]
+        repeated_adaptive = repeated_broad_metrics["adaptive"]
+        repeated_scoped_vector = repeated_scoped_metrics["vector"]
+        repeated_scoped_adaptive = repeated_scoped_metrics["adaptive"]
+        summary["repeated_latency_tradeoff"] = {
+            "actual_repeated_run_available": True,
+            "broad_source": str(DEFAULT_REPEATED_BROAD_PATH),
+            "scoped_source": str(DEFAULT_REPEATED_SCOPED_PATH),
+            "run_count": repeated_broad["run_count"],
+            "warmup_run_count": repeated_broad["warmup_run_count"],
+            "case_timeout_seconds": repeated_broad.get("case_timeout_seconds"),
+            "hybrid_p50_latency_increase_ms_vs_vector": _delta(
+                repeated_hybrid,
+                repeated_vector,
+                "latency_p50_ms",
+            ),
+            "hybrid_p95_latency_increase_ms_vs_vector": _delta(
+                repeated_hybrid,
+                repeated_vector,
+                "latency_p95_ms",
+            ),
+            "adaptive_p50_latency_increase_ms_vs_vector": _delta(
+                repeated_adaptive,
+                repeated_vector,
+                "latency_p50_ms",
+            ),
+            "adaptive_p95_latency_increase_ms_vs_vector": _delta(
+                repeated_adaptive,
+                repeated_vector,
+                "latency_p95_ms",
+            ),
+            "scoped_adaptive_p50_latency_increase_ms_vs_vector": _delta(
+                repeated_scoped_adaptive,
+                repeated_scoped_vector,
+                "latency_p50_ms",
+            ),
+            "scoped_adaptive_p95_latency_increase_ms_vs_vector": _delta(
+                repeated_scoped_adaptive,
+                repeated_scoped_vector,
+                "latency_p95_ms",
+            ),
+        }
+        summary["benchmark_execution_improvements"] = {
+            "root_cause": (
+                "Repeated benchmark re-embedded the same 50 queries for each "
+                "vector-based strategy and run, then executed vector DB search "
+                "sequentially."
+            ),
+            "observed_embedding_call_scale": {
+                "broad_estimated_embedding_calls": 900,
+                "scoped_estimated_embedding_calls": 600,
+                "total_estimated_embedding_calls": 1500,
+            },
+            "implemented_controls": [
+                "case_timeout_seconds records slow case failures instead of hanging",
+                "checkpoint_output preserves completed strategy-run results",
+            ],
+            "recommended_next_improvements": [
+                "cache query embeddings per case and reuse them across strategies",
+                "measure embedding latency and vector DB latency separately",
+                "rebuild final summaries from checkpoint JSONL after interruption",
+                "replace SQL ILIKE keyword scan with PostgreSQL FTS or trigram index",
+            ],
+        }
+    return summary
 
 
 def build_latency_repeated_fixture(
@@ -296,23 +369,66 @@ def build_latency_repeated_fixture(
     }
 
 
+def build_latency_repeated_actual(
+    repeated_broad: dict[str, Any],
+    repeated_scoped: dict[str, Any],
+) -> dict[str, Any]:
+    _validate_repeated_benchmark(repeated_broad, expected_scope=False)
+    _validate_repeated_benchmark(repeated_scoped, expected_scope=True)
+    return {
+        "execution_mode": "actual_repeated_benchmark",
+        "repeat_run_count": repeated_broad["run_count"],
+        "warmup_run_count": repeated_broad["warmup_run_count"],
+        "actual_repeated_run_available": True,
+        "case_timeout_seconds": repeated_broad.get("case_timeout_seconds"),
+        "aggregation_note": repeated_broad["aggregation_note"],
+        "summaries": [
+            _latency_actual_summary(
+                "broad",
+                repeated_broad,
+                str(DEFAULT_REPEATED_BROAD_PATH),
+            ),
+            _latency_actual_summary(
+                "scoped",
+                repeated_scoped,
+                str(DEFAULT_REPEATED_SCOPED_PATH),
+            ),
+        ],
+    }
+
+
 def build_all(
     *,
     cases_path: Path = DEFAULT_CASES_PATH,
     broad_path: Path = DEFAULT_BROAD_PATH,
     scoped_path: Path = DEFAULT_SCOPED_PATH,
+    repeated_broad_path: Path = DEFAULT_REPEATED_BROAD_PATH,
+    repeated_scoped_path: Path = DEFAULT_REPEATED_SCOPED_PATH,
 ) -> dict[str, Any]:
     cases = load_cases(cases_path)
     broad = load_json(broad_path)
     scoped = load_json(scoped_path)
+    repeated_broad = load_json(repeated_broad_path) if repeated_broad_path.exists() else None
+    repeated_scoped = (
+        load_json(repeated_scoped_path) if repeated_scoped_path.exists() else None
+    )
     taxonomy = build_taxonomy(cases)
     return {
         "taxonomy": taxonomy,
         "taxonomy_summary": summarize_taxonomy(taxonomy, broad),
         "fallback_cases": build_fallback_cases(broad, scoped),
         "evidence_quality": build_evidence_quality(broad, scoped),
-        "strategy_decision_summary": build_strategy_decision_summary(broad, scoped),
-        "latency_repeated": build_latency_repeated_fixture(broad, scoped),
+        "strategy_decision_summary": build_strategy_decision_summary(
+            broad,
+            scoped,
+            repeated_broad,
+            repeated_scoped,
+        ),
+        "latency_repeated": (
+            build_latency_repeated_actual(repeated_broad, repeated_scoped)
+            if repeated_broad and repeated_scoped
+            else build_latency_repeated_fixture(broad, scoped)
+        ),
     }
 
 
@@ -445,11 +561,79 @@ def _latency_fixture_summary(label: str, benchmark: dict[str, Any], source: str)
     }
 
 
+def _latency_actual_summary(
+    label: str,
+    benchmark: dict[str, Any],
+    source: str,
+) -> dict[str, Any]:
+    return {
+        "label": label,
+        "source_benchmark": source,
+        "scope_to_expected_policy": benchmark["scope_to_expected_policy"],
+        "case_count": benchmark["case_count"],
+        "run_count": benchmark["run_count"],
+        "warmup_run_count": benchmark["warmup_run_count"],
+        "strategies": [
+            {
+                "strategy": strategy["strategy"],
+                "policy_hit_at_k_pct_values": strategy["policy_hit_at_k_pct_values"],
+                "section_hit_at_k_pct_values": strategy["section_hit_at_k_pct_values"],
+                "mrr_values": strategy["mrr_values"],
+                "error_rate_pct_values": strategy["error_rate_pct_values"],
+                "latency_p50_ms_values": strategy["latency_p50_ms_values"],
+                "latency_p95_ms_values": strategy["latency_p95_ms_values"],
+                "median_latency_p50_ms": strategy["latency_p50_ms"],
+                "median_latency_p95_ms": strategy["latency_p95_ms"],
+                "fallback_count_values": strategy["fallback_count_values"],
+                "fallback_rate_pct_values": strategy["fallback_rate_pct_values"],
+            }
+            for strategy in benchmark["strategies"]
+        ],
+    }
+
+
 def _metrics_by_strategy(benchmark: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return {
         strategy["strategy"]: strategy["metrics"]
         for strategy in benchmark["strategies"]
     }
+
+
+def _repeated_metrics_by_strategy(benchmark: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    return {
+        strategy["strategy"]: strategy
+        for strategy in benchmark["strategies"]
+    }
+
+
+def _validate_repeated_benchmark(
+    benchmark: dict[str, Any],
+    *,
+    expected_scope: bool,
+) -> None:
+    if benchmark.get("execution_mode") != "actual_repeated_benchmark":
+        raise ValueError("repeated benchmark must be an actual repeated run")
+    if benchmark.get("run_count", 0) < 3:
+        raise ValueError("repeated benchmark needs at least 3 measured runs")
+    if benchmark.get("case_count") != 50:
+        raise ValueError("repeated benchmark must use the 50-case goldset")
+    if benchmark.get("top_k") != 5:
+        raise ValueError("repeated benchmark must use top_k=5")
+    if benchmark.get("scope_to_expected_policy") is not expected_scope:
+        raise ValueError("repeated benchmark scope does not match expected input")
+    for strategy in benchmark.get("strategies", []):
+        required = {
+            "policy_hit_at_k_pct_values",
+            "section_hit_at_k_pct_values",
+            "mrr_values",
+            "error_rate_pct_values",
+            "latency_p50_ms_values",
+            "latency_p95_ms_values",
+            "latency_p50_ms",
+            "latency_p95_ms",
+        }
+        if missing := sorted(required - set(strategy)):
+            raise ValueError(f"repeated strategy missing fields: {missing}")
 
 
 def _delta(left: dict[str, Any], right: dict[str, Any], key: str) -> float:
@@ -475,6 +659,8 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--cases", type=Path, default=DEFAULT_CASES_PATH)
     parser.add_argument("--broad", type=Path, default=DEFAULT_BROAD_PATH)
     parser.add_argument("--scoped", type=Path, default=DEFAULT_SCOPED_PATH)
+    parser.add_argument("--repeated-broad", type=Path, default=DEFAULT_REPEATED_BROAD_PATH)
+    parser.add_argument("--repeated-scoped", type=Path, default=DEFAULT_REPEATED_SCOPED_PATH)
     parser.add_argument("--output-dir", type=Path, default=Path("output"))
     parser.add_argument(
         "--taxonomy-output",
@@ -490,6 +676,8 @@ def main() -> None:
         cases_path=args.cases,
         broad_path=args.broad,
         scoped_path=args.scoped,
+        repeated_broad_path=args.repeated_broad,
+        repeated_scoped_path=args.repeated_scoped,
     )
     write_json(args.taxonomy_output, artifacts["taxonomy"])
     write_json(

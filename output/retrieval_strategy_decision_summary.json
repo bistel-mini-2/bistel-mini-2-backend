@@ -18,5 +18,37 @@
     "scoped_fallback_count": 1,
     "scoped_fallback_rate_pct": 2.0
   },
-  "bounded_decision_sentence": "현재 50문항 내부 평가 조건에서는 Hybrid가 Policy Hit@5와 MRR은 소폭 높지만 p50 latency 증가가 커서 기본값으로 채택하지 않고, Vector 품질을 유지하면서 조건부 SQL 보충만 수행한 Adaptive를 챗봇 기본 검색 전략 후보로 둔다."
+  "bounded_decision_sentence": "현재 50문항 내부 평가 조건에서는 Hybrid가 Policy Hit@5와 MRR은 소폭 높지만 p50 latency 증가가 커서 기본값으로 채택하지 않고, Vector 품질을 유지하면서 조건부 SQL 보충만 수행한 Adaptive를 챗봇 기본 검색 전략 후보로 둔다.",
+  "repeated_latency_tradeoff": {
+    "actual_repeated_run_available": true,
+    "broad_source": "output/retrieval_benchmark_repeated_broad_5.json",
+    "scoped_source": "output/retrieval_benchmark_repeated_scoped_5.json",
+    "run_count": 5,
+    "warmup_run_count": 1,
+    "case_timeout_seconds": 15.0,
+    "hybrid_p50_latency_increase_ms_vs_vector": 664.901,
+    "hybrid_p95_latency_increase_ms_vs_vector": 947.96,
+    "adaptive_p50_latency_increase_ms_vs_vector": 46.322,
+    "adaptive_p95_latency_increase_ms_vs_vector": 1529.715,
+    "scoped_adaptive_p50_latency_increase_ms_vs_vector": 10.59,
+    "scoped_adaptive_p95_latency_increase_ms_vs_vector": 55.61
+  },
+  "benchmark_execution_improvements": {
+    "root_cause": "Repeated benchmark re-embedded the same 50 queries for each vector-based strategy and run, then executed vector DB search sequentially.",
+    "observed_embedding_call_scale": {
+      "broad_estimated_embedding_calls": 900,
+      "scoped_estimated_embedding_calls": 600,
+      "total_estimated_embedding_calls": 1500
+    },
+    "implemented_controls": [
+      "case_timeout_seconds records slow case failures instead of hanging",
+      "checkpoint_output preserves completed strategy-run results"
+    ],
+    "recommended_next_improvements": [
+      "cache query embeddings per case and reuse them across strategies",
+      "measure embedding latency and vector DB latency separately",
+      "rebuild final summaries from checkpoint JSONL after interruption",
+      "replace SQL ILIKE keyword scan with PostgreSQL FTS or trigram index"
+    ]
+  }
 }

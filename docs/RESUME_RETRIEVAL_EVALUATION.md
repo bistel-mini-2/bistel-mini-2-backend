@@ -10,7 +10,7 @@
 - 정책명 노출을 제거한 50문항 골드셋과 Policy/Section Hit@5·MRR·latency
   평가기를 구축해 Hybrid의 Policy Hit@5 88%·MRR 0.7757을 검증하고,
   Vector 우선 Adaptive fallback으로 SQL 추가 조회를 broad 검색 14%,
-  정책별 근거 검색 2%로 제한
+  정책별 근거 검색 2%로 제한하며 실제 5회 반복 측정으로 latency 중앙값 확인
 
 ### 한 줄 버전
 
@@ -66,26 +66,29 @@
 
 ## 검증 결과
 
-실행일은 2026년 7월 28일이며, 아래 값은 동일한 50문항과 `Top K = 5`
-조건에서 실행한 1회 벤치마크 결과다.
+아래 정확도 값은 동일한 50문항과 `Top K = 5` 조건에서 실행한 benchmark
+결과다. latency는 2026년 8월 16일 실제 DB와 OpenAI embedding API로
+warm-up 1회, 측정 5회를 실행한 반복 benchmark의 중앙값이다.
 
 | 검색 방식 | Policy Hit@5 | Section Hit@5 | MRR | p50 | p95 |
 |---|---:|---:|---:|---:|---:|
-| SQL keyword | 18.0% | 12.0% | 0.0957 | 1,257ms | 1,732ms |
-| pgvector | 86.0% | 80.0% | 0.7497 | 782ms | 1,093ms |
-| Weighted Hybrid RRF | **88.0%** | **80.0%** | **0.7757** | 1,292ms | 1,717ms |
-| Adaptive fallback | 86.0% | 80.0% | 0.7497 | 809ms | 2,290ms |
+| SQL keyword | 18.0% | 12.0% | 0.0957 | 1,396ms | 2,118ms |
+| pgvector | 86.0% | 80.0% | 0.7497 | 757ms | 1,181ms |
+| Weighted Hybrid RRF | **88.0%** | **80.0%** | **0.7757** | 1,422ms | 2,129ms |
+| Adaptive fallback | 86.0% | 80.0% | 0.7497 | 803ms | 2,711ms |
 
 확인된 결과는 다음과 같다.
 
 - pgvector는 단순 SQL keyword 기준선보다 Policy Hit@5가 68%p,
   Section Hit@5가 68%p 높았다.
 - Weighted Hybrid는 Vector보다 Policy Hit@5가 2%p, MRR이 0.0260
-  높았지만 p50 latency가 약 510ms 길었다.
+  높았지만 반복 실행 p50 latency가 약 665ms 길었다.
 - Adaptive는 broad 검색에서 7/50문항(14%)만 SQL fallback을 실행하면서
   Vector와 같은 Policy Hit@5 86%, Section Hit@5 80%를 유지했다.
 - 실제 챗봇 흐름처럼 정책 ID를 지정한 근거 검색에서는 Vector와 Adaptive
   모두 Section Hit@5 98%였고 Adaptive fallback은 1/50문항(2%)이었다.
+- 반복 실행의 error rate는 모든 전략에서 0.0%였고, 실행별 정확도와
+  fallback 비율은 변하지 않았다.
 
 따라서 정확도만 보면 Hybrid가 가장 높았지만, 작은 정확도 이득에 비해
 지연시간 증가가 컸다. 운영 기본값은 Vector 정상 경로를 유지하는 Adaptive로
@@ -114,7 +117,7 @@ Hit@5와 함께 Section Hit@5를 측정했다. MRR은 정답이 포함된 경우
 ### 왜 Hybrid를 기본값으로 사용하지 않았나?
 
 Hybrid는 Vector보다 Policy Hit@5가 2%p 높았지만 Section Hit@5는 같았고,
-p50 latency는 약 510ms 증가했다. 따라서 모든 요청에서 두 검색을 실행하는
+반복 실행 p50 latency는 약 665ms 증가했다. 따라서 모든 요청에서 두 검색을 실행하는
 대신 Vector를 정상 경로로 사용하고 근거 역할이 없을 때만 SQL을 보충하도록
 했다.
 
@@ -155,15 +158,17 @@ p50 latency는 약 510ms 증가했다. 따라서 모든 요청에서 두 검색�
   - 정확한 표현은 "정책 원문 기준으로 검수한 50문항 내부 검색 검증셋"이다.
     독립적인 사람 검수와 평가자 간 일치도 측정은 완료되지 않았다.
 - **지연시간을 운영 SLA처럼 표현**
-  - 현재 latency는 1회 실행 결과이며 API 네트워크와 DB 상태의 영향을
-    받는다. 이력서의 핵심 성과는 정확도와 fallback 비율로 두는 편이 안전하다.
+  - 현재 latency는 실제 5회 반복 측정값이지만 API 네트워크, 로컬 DB 상태,
+    순차 실행 방식의 영향을 받는다. 이력서의 핵심 성과는 정확도와 fallback
+    비율로 두는 편이 안전하다.
 
 ## 포트폴리오 확장 시 다음 작업
 
-1. 벤치마크를 워밍업 후 3회 이상 반복해 latency 중앙값과 분산 기록
-2. 정답 답변 또는 원자적 사실 목록을 추가해 생성 답변의 faithfulness 평가
-3. 일부 문항을 제3자가 독립 검수하고 평가자 간 일치도 기록
-4. PostgreSQL FTS 또는 한국어 형태소 기반 keyword 기준선을 추가해 재비교
+1. 평가 전용 query embedding cache를 만들어 같은 질문 임베딩을 전략 간 공유
+2. embedding/API latency와 DB vector search latency를 분리 측정
+3. 정답 답변 또는 원자적 사실 목록을 추가해 생성 답변의 faithfulness 평가
+4. 일부 문항을 제3자가 독립 검수하고 평가자 간 일치도 기록
+5. PostgreSQL FTS 또는 한국어 형태소 기반 keyword 기준선을 추가해 재비교
 
 ## 근거 자료
 
@@ -175,3 +180,5 @@ p50 latency는 약 510ms 증가했다. 따라서 모든 요청에서 두 검색�
 - 벤치마크 설명: `docs/RETRIEVAL_BENCHMARK.md`
 - 전체 정책 검색 결과: `output/retrieval_benchmark_50.json`
 - 정책 범위 지정 결과: `output/retrieval_benchmark_scoped_50.json`
+- 반복 전체 정책 검색 결과: `output/retrieval_benchmark_repeated_broad_5.json`
+- 반복 정책 범위 지정 결과: `output/retrieval_benchmark_repeated_scoped_5.json`

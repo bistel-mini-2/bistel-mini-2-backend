@@ -20,7 +20,7 @@ Dodam 정책 챗봇 작업을 "RAG 챗봇을 만들었다"가 아니라, 검색 
   수정된 gold label을 재적용해 재채점했다. Broad 평가의 pgvector,
   Weighted Hybrid RRF, Adaptive fallback Section Hit@5는 80.0%로 정리됐다.
 - 질문 유형 taxonomy, fallback 사례, evidence correctness, 전략 선택 요약,
-  반복 latency fixture 산출물을 추가해 포트폴리오에서 설명 가능한 근거를
+  실제 5회 반복 latency 산출물을 추가해 포트폴리오에서 설명 가능한 근거를
   분리했다.
 - 이 문서는 공개 표준 데이터셋 검증이 아니라 내부 검색 검증셋 기반
   retrieval evidence 정리로 한정한다.
@@ -72,22 +72,37 @@ Scoped 평가는 실제 정책 요약 흐름처럼 이미 `policy_id`를 알고 
 
 ## 반복 Latency 결과
 
-`tests/eval/retrieval_eval.py`에 `--repeat-runs` 옵션을 추가했다. 실제 DB,
-임베딩 API, 네트워크 설정이 준비된 환경에서는 다음 명령으로 기존 1회
-benchmark 파일을 덮어쓰지 않고 반복 latency를 측정할 수 있다.
+2026년 8월 16일에 실제 DB와 OpenAI embedding API를 사용해 warm-up 1회,
+측정 5회 반복 benchmark를 실행했다. 기존 1회 benchmark 파일은 덮어쓰지
+않고 Broad/Scoped 반복 결과를 별도 JSON으로 보존했다.
 
 ```bash
 PYTHONPATH=. .venv/bin/python tests/eval/retrieval_eval.py \
+  --strategies sql_keyword vector hybrid adaptive \
+  --warmup-runs 1 \
   --repeat-runs 5 \
+  --case-timeout-seconds 15 \
   --top-k 5 \
-  --output output/retrieval_latency_repeated.json
+  --checkpoint-output output/retrieval_benchmark_repeated_broad_5.checkpoint.jsonl \
+  --output output/retrieval_benchmark_repeated_broad_5.json
 ```
 
-현재 `output/retrieval_latency_repeated.json`은 기존 체크인 benchmark JSON에서
-만든 fixture 기반 산출물이다. DB/API를 새로 호출하지 않았으므로
-`actual_repeated_run_available=false`로 표시했다. 이 파일은 반복 실행
-가능 경로와 현재 1회 측정값을 분리해 문서화하기 위한 것이며, 운영 SLA로
-해석하지 않는다.
+반복 결과는 `output/retrieval_latency_repeated.json`에
+`actual_repeated_run_available=true`로 요약했다. 대표 latency는 warm-up을
+제외한 실행별 p50/p95의 중앙값이다.
+
+| 조건 | 전략 | Policy Hit@5 | Section Hit@5 | p50 median | p95 median | Error | Fallback |
+|---|---|---:|---:|---:|---:|---:|---:|
+| broad | SQL keyword | 18.0% | 12.0% | 1,396ms | 2,118ms | 0.0% | - |
+| broad | pgvector | 86.0% | 80.0% | 757ms | 1,181ms | 0.0% | - |
+| broad | Hybrid | 88.0% | 80.0% | 1,422ms | 2,129ms | 0.0% | - |
+| broad | Adaptive | 86.0% | 80.0% | 803ms | 2,711ms | 0.0% | 14.0% |
+| scoped | pgvector | 100.0% | 98.0% | 662ms | 972ms | 0.0% | - |
+| scoped | Adaptive | 100.0% | 98.0% | 673ms | 1,028ms | 0.0% | 2.0% |
+
+반복 실행에서도 정확도와 fallback 비율은 실행별로 변하지 않았다. 다만
+Adaptive broad p95는 fallback 문항의 추가 SQL 조회 영향으로 pgvector보다
+크다.
 
 ## 질문 유형별 결과
 
@@ -151,7 +166,8 @@ Scoped fallback은 `R015` 1문항에서만 발동했고, 기대 정책과 기대
 
 현재 50문항 내부 평가 조건에서는 Hybrid가 pgvector보다 Policy Hit@5가
 2.0%p, MRR이 0.0260 높다. 그러나 Section Hit@5는 80.0%로 같고, p50
-latency는 약 510ms, p95 latency는 약 624ms 증가했다.
+latency는 단일 실행 기준 약 510ms, 반복 실행 중앙값 기준 약 665ms
+증가했다. p95 latency도 반복 실행 중앙값 기준 약 948ms 증가했다.
 
 Adaptive는 broad에서 pgvector와 같은 Policy Hit@5 86.0%, Section Hit@5
 80.0%를 유지하면서 SQL fallback을 7/50문항으로 제한했다. Scoped에서도
@@ -162,9 +178,23 @@ Section Hit@5 98.0%를 유지하고 fallback은 1/50문항이었다.
 기본 검색 전략 후보로 보는 것이 더 보수적이다. 이 판단은
 `output/retrieval_strategy_decision_summary.json`에 자동 요약했다.
 
+## 반복 실행 병목과 개선사항
+
+반복 benchmark가 오래 걸린 근본 원인은 같은 50개 질문을 전략별, 실행별로
+다시 임베딩하고 각 결과마다 vector DB 검색을 순차 수행했기 때문이다. Broad는
+warm-up 포함 6회 × 50문항 × vector 기반 3전략으로 약 900회 embedding
+호출이 발생했고, Scoped는 약 600회가 추가됐다.
+
+이번 보강에서는 문항 단위 timeout과 전략 단위 checkpoint를 추가했다. 다음
+개선은 평가 전용 query embedding cache를 만들어 같은 질문 임베딩을 전략 간
+공유하고, embedding latency와 DB vector search latency를 분리 측정하는 것이다.
+SQL keyword 기준선은 현재 `ILIKE '%keyword%'` 중심이라 PostgreSQL FTS 또는
+trigram index 기준선으로 바꿔 재비교하는 편이 좋다.
+
 ## 한계
 
-- Latency는 1회 또는 fixture 기반 측정이며 운영 SLA가 아니다.
+- Latency는 실제 5회 반복 측정값이지만 OpenAI embedding API, 로컬 DB 상태,
+  순차 실행 방식의 영향을 받으므로 운영 SLA가 아니다.
 - 골드셋은 정책 원문 기준으로 검수한 50문항 내부 검색 검증셋이며 공개
   표준 데이터셋이 아니다.
 - 현재 평가는 검색된 근거의 correctness를 본다. 생성 답변 faithfulness는

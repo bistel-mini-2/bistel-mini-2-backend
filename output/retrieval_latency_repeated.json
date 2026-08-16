@@ -1,65 +1,394 @@
 {
-  "execution_mode": "fixture_from_existing_single_run_benchmarks",
-  "repeat_run_count": 1,
-  "actual_repeated_run_available": false,
-  "why_not_repeated": "This artifact was generated from checked-in benchmark JSON without opening the DB, calling the embedding API, or overwriting the original benchmark files. Run retrieval_eval.py --repeat-runs 5 against a configured DB/API environment for true repeated latency.",
-  "recommended_command": "PYTHONPATH=. .venv/bin/python tests/eval/retrieval_eval.py --repeat-runs 5 --top-k 5 --output output/retrieval_latency_repeated.json",
+  "execution_mode": "actual_repeated_benchmark",
+  "repeat_run_count": 5,
+  "warmup_run_count": 1,
+  "actual_repeated_run_available": true,
+  "case_timeout_seconds": 15.0,
+  "aggregation_note": "Repeated latency is summarized with median of per-run p50/p95 values after excluding warm-up runs; single-run benchmark files are not overwritten.",
   "summaries": [
     {
       "label": "broad",
-      "source_benchmark": "output/retrieval_benchmark_50.json",
+      "source_benchmark": "output/retrieval_benchmark_repeated_broad_5.json",
       "scope_to_expected_policy": false,
       "case_count": 50,
+      "run_count": 5,
+      "warmup_run_count": 1,
       "strategies": [
         {
           "strategy": "sql_keyword",
-          "single_run_latency_p50_ms": 1256.644,
-          "single_run_latency_p95_ms": 1731.826,
-          "fallback_count": null,
-          "fallback_rate_pct": null
+          "policy_hit_at_k_pct_values": [
+            18.0,
+            18.0,
+            18.0,
+            18.0,
+            18.0
+          ],
+          "section_hit_at_k_pct_values": [
+            12.0,
+            12.0,
+            12.0,
+            12.0,
+            12.0
+          ],
+          "mrr_values": [
+            0.0957,
+            0.0957,
+            0.0957,
+            0.0957,
+            0.0957
+          ],
+          "error_rate_pct_values": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "latency_p50_ms_values": [
+            1387.413,
+            1396.229,
+            1447.732,
+            1459.925,
+            1383.17
+          ],
+          "latency_p95_ms_values": [
+            1998.086,
+            1870.749,
+            2117.97,
+            2643.112,
+            2203.934
+          ],
+          "median_latency_p50_ms": 1396.229,
+          "median_latency_p95_ms": 2117.97,
+          "fallback_count_values": [
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "fallback_rate_pct_values": [
+            null,
+            null,
+            null,
+            null,
+            null
+          ]
         },
         {
           "strategy": "vector",
-          "single_run_latency_p50_ms": 781.577,
-          "single_run_latency_p95_ms": 1093.191,
-          "fallback_count": null,
-          "fallback_rate_pct": null
+          "policy_hit_at_k_pct_values": [
+            86.0,
+            86.0,
+            86.0,
+            86.0,
+            86.0
+          ],
+          "section_hit_at_k_pct_values": [
+            80.0,
+            80.0,
+            80.0,
+            80.0,
+            80.0
+          ],
+          "mrr_values": [
+            0.7497,
+            0.7497,
+            0.7497,
+            0.7497,
+            0.7497
+          ],
+          "error_rate_pct_values": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "latency_p50_ms_values": [
+            815.031,
+            757.078,
+            740.745,
+            800.72,
+            721.57
+          ],
+          "latency_p95_ms_values": [
+            1436.54,
+            1020.741,
+            1119.24,
+            1189.898,
+            1181.423
+          ],
+          "median_latency_p50_ms": 757.078,
+          "median_latency_p95_ms": 1181.423,
+          "fallback_count_values": [
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "fallback_rate_pct_values": [
+            null,
+            null,
+            null,
+            null,
+            null
+          ]
         },
         {
           "strategy": "hybrid",
-          "single_run_latency_p50_ms": 1291.562,
-          "single_run_latency_p95_ms": 1717.025,
-          "fallback_count": null,
-          "fallback_rate_pct": null
+          "policy_hit_at_k_pct_values": [
+            88.0,
+            88.0,
+            88.0,
+            88.0,
+            88.0
+          ],
+          "section_hit_at_k_pct_values": [
+            80.0,
+            80.0,
+            80.0,
+            80.0,
+            80.0
+          ],
+          "mrr_values": [
+            0.7757,
+            0.7757,
+            0.7757,
+            0.7757,
+            0.7757
+          ],
+          "error_rate_pct_values": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "latency_p50_ms_values": [
+            1404.114,
+            1446.778,
+            1421.979,
+            1456.187,
+            1408.877
+          ],
+          "latency_p95_ms_values": [
+            2129.383,
+            2120.407,
+            2347.384,
+            2517.794,
+            1956.598
+          ],
+          "median_latency_p50_ms": 1421.979,
+          "median_latency_p95_ms": 2129.383,
+          "fallback_count_values": [
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "fallback_rate_pct_values": [
+            null,
+            null,
+            null,
+            null,
+            null
+          ]
         },
         {
           "strategy": "adaptive",
-          "single_run_latency_p50_ms": 808.613,
-          "single_run_latency_p95_ms": 2290.099,
-          "fallback_count": 7,
-          "fallback_rate_pct": 14.0
+          "policy_hit_at_k_pct_values": [
+            86.0,
+            86.0,
+            86.0,
+            86.0,
+            86.0
+          ],
+          "section_hit_at_k_pct_values": [
+            80.0,
+            80.0,
+            80.0,
+            80.0,
+            80.0
+          ],
+          "mrr_values": [
+            0.7497,
+            0.7497,
+            0.7497,
+            0.7497,
+            0.7497
+          ],
+          "error_rate_pct_values": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "latency_p50_ms_values": [
+            774.384,
+            803.4,
+            739.832,
+            922.631,
+            930.489
+          ],
+          "latency_p95_ms_values": [
+            2711.138,
+            2497.097,
+            2911.835,
+            2804.158,
+            2451.7
+          ],
+          "median_latency_p50_ms": 803.4,
+          "median_latency_p95_ms": 2711.138,
+          "fallback_count_values": [
+            7,
+            7,
+            7,
+            7,
+            7
+          ],
+          "fallback_rate_pct_values": [
+            14.0,
+            14.0,
+            14.0,
+            14.0,
+            14.0
+          ]
         }
       ]
     },
     {
       "label": "scoped",
-      "source_benchmark": "output/retrieval_benchmark_scoped_50.json",
+      "source_benchmark": "output/retrieval_benchmark_repeated_scoped_5.json",
       "scope_to_expected_policy": true,
       "case_count": 50,
+      "run_count": 5,
+      "warmup_run_count": 1,
       "strategies": [
         {
           "strategy": "vector",
-          "single_run_latency_p50_ms": 664.753,
-          "single_run_latency_p95_ms": 1026.989,
-          "fallback_count": null,
-          "fallback_rate_pct": null
+          "policy_hit_at_k_pct_values": [
+            100.0,
+            100.0,
+            100.0,
+            100.0,
+            100.0
+          ],
+          "section_hit_at_k_pct_values": [
+            98.0,
+            98.0,
+            98.0,
+            98.0,
+            98.0
+          ],
+          "mrr_values": [
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "error_rate_pct_values": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "latency_p50_ms_values": [
+            659.832,
+            678.513,
+            652.698,
+            682.444,
+            662.427
+          ],
+          "latency_p95_ms_values": [
+            943.43,
+            1023.461,
+            925.918,
+            972.16,
+            1017.746
+          ],
+          "median_latency_p50_ms": 662.427,
+          "median_latency_p95_ms": 972.16,
+          "fallback_count_values": [
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "fallback_rate_pct_values": [
+            null,
+            null,
+            null,
+            null,
+            null
+          ]
         },
         {
           "strategy": "adaptive",
-          "single_run_latency_p50_ms": 700.228,
-          "single_run_latency_p95_ms": 951.483,
-          "fallback_count": 1,
-          "fallback_rate_pct": 2.0
+          "policy_hit_at_k_pct_values": [
+            100.0,
+            100.0,
+            100.0,
+            100.0,
+            100.0
+          ],
+          "section_hit_at_k_pct_values": [
+            98.0,
+            98.0,
+            98.0,
+            98.0,
+            98.0
+          ],
+          "mrr_values": [
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "error_rate_pct_values": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "latency_p50_ms_values": [
+            673.017,
+            645.839,
+            684.739,
+            669.126,
+            711.916
+          ],
+          "latency_p95_ms_values": [
+            978.019,
+            1353.378,
+            1189.137,
+            1027.77,
+            948.714
+          ],
+          "median_latency_p50_ms": 673.017,
+          "median_latency_p95_ms": 1027.77,
+          "fallback_count_values": [
+            1,
+            1,
+            1,
+            1,
+            1
+          ],
+          "fallback_rate_pct_values": [
+            2.0,
+            2.0,
+            2.0,
+            2.0,
+            2.0
+          ]
         }
       ]
     }
