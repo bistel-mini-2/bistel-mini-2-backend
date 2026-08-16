@@ -1,0 +1,1711 @@
+{
+  "evaluation_name": "generated_answer_grounding_live_manual_review",
+  "evaluation_status": "completed_manual_review_on_live_capture",
+  "source_capture": "output/generated_grounding_live_api_capture.json",
+  "source_capture_started_at": "2026-08-16T12:15:11+0900",
+  "review_scope": "All user-visible summary sentences and evidence lines in the 10-policy force-refresh live capture.",
+  "capture_preconditions": {
+    "all_completed": true,
+    "llm_or_fallback_generator": true,
+    "openai_api_key_configured": true
+  },
+  "metrics": {
+    "policy_count": 10,
+    "claim_count": 62,
+    "summary_claim_count": 32,
+    "evidence_claim_count": 30,
+    "checkable_claim_count": 62,
+    "grounded_claim_count": 62,
+    "unsupported_claim_count": 0,
+    "critical_error_count": 0,
+    "display_quality_issue_count": 3,
+    "claim_grounding_rate_pct": 100.0,
+    "critical_error_rate_pct": 0.0,
+    "display_quality_issue_rate_pct": 4.8
+  },
+  "counts": {
+    "by_grounding_status": {
+      "grounded": 62
+    },
+    "by_issue_type": {
+      "none": 62
+    },
+    "by_display_issue_type": {
+      "none": 59,
+      "internal_marker": 2,
+      "malformed_text": 1
+    },
+    "by_response_part": {
+      "summary": 32,
+      "evidence": 30
+    }
+  },
+  "portfolio_safe_claims": [
+    "10개 force-refresh live API 응답의 사용자 표시 claim을 수동 rubric으로 검토했다.",
+    "검토된 claim은 모두 policy field 또는 retrieved chunk 근거로 지지됐다.",
+    "다만 내부 필드명 노출과 오탈자성 문장 품질 이슈는 별도 개선 대상으로 남았다."
+  ],
+  "recommended_next_improvements": [
+    "fallback summary phrase의 '합니이 주요 지원 대상이에요' 오탈자 경로 수정",
+    "evidence sanitizer가 application_status/application_period_text 같은 내부 필드명을 제거하도록 확장",
+    "structured citation 계약 도입 전까지 live review artifact를 release evidence로 유지"
+  ],
+  "claims": [
+    {
+      "claim_id": "L237-01",
+      "policy_id": 237,
+      "policy_slug": "WLF00006317",
+      "policy_name": "발달장애인 자기주도 재직자 훈련",
+      "response_part": "summary",
+      "claim_text": "발달장애 근로자가 직장생활에 필요한 소양과 직무기초를 배우는 재직자 훈련입니다.",
+      "support_type": "both",
+      "support_reference": {
+        "policy_fields": [
+          "condition_profile_target_summary",
+          "benefit_description",
+          "application_method"
+        ],
+        "chunk_ids": [
+          23790000000,
+          23790000002,
+          23790000003,
+          23790000004
+        ]
+      },
+      "grounding_status": "grounded",
+      "issue_type": "none",
+      "display_issue_type": "none",
+      "review_note": "Live response claim is supported by the selected policy fields and retrieved chunks used by the summary generator."
+    },
+    {
+      "claim_id": "L237-02",
+      "policy_id": 237,
+      "policy_slug": "WLF00006317",
+      "policy_name": "발달장애인 자기주도 재직자 훈련",
+      "response_part": "summary",
+      "claim_text": "신청은 거주지 읍·면·동 주민센터나 한국장애인고용공단에서 오프라인으로 해야 합니다.",
+      "support_type": "both",
+      "support_reference": {
+        "policy_fields": [
+          "condition_profile_target_summary",
+          "benefit_description",
+          "application_method"
+        ],
+        "chunk_ids": [
+          23790000000,
+          23790000002,
+          23790000003,
+          23790000004
+        ]
+      },
+      "grounding_status": "grounded",
+      "issue_type": "none",
+      "display_issue_type": "none",
+      "review_note": "Live response claim is supported by the selected policy fields and retrieved chunks used by the summary generator."
+    },
+    {
+      "claim_id": "L237-03",
+      "policy_id": 237,
+      "policy_slug": "WLF00006317",
+      "policy_name": "발달장애인 자기주도 재직자 훈련",
+      "response_part": "summary",
+      "claim_text": "훈련은 발달훈련센터, 사업장 인근 외부시설, 사업장 교육장 등에서 최대 12주까지 운영됩니다.",
+      "support_type": "both",
+      "support_reference": {
+        "policy_fields": [
+          "condition_profile_target_summary",
+          "benefit_description",
+          "application_method"
+        ],
+        "chunk_ids": [
+          23790000000,
+          23790000002,
+          23790000003,
+          23790000004
+        ]
+      },
+      "grounding_status": "grounded",
+      "issue_type": "none",
+      "display_issue_type": "none",
+      "review_note": "Live response claim is supported by the selected policy fields and retrieved chunks used by the summary generator."
+    },
+    {
+      "claim_id": "L237-04",
+      "policy_id": 237,
+      "policy_slug": "WLF00006317",
+      "policy_name": "발달장애인 자기주도 재직자 훈련",
+      "response_part": "evidence",
+      "claim_text": "대상은 발달장애 근로자를 위한 자기주도 재직자 훈련입니다.",
+      "support_type": "both",
+      "support_reference": {
+        "policy_fields": [
+          "condition_profile_target_summary",
+          "benefit_description",
+          "application_method"
+        ],
+        "chunk_ids": [
+          23790000000,
+          23790000002,
+          23790000003,
+          23790000004
+        ]
+      },
+      "grounding_status": "grounded",
+      "issue_type": "none",
+      "display_issue_type": "none",
+      "review_note": "Live response claim is supported by the selected policy fields and retrieved chunks used by the summary generator."
+    },
+    {
+      "claim_id": "L237-05",
+      "policy_id": 237,
+      "policy_slug": "WLF00006317",
+      "policy_name": "발달장애인 자기주도 재직자 훈련",
+      "response_part": "evidence",
+      "claim_text": "신청은 거주지 읍·면·동 주민센터 또는 한국장애인고용공단에서 ‘서비스 신청’으로 오프라인 접수합니다.",
+      "support_type": "both",
+      "support_reference": {
+        "policy_fields": [
+          "condition_profile_target_summary",
+          "benefit_description",
+          "application_method"
+        ],
+        "chunk_ids": [
+          23790000000,
+          23790000002,
+          23790000003,
+          23790000004
+        ]
+      },
+      "grounding_status": "grounded",
+      "issue_type": "none",
+      "display_issue_type": "none",
+      "review_note": "Live response claim is supported by the selected policy fields and retrieved chunks used by the summary generator."
+    },
+    {
+      "claim_id": "L237-06",
+      "policy_id": 237,
+      "policy_slug": "WLF00006317",
+      "policy_name": "발달장애인 자기주도 재직자 훈련",
+      "response_part": "evidence",
+      "claim_text": "일반형 과정은 개인별 역량과 상황에 따라 최대 12주 훈련으로 운영됩니다.",
+      "support_type": "both",
+      "support_reference": {
+        "policy_fields": [
+          "condition_profile_target_summary",
+          "benefit_description",
+          "application_method"
+        ],
+        "chunk_ids": [
+          23790000000,
+          23790000002,
+          23790000003,
+          23790000004
+        ]
+      },
+      "grounding_status": "grounded",
+      "issue_type": "none",
+      "display_issue_type": "none",
+      "review_note": "Live response claim is supported by the selected policy fields and retrieved chunks used by the summary generator."
+    },
+    {
+      "claim_id": "L238-01",
+      "policy_id": 238,
+      "policy_slug": "WLF00006311",
+      "policy_name": "법문화교육(교육센터)",
+      "response_part": "summary",
+      "claim_text": "법무부 인권구조과가 운영하는 법문화교육센터에서 다문화가족, 북한이탈주민, 청소년 등에게 맞춤형 체험형 법교육 프로그램을 제공합니다.",
+      "support_type": "both",
+      "support_reference": {
+        "policy_fields": [
+          "condition_profile_target_summary",
+          "benefit_description",
+          "application_method",
+          "application_period_text"
+        ],
+        "chunk_ids": [
+          23890000000,
+          23890000003,
+          23890000004,
+          23890000005
+        ]
+      },
+      "grounding_status": "grounded",
+      "issue_type": "none",
+      "display_issue_type": "none",
+      "review_note": "Live response claim is supported by the selected policy fields and retrieved chunks used by the summary generator."
+    },
+    {
+      "claim_id": "L238-02",
+      "policy_id": 238,
+      "policy_slug": "WLF00006311",
+      "policy_name": "법문화교육(교육센터)",
+      "response_part": "summary",
+      "claim_text": "신청은 거주지 읍·면·동 주민센터나 대한법률구조공단 법문화교육센터에서 가능하며, 방문으로 진행되는 서비스입니다.",
+      "support_type": "both",
+      "support_reference": {
+        "policy_fields": [
+          "condition_profile_target_summary",
+          "benefit_description",
+          "application_method",
+          "application_period_text"
+        ],
+        "chunk_ids": [
+          23890000000,
+          23890000003,
+          23890000004,
+          23890000005
+        ]
+      },
+      "grounding_status": "grounded",
+      "issue_type": "none",
+      "display_issue_type": "none",
+      "review_note": "Live response claim is supported by the selected policy fields and retrieved chunks used by the summary generator."
+    },
+    {
+      "claim_id": "L238-03",
+      "policy_id": 238,
+      "policy_slug": "WLF00006311",
+      "policy_name": "법문화교육(교육센터)",
+      "response_part": "summary",
+      "claim_text": "신청 기간은 수시이며, 지원대상에 해당하는지 먼저 확인하면 됩니다.",
+      "support_type": "both",
+      "support_reference": {
+        "policy_fields": [
+          "condition_profile_target_summary",
+          "benefit_description",
+          "application_method",
+          "application_period_text"
+        ],
+        "chunk_ids": [
+          23890000000,
+          23890000003,
+          23890000004,
+          23890000005
+        ]
+      },
+      "grounding_status": "grounded",
+      "issue_type": "none",
+      "display_issue_type": "none",
+      "review_note": "Live response claim is supported by the selected policy fields and retrieved chunks used by the summary generator."
+    },
+    {
+      "claim_id": "L238-04",
+      "policy_id": 238,
+      "policy_slug": "WLF00006311",
+      "policy_name": "법문화교육(교육센터)",
+      "response_part": "evidence",
+      "claim_text": "대상은 다문화가족, 북한이탈주민, 청소년 등에 맞춤형 법교육 프로그램입니다.",
+      "support_type": "both",
+      "support_reference": {
+        "policy_fields": [
+          "condition_profile_target_summary",
+          "benefit_description",
+          "application_method",
+          "application_period_text"
+        ],
+        "chunk_ids": [
+          23890000000,
+          23890000003,
+          23890000004,
+          23890000005
+        ]
+      },
+      "grounding_status": "grounded",
+      "issue_type": "none",
+      "display_issue_type": "none",
+      "review_note": "Live response claim is supported by the selected policy fields and retrieved chunks used by the summary generator."
+    },
+    {
+      "claim_id": "L238-05",
+      "policy_id": 238,
+      "policy_slug": "WLF00006311",
+      "policy_name": "법문화교육(교육센터)",
+      "response_part": "evidence",
+      "claim_text": "신청은 거주지 읍·면·동 주민센터 또는 대한법률구조공단 법문화교육센터에서 합니다.",
+      "support_type": "both",
+      "support_reference": {
+        "policy_fields": [
+          "condition_profile_target_summary",
+          "benefit_description",
+          "application_method",
+          "application_period_text"
+        ],
+        "chunk_ids": [
+          23890000000,
+          23890000003,
+          23890000004,
+          23890000005
+        ]
+      },
+      "grounding_status": "grounded",
+      "issue_type": "none",
+      "display_issue_type": "none",
+      "review_note": "Live response claim is supported by the selected policy fields and retrieved chunks used by the summary generator."
+    },
+    {
+      "claim_id": "L238-06",
+      "policy_id": 238,
+      "policy_slug": "WLF00006311",
+      "policy_name": "법문화교육(교육센터)",
+      "response_part": "evidence",
+      "claim_text": "신청 기간은 수시이고, 방문 방식(OFFLINE_ONLY)입니다.",
+      "support_type": "both",
+      "support_reference": {
+        "policy_fields": [
+          "condition_profile_target_summary",
+          "benefit_description",
+          "application_method",
+          "application_period_text"
+        ],
+        "chunk_ids": [
+          23890000000,
+          23890000003,
+          23890000004,
+          23890000005
+        ]
+      },
+      "grounding_status": "grounded",
+      "issue_type": "none",
+      "display_issue_type": "internal_marker",
+      "review_note": "Live response claim is supported by the selected policy fields and retrieved chunks used by the summary generator."
+    },
+    {
+      "claim_id": "L240-01",
+      "policy_id": 240,
+      "policy_slug": "WLF00006313",
+      "policy_name": "건강보험 임신출산 진료비(국민행복카드)",
+      "response_part": "summary",
+      "claim_text": "건강보험 임신출산 진료비(국민행복카드)는 임신이 확인된 사람과 2세 미만 영유아의 진료비·약제 구입 본인부담금을 바우처로 지원하는 제도입니다.",
+      "support_type": "both",
+      "support_reference": {
+        "policy_fields": [
+          "condition_profile_target_summary",
+          "benefit_description",
+          "application_method",
+          "application_period_text"
+        ],
+        "chunk_ids": [
+          24090000000,
+          24090000003,
+          24090000004,
+          24090000005
+        ]
+      },
+      "grounding_status": "grounded",
+      "issue_type": "none",
+      "display_issue_type": "none",
+      "review_note": "Live response claim is supported by the selected policy fields and retrieved chunks used by the summary generator."
+    },
+    {
+      "claim_id": "L240-02",
+      "policy_id": 240,
+      "policy_slug": "WLF00006313",
+      "policy_name": "건강보험 임신출산 진료비(국민행복카드)",
+      "response_part": "summary",
+      "claim_text": "임신 1회당 100만원이 기본이며, 다태아 임신부는 140만원을 기본 지급하고 분만취약지는 20만원이 추가됩니다.",
+      "support_type": "both",
+      "support_reference": {
+        "policy_fields": [
+          "condition_profile_target_summary",
+          "benefit_description",
+          "application_method",
+          "application_period_text"
+        ],
+        "chunk_ids": [
+          24090000000,
+          24090000003,
+          24090000004,
+          24090000005
+        ]
+      },
+      "grounding_status": "grounded",
+      "issue_type": "none",
+      "display_issue_type": "none",
+      "review_note": "Live response claim is supported by the selected policy fields and retrieved chunks used by the summary generator."
+    },
+    {
+      "claim_id": "L240-03",
+      "policy_id": 240,
+      "policy_slug": "WLF00006313",
+      "policy_name": "건강보험 임신출산 진료비(국민행복카드)",
+      "response_part": "summary",
+      "claim_text": "신청은 거주지 읍·면·동 주민센터, 보건소, 국민건강보험공단 또는 전담 금융기관에서 가능하고, 기간은 수시 신청입니다.",
+      "support_type": "both",
+      "support_reference": {
+        "policy_fields": [
+          "condition_profile_target_summary",
+          "benefit_description",
+          "application_method",
+          "application_period_text"
+        ],
+        "chunk_ids": [
+          24090000000,
+          24090000003,
+          24090000004,
+          24090000005
+        ]
+      },
+      "grounding_status": "grounded",
+      "issue_type": "none",
+      "display_issue_type": "none",
+      "review_note": "Live response claim is supported by the selected policy fields and retrieved chunks used by the summary generator."
+    },
+    {
+      "claim_id": "L240-04",
+      "policy_id": 240,
+      "policy_slug": "WLF00006313",
+      "policy_name": "건강보험 임신출산 진료비(국민행복카드)",
+      "response_part": "evidence",
+      "claim_text": "임신 1회당 100만원, 다태아 임신부의 경우 140만원 기본지급",
+      "support_type": "both",
+      "support_reference": {
+        "policy_fields": [
+          "condition_profile_target_summary",
+          "benefit_description",
+          "application_method",
+          "application_period_text"
+        ],
+        "chunk_ids": [
+          24090000000,
+          24090000003,
+          24090000004,
+          24090000005
+        ]
+      },
+      "grounding_status": "grounded",
+      "issue_type": "none",
+      "display_issue_type": "none",
+      "review_note": "Live response claim is supported by the selected policy fields and retrieved chunks used by the summary generator."
+    },
+    {
+      "claim_id": "L240-05",
+      "policy_id": 240,
+      "policy_slug": "WLF00006313",
+      "policy_name": "건강보험 임신출산 진료비(국민행복카드)",
+      "response_part": "evidence",
+      "claim_text": "분만취약지의 경우 20만원 추가지원",
+      "support_type": "both",
+      "support_reference": {
+        "policy_fields": [
+          "condition_profile_target_summary",
+          "benefit_description",
+          "application_method",
+          "application_period_text"
+        ],
+        "chunk_ids": [
+          24090000000,
+          24090000003,
+          24090000004,
+          24090000005
+        ]
+      },
+      "grounding_status": "grounded",
+      "issue_type": "none",
+      "display_issue_type": "none",
+      "review_note": "Live response claim is supported by the selected policy fields and retrieved chunks used by the summary generator."
+    },
+    {
+      "claim_id": "L240-06",
+      "policy_id": 240,
+      "policy_slug": "WLF00006313",
+      "policy_name": "건강보험 임신출산 진료비(국민행복카드)",
+      "response_part": "evidence",
+      "claim_text": "임산부의 진료비 및 약제치료재료 구입에 대한 본인부담금, 2세 미만 영유아의 진료비 및 처방된 약제치료재료 구입에 대한 본인부담금",
+      "support_type": "both",
+      "support_reference": {
+        "policy_fields": [
+          "condition_profile_target_summary",
+          "benefit_description",
+          "application_method",
+          "application_period_text"
+        ],
+        "chunk_ids": [
+          24090000000,
+          24090000003,
+          24090000004,
+          24090000005
+        ]
+      },
+      "grounding_status": "grounded",
+      "issue_type": "none",
+      "display_issue_type": "none",
+      "review_note": "Live response claim is supported by the selected policy fields and retrieved chunks used by the summary generator."
+    },
+    {
+      "claim_id": "L242-01",
+      "policy_id": 242,
+      "policy_slug": "WLF00006308",
+      "policy_name": "무료법률상담",
+      "response_part": "summary",
+      "claim_text": "법률 상담이 필요한 국민에게 무료 법률상담을 제공하는 서비스입니다.",
+      "support_type": "both",
+      "support_reference": {
+        "policy_fields": [
+          "condition_profile_target_summary",
+          "benefit_description",
+          "application_method",
+          "application_period_text"
+        ],
+        "chunk_ids": [
+          24290000000,
+          24290000003,
+          24290000004,
+          24290000005
+        ]
+      },
+      "grounding_status": "grounded",
+      "issue_type": "none",
+      "display_issue_type": "none",
+      "review_note": "Live response claim is supported by the selected policy fields and retrieved chunks used by the summary generator."
+    },
+    {
+      "claim_id": "L242-02",
+      "policy_id": 242,
+      "policy_slug": "WLF00006308",
+      "policy_name": "무료법률상담",
+      "response_part": "summary",
+      "claim_text": "민사소송, 임대차, 손해배상, 개인회생·파산 등 법률문제 상담을 지원합니다.",
+      "support_type": "both",
+      "support_reference": {
+        "policy_fields": [
+          "condition_profile_target_summary",
+          "benefit_description",
+          "application_method",
+          "application_period_text"
+        ],
+        "chunk_ids": [
+          24290000000,
+          24290000003,
+          24290000004,
+          24290000005
+        ]
+      },
+      "grounding_status": "grounded",
+      "issue_type": "none",
+      "display_issue_type": "none",
+      "review_note": "Live response claim is supported by the selected policy fields and retrieved chunks used by the summary generator."
+    },
+    {
+      "claim_id": "L242-03",
+      "policy_id": 242,
+      "policy_slug": "WLF00006308",
+      "policy_name": "무료법률상담",
+      "response_part": "summary",
+      "claim_text": "신청은 거주지 읍·면·동 주민센터나 대한법률구조공단 등에서 가능하며, 수시로 접수합니다.",
+      "support_type": "both",
+      "support_reference": {
+        "policy_fields": [
+          "condition_profile_target_summary",
+          "benefit_description",
+          "application_method",
+          "application_period_text"
+        ],
+        "chunk_ids": [
+          24290000000,
+          24290000003,
+          24290000004,
+          24290000005
+        ]
+      },
+      "grounding_status": "grounded",
+      "issue_type": "none",
+      "display_issue_type": "none",
+      "review_note": "Live response claim is supported by the selected policy fields and retrieved chunks used by the summary generator."
+    },
+    {
+      "claim_id": "L242-04",
+      "policy_id": 242,
+      "policy_slug": "WLF00006308",
+      "policy_name": "무료법률상담",
+      "response_part": "evidence",
+      "claim_text": "대상은 \"법률 상담이 필요한 국민\"으로 정리되어 있습니다.",
+      "support_type": "both",
+      "support_reference": {
+        "policy_fields": [
+          "condition_profile_target_summary",
+          "benefit_description",
+          "application_method",
+          "application_period_text"
+        ],
+        "chunk_ids": [
+          24290000000,
+          24290000003,
+          24290000004,
+          24290000005
+        ]
+      },
+      "grounding_status": "grounded",
+      "issue_type": "none",
+      "display_issue_type": "none",
+      "review_note": "Live response claim is supported by the selected policy fields and retrieved chunks used by the summary generator."
+    },
+    {
+      "claim_id": "L242-05",
+      "policy_id": 242,
+      "policy_slug": "WLF00006308",
+      "policy_name": "무료법률상담",
+      "response_part": "evidence",
+      "claim_text": "지원 내용에 \"민사소송, 임대차, 손해배상, 개인회생 및 파산\" 등이 포함되어 있습니다.",
+      "support_type": "both",
+      "support_reference": {
+        "policy_fields": [
+          "condition_profile_target_summary",
+          "benefit_description",
+          "application_method",
+          "application_period_text"
+        ],
+        "chunk_ids": [
+          24290000000,
+          24290000003,
+          24290000004,
+          24290000005
+        ]
+      },
+      "grounding_status": "grounded",
+      "issue_type": "none",
+      "display_issue_type": "none",
+      "review_note": "Live response claim is supported by the selected policy fields and retrieved chunks used by the summary generator."
+    },
+    {
+      "claim_id": "L242-06",
+      "policy_id": 242,
+      "policy_slug": "WLF00006308",
+      "policy_name": "무료법률상담",
+      "response_part": "evidence",
+      "claim_text": "신청은 \"거주지 읍/면/동 주민센터\" 또는 \"대한법률구조공단\" 등에서 하고, 신청기간은 \"수시\"입니다.",
+      "support_type": "both",
+      "support_reference": {
+        "policy_fields": [
+          "condition_profile_target_summary",
+          "benefit_description",
+          "application_method",
+          "application_period_text"
+        ],
+        "chunk_ids": [
+          24290000000,
+          24290000003,
+          24290000004,
+          24290000005
+        ]
+      },
+      "grounding_status": "grounded",
+      "issue_type": "none",
+      "display_issue_type": "none",
+      "review_note": "Live response claim is supported by the selected policy fields and retrieved chunks used by the summary generator."
+    },
+    {
+      "claim_id": "L246-01",
+      "policy_id": 246,
+      "policy_slug": "WLF00006292",
+      "policy_name": "난임치료휴가급여 지원",
+      "response_part": "summary",
+      "claim_text": "난임치료휴가를 사용한 근로자를 대상으로, 휴가 기간 중 처음 2일분의 통상임금을 100% 현금으로 지원합니다.",
+      "support_type": "both",
+      "support_reference": {
+        "policy_fields": [
+          "condition_profile_target_summary",
+          "benefit_description",
+          "application_method",
+          "application_period_text",
+          "application_status"
+        ],
+        "chunk_ids": [
+          24690000000,
+          24690000003,
+          24690000004,
+          24690000005
+        ]
+      },
+      "grounding_status": "grounded",
+      "issue_type": "none",
+      "display_issue_type": "none",
+      "review_note": "Live response claim is supported by the selected policy fields and retrieved chunks used by the summary generator."
+    },
+    {
+      "claim_id": "L246-02",
+      "policy_id": 246,
+      "policy_slug": "WLF00006292",
+      "policy_name": "난임치료휴가급여 지원",
+      "response_part": "summary",
+      "claim_text": "지원 상한은 1일 168,420원이며, 신청은 온라인이 아닌 주민센터나 고용센터 등 오프라인에서 수시로 할 수 있습니다.",
+      "support_type": "both",
+      "support_reference": {
+        "policy_fields": [
+          "condition_profile_target_summary",
+          "benefit_description",
+          "application_method",
+          "application_period_text",
+          "application_status"
+        ],
+        "chunk_ids": [
+          24690000000,
+          24690000003,
+          24690000004,
+          24690000005
+        ]
+      },
+      "grounding_status": "grounded",
+      "issue_type": "none",
+      "display_issue_type": "none",
+      "review_note": "Live response claim is supported by the selected policy fields and retrieved chunks used by the summary generator."
+    },
+    {
+      "claim_id": "L246-03",
+      "policy_id": 246,
+      "policy_slug": "WLF00006292",
+      "policy_name": "난임치료휴가급여 지원",
+      "response_part": "summary",
+      "claim_text": "다만 실제 대상 요건은 근로자 여부, 고용보험 피보험 단위기간 180일 이상 등 세부 조건을 확인해야 합니다.",
+      "support_type": "both",
+      "support_reference": {
+        "policy_fields": [
+          "condition_profile_target_summary",
+          "benefit_description",
+          "application_method",
+          "application_period_text",
+          "application_status"
+        ],
+        "chunk_ids": [
+          24690000000,
+          24690000003,
+          24690000004,
+          24690000005
+        ]
+      },
+      "grounding_status": "grounded",
+      "issue_type": "none",
+      "display_issue_type": "none",
+      "review_note": "Live response claim is supported by the selected policy fields and retrieved chunks used by the summary generator."
+    },
+    {
+      "claim_id": "L246-04",
+      "policy_id": 246,
+      "policy_slug": "WLF00006292",
+      "policy_name": "난임치료휴가급여 지원",
+      "response_part": "evidence",
+      "claim_text": "난임치료휴가 기간 중 최초 2일분 통상임금 100% 지급(상한액 168,420원)",
+      "support_type": "both",
+      "support_reference": {
+        "policy_fields": [
+          "condition_profile_target_summary",
+          "benefit_description",
+          "application_method",
+          "application_period_text",
+          "application_status"
+        ],
+        "chunk_ids": [
+          24690000000,
+          24690000003,
+          24690000004,
+          24690000005
+        ]
+      },
+      "grounding_status": "grounded",
+      "issue_type": "none",
+      "display_issue_type": "none",
+      "review_note": "Live response claim is supported by the selected policy fields and retrieved chunks used by the summary generator."
+    },
+    {
+      "claim_id": "L246-05",
+      "policy_id": 246,
+      "policy_slug": "WLF00006292",
+      "policy_name": "난임치료휴가급여 지원",
+      "response_part": "evidence",
+      "claim_text": "거주지 읍/면/동 주민센터, 고용센터에서 ‘서비스 신청’ 및 수시 신청",
+      "support_type": "both",
+      "support_reference": {
+        "policy_fields": [
+          "condition_profile_target_summary",
+          "benefit_description",
+          "application_method",
+          "application_period_text",
+          "application_status"
+        ],
+        "chunk_ids": [
+          24690000000,
+          24690000003,
+          24690000004,
+          24690000005
+        ]
+      },
+      "grounding_status": "grounded",
+      "issue_type": "none",
+      "display_issue_type": "none",
+      "review_note": "Live response claim is supported by the selected policy fields and retrieved chunks used by the summary generator."
+    },
+    {
+      "claim_id": "L246-06",
+      "policy_id": 246,
+      "policy_slug": "WLF00006292",
+      "policy_name": "난임치료휴가급여 지원",
+      "response_part": "evidence",
+      "claim_text": "난임치료휴가를 사용하려는 남녀 근로자, 휴가가 끝난 날 이전까지의 피보험 단위기간 180일 이상",
+      "support_type": "both",
+      "support_reference": {
+        "policy_fields": [
+          "condition_profile_target_summary",
+          "benefit_description",
+          "application_method",
+          "application_period_text",
+          "application_status"
+        ],
+        "chunk_ids": [
+          24690000000,
+          24690000003,
+          24690000004,
+          24690000005
+        ]
+      },
+      "grounding_status": "grounded",
+      "issue_type": "none",
+      "display_issue_type": "none",
+      "review_note": "Live response claim is supported by the selected policy fields and retrieved chunks used by the summary generator."
+    },
+    {
+      "claim_id": "L247-01",
+      "policy_id": 247,
+      "policy_slug": "WLF00006289",
+      "policy_name": "위기임신 및 보호출산 지원",
+      "response_part": "summary",
+      "claim_text": "위기임신 중이거나 분만 후 6개월 미만인 경우, 위기임신·보호출산 지원을 받을 수 있습니다.",
+      "support_type": "both",
+      "support_reference": {
+        "policy_fields": [
+          "condition_profile_target_summary",
+          "benefit_description",
+          "application_method",
+          "application_period_text"
+        ],
+        "chunk_ids": [
+          24790000000,
+          24790000003,
+          24790000004,
+          24790000005
+        ]
+      },
+      "grounding_status": "grounded",
+      "issue_type": "none",
+      "display_issue_type": "none",
+      "review_note": "Live response claim is supported by the selected policy fields and retrieved chunks used by the summary generator."
+    },
+    {
+      "claim_id": "L247-02",
+      "policy_id": 247,
+      "policy_slug": "WLF00006289",
+      "policy_name": "위기임신 및 보호출산 지원",
+      "response_part": "summary",
+      "claim_text": "365일 24시간 상담과 긴급상황 방문 지원, 진료비·산후조리·아동수당·보육료 등 맞춤형 연계가 제공됩니다.",
+      "support_type": "both",
+      "support_reference": {
+        "policy_fields": [
+          "condition_profile_target_summary",
+          "benefit_description",
+          "application_method",
+          "application_period_text"
+        ],
+        "chunk_ids": [
+          24790000000,
+          24790000003,
+          24790000004,
+          24790000005
+        ]
+      },
+      "grounding_status": "grounded",
+      "issue_type": "none",
+      "display_issue_type": "none",
+      "review_note": "Live response claim is supported by the selected policy fields and retrieved chunks used by the summary generator."
+    },
+    {
+      "claim_id": "L247-03",
+      "policy_id": 247,
+      "policy_slug": "WLF00006289",
+      "policy_name": "위기임신 및 보호출산 지원",
+      "response_part": "summary",
+      "claim_text": "보호출산 산모는 의료비 1인당 100만원, 숙려기관은 1일 20만원씩 최대 7일, 신생아는 월 100만원까지 최대 3개월 지원합니다.",
+      "support_type": "both",
+      "support_reference": {
+        "policy_fields": [
+          "condition_profile_target_summary",
+          "benefit_description",
+          "application_method",
+          "application_period_text"
+        ],
+        "chunk_ids": [
+          24790000000,
+          24790000003,
+          24790000004,
+          24790000005
+        ]
+      },
+      "grounding_status": "grounded",
+      "issue_type": "none",
+      "display_issue_type": "none",
+      "review_note": "Live response claim is supported by the selected policy fields and retrieved chunks used by the summary generator."
+    },
+    {
+      "claim_id": "L247-04",
+      "policy_id": 247,
+      "policy_slug": "WLF00006289",
+      "policy_name": "위기임신 및 보호출산 지원",
+      "response_part": "evidence",
+      "claim_text": "전국 17개 지역상담기관에서 365일 24시간 상담 서비스를 제공합니다.",
+      "support_type": "both",
+      "support_reference": {
+        "policy_fields": [
+          "condition_profile_target_summary",
+          "benefit_description",
+          "application_method",
+          "application_period_text"
+        ],
+        "chunk_ids": [
+          24790000000,
+          24790000003,
+          24790000004,
+          24790000005
+        ]
+      },
+      "grounding_status": "grounded",
+      "issue_type": "none",
+      "display_issue_type": "none",
+      "review_note": "Live response claim is supported by the selected policy fields and retrieved chunks used by the summary generator."
+    },
+    {
+      "claim_id": "L247-05",
+      "policy_id": 247,
+      "policy_slug": "WLF00006289",
+      "policy_name": "위기임신 및 보호출산 지원",
+      "response_part": "evidence",
+      "claim_text": "보호출산 산모 지원으로 의료비 1명당 1백만원, 숙려기관 지원은 1일 20만원씩 총 7일 지원입니다.",
+      "support_type": "both",
+      "support_reference": {
+        "policy_fields": [
+          "condition_profile_target_summary",
+          "benefit_description",
+          "application_method",
+          "application_period_text"
+        ],
+        "chunk_ids": [
+          24790000000,
+          24790000003,
+          24790000004,
+          24790000005
+        ]
+      },
+      "grounding_status": "grounded",
+      "issue_type": "none",
+      "display_issue_type": "none",
+      "review_note": "Live response claim is supported by the selected policy fields and retrieved chunks used by the summary generator."
+    },
+    {
+      "claim_id": "L247-06",
+      "policy_id": 247,
+      "policy_slug": "WLF00006289",
+      "policy_name": "위기임신 및 보호출산 지원",
+      "response_part": "evidence",
+      "claim_text": "보호출산 신생아 긴급보호비는 신생아 1인당 월100만원 최대 3개월 지원합니다.",
+      "support_type": "both",
+      "support_reference": {
+        "policy_fields": [
+          "condition_profile_target_summary",
+          "benefit_description",
+          "application_method",
+          "application_period_text"
+        ],
+        "chunk_ids": [
+          24790000000,
+          24790000003,
+          24790000004,
+          24790000005
+        ]
+      },
+      "grounding_status": "grounded",
+      "issue_type": "none",
+      "display_issue_type": "none",
+      "review_note": "Live response claim is supported by the selected policy fields and retrieved chunks used by the summary generator."
+    },
+    {
+      "claim_id": "L251-01",
+      "policy_id": 251,
+      "policy_slug": "WLF00003213",
+      "policy_name": "인플루엔자 국가예방접종 지원사업",
+      "response_part": "summary",
+      "claim_text": "인플루엔자(독감) 예방접종 1회를 지원하는 국가사업입니다.",
+      "support_type": "both",
+      "support_reference": {
+        "policy_fields": [
+          "condition_profile_target_summary",
+          "benefit_description",
+          "application_method",
+          "application_period_text"
+        ],
+        "chunk_ids": [
+          25190000000,
+          25190000003,
+          25190000004,
+          25190000005
+        ]
+      },
+      "grounding_status": "grounded",
+      "issue_type": "none",
+      "display_issue_type": "none",
+      "review_note": "Live response claim is supported by the selected policy fields and retrieved chunks used by the summary generator."
+    },
+    {
+      "claim_id": "L251-02",
+      "policy_id": 251,
+      "policy_slug": "WLF00003213",
+      "policy_name": "인플루엔자 국가예방접종 지원사업",
+      "response_part": "summary",
+      "claim_text": "65세 이상 어르신, 생후 6개월~13세 어린이, 임신부가 대상이며, 어린이는 처음 접종하거나 이전 접종력을 모를 경우 2회까지 지원될 수 있습니다.",
+      "support_type": "both",
+      "support_reference": {
+        "policy_fields": [
+          "condition_profile_target_summary",
+          "benefit_description",
+          "application_method",
+          "application_period_text"
+        ],
+        "chunk_ids": [
+          25190000000,
+          25190000003,
+          25190000004,
+          25190000005
+        ]
+      },
+      "grounding_status": "grounded",
+      "issue_type": "none",
+      "display_issue_type": "none",
+      "review_note": "Live response claim is supported by the selected policy fields and retrieved chunks used by the summary generator."
+    },
+    {
+      "claim_id": "L251-03",
+      "policy_id": 251,
+      "policy_slug": "WLF00003213",
+      "policy_name": "인플루엔자 국가예방접종 지원사업",
+      "response_part": "summary",
+      "claim_text": "신청은 온라인이 아니라 담당 시·군·구청, 보건소, 위탁 의료기관 등에서 수시로 안내받아 오프라인으로 진행합니다.",
+      "support_type": "both",
+      "support_reference": {
+        "policy_fields": [
+          "condition_profile_target_summary",
+          "benefit_description",
+          "application_method",
+          "application_period_text"
+        ],
+        "chunk_ids": [
+          25190000000,
+          25190000003,
+          25190000004,
+          25190000005
+        ]
+      },
+      "grounding_status": "grounded",
+      "issue_type": "none",
+      "display_issue_type": "none",
+      "review_note": "Live response claim is supported by the selected policy fields and retrieved chunks used by the summary generator."
+    },
+    {
+      "claim_id": "L251-04",
+      "policy_id": 251,
+      "policy_slug": "WLF00003213",
+      "policy_name": "인플루엔자 국가예방접종 지원사업",
+      "response_part": "summary",
+      "claim_text": "인플루엔자 국가예방접종 지원대상은 다음과 같습니이 주요 지원 대상이에요.",
+      "support_type": "both",
+      "support_reference": {
+        "policy_fields": [
+          "condition_profile_target_summary",
+          "benefit_description",
+          "application_method",
+          "application_period_text"
+        ],
+        "chunk_ids": [
+          25190000000,
+          25190000003,
+          25190000004,
+          25190000005
+        ]
+      },
+      "grounding_status": "grounded",
+      "issue_type": "none",
+      "display_issue_type": "none",
+      "review_note": "Live response claim is supported by the selected policy fields and retrieved chunks used by the summary generator."
+    },
+    {
+      "claim_id": "L251-05",
+      "policy_id": 251,
+      "policy_slug": "WLF00003213",
+      "policy_name": "인플루엔자 국가예방접종 지원사업",
+      "response_part": "summary",
+      "claim_text": "주요 지원 내용은 인플루엔자 예방접종 1회를 지원합니이에요.",
+      "support_type": "both",
+      "support_reference": {
+        "policy_fields": [
+          "condition_profile_target_summary",
+          "benefit_description",
+          "application_method",
+          "application_period_text"
+        ],
+        "chunk_ids": [
+          25190000000,
+          25190000003,
+          25190000004,
+          25190000005
+        ]
+      },
+      "grounding_status": "grounded",
+      "issue_type": "none",
+      "display_issue_type": "malformed_text",
+      "review_note": "Live response claim is supported by the selected policy fields and retrieved chunks used by the summary generator."
+    },
+    {
+      "claim_id": "L251-06",
+      "policy_id": 251,
+      "policy_slug": "WLF00003213",
+      "policy_name": "인플루엔자 국가예방접종 지원사업",
+      "response_part": "evidence",
+      "claim_text": "65세 이상 어르신, 생후 6개월~13세 어린이, 임신부가 지원대상입니다.",
+      "support_type": "both",
+      "support_reference": {
+        "policy_fields": [
+          "condition_profile_target_summary",
+          "benefit_description",
+          "application_method",
+          "application_period_text"
+        ],
+        "chunk_ids": [
+          25190000000,
+          25190000003,
+          25190000004,
+          25190000005
+        ]
+      },
+      "grounding_status": "grounded",
+      "issue_type": "none",
+      "display_issue_type": "none",
+      "review_note": "Live response claim is supported by the selected policy fields and retrieved chunks used by the summary generator."
+    },
+    {
+      "claim_id": "L251-07",
+      "policy_id": 251,
+      "policy_slug": "WLF00003213",
+      "policy_name": "인플루엔자 국가예방접종 지원사업",
+      "response_part": "evidence",
+      "claim_text": "인플루엔자 예방접종 1회를 지원하며, 생후 6개월~만 9세 미만 어린이 중 처음 접종하거나 이전 접종력을 모르는 경우 등은 2회 접종 지원입니다.",
+      "support_type": "both",
+      "support_reference": {
+        "policy_fields": [
+          "condition_profile_target_summary",
+          "benefit_description",
+          "application_method",
+          "application_period_text"
+        ],
+        "chunk_ids": [
+          25190000000,
+          25190000003,
+          25190000004,
+          25190000005
+        ]
+      },
+      "grounding_status": "grounded",
+      "issue_type": "none",
+      "display_issue_type": "none",
+      "review_note": "Live response claim is supported by the selected policy fields and retrieved chunks used by the summary generator."
+    },
+    {
+      "claim_id": "L251-08",
+      "policy_id": 251,
+      "policy_slug": "WLF00003213",
+      "policy_name": "인플루엔자 국가예방접종 지원사업",
+      "response_part": "evidence",
+      "claim_text": "신청은 OFFLINE_ONLY이며, 담당 시/군/구청·보건소·인플루엔자 위탁 의료기관에서 서비스를 제공합니다.",
+      "support_type": "both",
+      "support_reference": {
+        "policy_fields": [
+          "condition_profile_target_summary",
+          "benefit_description",
+          "application_method",
+          "application_period_text"
+        ],
+        "chunk_ids": [
+          25190000000,
+          25190000003,
+          25190000004,
+          25190000005
+        ]
+      },
+      "grounding_status": "grounded",
+      "issue_type": "none",
+      "display_issue_type": "internal_marker",
+      "review_note": "Live response claim is supported by the selected policy fields and retrieved chunks used by the summary generator."
+    },
+    {
+      "claim_id": "L255-01",
+      "policy_id": 255,
+      "policy_slug": "WLF00004656",
+      "policy_name": "첫만남이용권",
+      "response_part": "summary",
+      "claim_text": "첫만남이용권은 출생신고를 마치고 주민등록번호를 받은 출생아에게 주는 1회성 지원입니다.",
+      "support_type": "both",
+      "support_reference": {
+        "policy_fields": [
+          "condition_profile_target_summary",
+          "benefit_description",
+          "application_method"
+        ],
+        "chunk_ids": [
+          25590000000,
+          25590000003,
+          25590000004,
+          25590000005
+        ]
+      },
+      "grounding_status": "grounded",
+      "issue_type": "none",
+      "display_issue_type": "none",
+      "review_note": "Live response claim is supported by the selected policy fields and retrieved chunks used by the summary generator."
+    },
+    {
+      "claim_id": "L255-02",
+      "policy_id": 255,
+      "policy_slug": "WLF00004656",
+      "policy_name": "첫만남이용권",
+      "response_part": "summary",
+      "claim_text": "2024년 이후 출생아는 첫째아 200만원, 둘째아 이상 300만원을 받을 수 있습니다.",
+      "support_type": "both",
+      "support_reference": {
+        "policy_fields": [
+          "condition_profile_target_summary",
+          "benefit_description",
+          "application_method"
+        ],
+        "chunk_ids": [
+          25590000000,
+          25590000003,
+          25590000004,
+          25590000005
+        ]
+      },
+      "grounding_status": "grounded",
+      "issue_type": "none",
+      "display_issue_type": "none",
+      "review_note": "Live response claim is supported by the selected policy fields and retrieved chunks used by the summary generator."
+    },
+    {
+      "claim_id": "L255-03",
+      "policy_id": 255,
+      "policy_slug": "WLF00004656",
+      "policy_name": "첫만남이용권",
+      "response_part": "summary",
+      "claim_text": "신청은 거주지 읍·면·동 주민센터나 복지로(PC·모바일앱)에서 할 수 있으며, 국민행복카드 포인트로 지급하는 것이 원칙입니다.",
+      "support_type": "both",
+      "support_reference": {
+        "policy_fields": [
+          "condition_profile_target_summary",
+          "benefit_description",
+          "application_method"
+        ],
+        "chunk_ids": [
+          25590000000,
+          25590000003,
+          25590000004,
+          25590000005
+        ]
+      },
+      "grounding_status": "grounded",
+      "issue_type": "none",
+      "display_issue_type": "none",
+      "review_note": "Live response claim is supported by the selected policy fields and retrieved chunks used by the summary generator."
+    },
+    {
+      "claim_id": "L255-04",
+      "policy_id": 255,
+      "policy_slug": "WLF00004656",
+      "policy_name": "첫만남이용권",
+      "response_part": "evidence",
+      "claim_text": "대상은 출생신고되어 정상적으로 주민등록번호를 부여받은 아동이며, 2024년 이후 출생아는 주민등록상 생년월일로부터 2년이 초과되지 않아야 합니다.",
+      "support_type": "both",
+      "support_reference": {
+        "policy_fields": [
+          "condition_profile_target_summary",
+          "benefit_description",
+          "application_method"
+        ],
+        "chunk_ids": [
+          25590000000,
+          25590000003,
+          25590000004,
+          25590000005
+        ]
+      },
+      "grounding_status": "grounded",
+      "issue_type": "none",
+      "display_issue_type": "none",
+      "review_note": "Live response claim is supported by the selected policy fields and retrieved chunks used by the summary generator."
+    },
+    {
+      "claim_id": "L255-05",
+      "policy_id": 255,
+      "policy_slug": "WLF00004656",
+      "policy_name": "첫만남이용권",
+      "response_part": "evidence",
+      "claim_text": "지원금액은 첫째아 200만원, 둘째아 이상 300만원으로 안내되어 있습니다.",
+      "support_type": "both",
+      "support_reference": {
+        "policy_fields": [
+          "condition_profile_target_summary",
+          "benefit_description",
+          "application_method"
+        ],
+        "chunk_ids": [
+          25590000000,
+          25590000003,
+          25590000004,
+          25590000005
+        ]
+      },
+      "grounding_status": "grounded",
+      "issue_type": "none",
+      "display_issue_type": "none",
+      "review_note": "Live response claim is supported by the selected policy fields and retrieved chunks used by the summary generator."
+    },
+    {
+      "claim_id": "L255-06",
+      "policy_id": 255,
+      "policy_slug": "WLF00004656",
+      "policy_name": "첫만남이용권",
+      "response_part": "evidence",
+      "claim_text": "신청은 거주지 읍·면·동 주민센터 또는 복지로 웹사이트(PC/모바일앱)에서 ‘서비스 신청’으로 가능하며, 지급은 국민행복카드 이용권(포인트) 방식이 원칙입니다.",
+      "support_type": "both",
+      "support_reference": {
+        "policy_fields": [
+          "condition_profile_target_summary",
+          "benefit_description",
+          "application_method"
+        ],
+        "chunk_ids": [
+          25590000000,
+          25590000003,
+          25590000004,
+          25590000005
+        ]
+      },
+      "grounding_status": "grounded",
+      "issue_type": "none",
+      "display_issue_type": "none",
+      "review_note": "Live response claim is supported by the selected policy fields and retrieved chunks used by the summary generator."
+    },
+    {
+      "claim_id": "L289-01",
+      "policy_id": 289,
+      "policy_slug": "WLF00000072",
+      "policy_name": "에너지바우처",
+      "response_part": "summary",
+      "claim_text": "에너지바우처는 기초생활보장급여 수급 세대 중 세대원 특성기준을 충족하는 가구에 지원하는 제도입니다.",
+      "support_type": "both",
+      "support_reference": {
+        "policy_fields": [
+          "condition_profile_target_summary",
+          "benefit_description",
+          "application_method"
+        ],
+        "chunk_ids": [
+          28990000000,
+          28990000003,
+          28990000004,
+          28990000005
+        ]
+      },
+      "grounding_status": "grounded",
+      "issue_type": "none",
+      "display_issue_type": "none",
+      "review_note": "Live response claim is supported by the selected policy fields and retrieved chunks used by the summary generator."
+    },
+    {
+      "claim_id": "L289-02",
+      "policy_id": 289,
+      "policy_slug": "WLF00000072",
+      "policy_name": "에너지바우처",
+      "response_part": "summary",
+      "claim_text": "여름에는 전기요금 차감, 겨울에는 전기·도시가스·지역난방·등유·연탄·LPG 중 하나를 선택해 전자바우처로 사용할 수 있습니다.",
+      "support_type": "both",
+      "support_reference": {
+        "policy_fields": [
+          "condition_profile_target_summary",
+          "benefit_description",
+          "application_method"
+        ],
+        "chunk_ids": [
+          28990000000,
+          28990000003,
+          28990000004,
+          28990000005
+        ]
+      },
+      "grounding_status": "grounded",
+      "issue_type": "none",
+      "display_issue_type": "none",
+      "review_note": "Live response claim is supported by the selected policy fields and retrieved chunks used by the summary generator."
+    },
+    {
+      "claim_id": "L289-03",
+      "policy_id": 289,
+      "policy_slug": "WLF00000072",
+      "policy_name": "에너지바우처",
+      "response_part": "summary",
+      "claim_text": "신청은 거주지 읍·면·동 주민센터나 복지로 웹사이트(PC/모바일앱)에서 할 수 있으며, 온라인 신청도 가능합니다.",
+      "support_type": "both",
+      "support_reference": {
+        "policy_fields": [
+          "condition_profile_target_summary",
+          "benefit_description",
+          "application_method"
+        ],
+        "chunk_ids": [
+          28990000000,
+          28990000003,
+          28990000004,
+          28990000005
+        ]
+      },
+      "grounding_status": "grounded",
+      "issue_type": "none",
+      "display_issue_type": "none",
+      "review_note": "Live response claim is supported by the selected policy fields and retrieved chunks used by the summary generator."
+    },
+    {
+      "claim_id": "L289-04",
+      "policy_id": 289,
+      "policy_slug": "WLF00000072",
+      "policy_name": "에너지바우처",
+      "response_part": "evidence",
+      "claim_text": "기초생활보장급여 수급 세대 중 노인, 영유아, 임산부, 장애인, 한부모가족, 다자녀가구 등 세대원 특성기준을 충족하는 세대에 에너지바우처를 지원합니다.",
+      "support_type": "both",
+      "support_reference": {
+        "policy_fields": [
+          "condition_profile_target_summary",
+          "benefit_description",
+          "application_method"
+        ],
+        "chunk_ids": [
+          28990000000,
+          28990000003,
+          28990000004,
+          28990000005
+        ]
+      },
+      "grounding_status": "grounded",
+      "issue_type": "none",
+      "display_issue_type": "none",
+      "review_note": "Live response claim is supported by the selected policy fields and retrieved chunks used by the summary generator."
+    },
+    {
+      "claim_id": "L289-05",
+      "policy_id": 289,
+      "policy_slug": "WLF00000072",
+      "policy_name": "에너지바우처",
+      "response_part": "evidence",
+      "claim_text": "여름(7~9월)에는 전기 요금 차감을, 겨울(10월~익년5월)에는 전기·도시가스·지역난방·등유·연탄·LPG 중 한 가지를 선택하여 구입할 수 있는 전자바우처를 세대원 수에 따라 차등 지급합니다.",
+      "support_type": "both",
+      "support_reference": {
+        "policy_fields": [
+          "condition_profile_target_summary",
+          "benefit_description",
+          "application_method"
+        ],
+        "chunk_ids": [
+          28990000000,
+          28990000003,
+          28990000004,
+          28990000005
+        ]
+      },
+      "grounding_status": "grounded",
+      "issue_type": "none",
+      "display_issue_type": "none",
+      "review_note": "Live response claim is supported by the selected policy fields and retrieved chunks used by the summary generator."
+    },
+    {
+      "claim_id": "L289-06",
+      "policy_id": 289,
+      "policy_slug": "WLF00000072",
+      "policy_name": "에너지바우처",
+      "response_part": "evidence",
+      "claim_text": "거주지 읍/면/동 주민센터, 주민등록상 거주지 읍면동 주민센터 또는 복지로 웹사이트(PC/모바일앱)에서 '서비스 신청'",
+      "support_type": "both",
+      "support_reference": {
+        "policy_fields": [
+          "condition_profile_target_summary",
+          "benefit_description",
+          "application_method"
+        ],
+        "chunk_ids": [
+          28990000000,
+          28990000003,
+          28990000004,
+          28990000005
+        ]
+      },
+      "grounding_status": "grounded",
+      "issue_type": "none",
+      "display_issue_type": "none",
+      "review_note": "Live response claim is supported by the selected policy fields and retrieved chunks used by the summary generator."
+    },
+    {
+      "claim_id": "L292-01",
+      "policy_id": 292,
+      "policy_slug": "WLF00000076",
+      "policy_name": "스포츠강좌이용권",
+      "response_part": "summary",
+      "claim_text": "만 5~18세 유·청소년 중 기초생활수급자, 차상위계층, 법정 한부모가정 등이 스포츠 강좌 수강료를 지원받을 수 있는 제도입니다.",
+      "support_type": "both",
+      "support_reference": {
+        "policy_fields": [
+          "condition_profile_target_summary",
+          "benefit_description",
+          "application_method"
+        ],
+        "chunk_ids": [
+          29290000000,
+          29290000003,
+          29290000004,
+          29290000005
+        ]
+      },
+      "grounding_status": "grounded",
+      "issue_type": "none",
+      "display_issue_type": "none",
+      "review_note": "Live response claim is supported by the selected policy fields and retrieved chunks used by the summary generator."
+    },
+    {
+      "claim_id": "L292-02",
+      "policy_id": 292,
+      "policy_slug": "WLF00000076",
+      "policy_name": "스포츠강좌이용권",
+      "response_part": "summary",
+      "claim_text": "월 최대 10만5천원 범위에서 12개월 동안 전자바우처로 지원하며, 수강료가 10만5천원을 넘으면 차액은 본인이 부담합니다.",
+      "support_type": "both",
+      "support_reference": {
+        "policy_fields": [
+          "condition_profile_target_summary",
+          "benefit_description",
+          "application_method"
+        ],
+        "chunk_ids": [
+          29290000000,
+          29290000003,
+          29290000004,
+          29290000005
+        ]
+      },
+      "grounding_status": "grounded",
+      "issue_type": "none",
+      "display_issue_type": "none",
+      "review_note": "Live response claim is supported by the selected policy fields and retrieved chunks used by the summary generator."
+    },
+    {
+      "claim_id": "L292-03",
+      "policy_id": 292,
+      "policy_slug": "WLF00000076",
+      "policy_name": "스포츠강좌이용권",
+      "response_part": "summary",
+      "claim_text": "신청은 거주지 읍·면·동 주민센터, 시·군·구청, 또는 국민체육진흥공단 인터넷으로 할 수 있고, 방문 신청도 포함됩니다.",
+      "support_type": "both",
+      "support_reference": {
+        "policy_fields": [
+          "condition_profile_target_summary",
+          "benefit_description",
+          "application_method"
+        ],
+        "chunk_ids": [
+          29290000000,
+          29290000003,
+          29290000004,
+          29290000005
+        ]
+      },
+      "grounding_status": "grounded",
+      "issue_type": "none",
+      "display_issue_type": "none",
+      "review_note": "Live response claim is supported by the selected policy fields and retrieved chunks used by the summary generator."
+    },
+    {
+      "claim_id": "L292-04",
+      "policy_id": 292,
+      "policy_slug": "WLF00000076",
+      "policy_name": "스포츠강좌이용권",
+      "response_part": "evidence",
+      "claim_text": "만 5~18세 유·청소년 대상이라는 기준이 제시되어 있습니다.",
+      "support_type": "both",
+      "support_reference": {
+        "policy_fields": [
+          "condition_profile_target_summary",
+          "benefit_description",
+          "application_method"
+        ],
+        "chunk_ids": [
+          29290000000,
+          29290000003,
+          29290000004,
+          29290000005
+        ]
+      },
+      "grounding_status": "grounded",
+      "issue_type": "none",
+      "display_issue_type": "none",
+      "review_note": "Live response claim is supported by the selected policy fields and retrieved chunks used by the summary generator."
+    },
+    {
+      "claim_id": "L292-05",
+      "policy_id": 292,
+      "policy_slug": "WLF00000076",
+      "policy_name": "스포츠강좌이용권",
+      "response_part": "evidence",
+      "claim_text": "월 105,000원 범위 내에서 12개월 스포츠활동 강좌비를 지급하고, 105,000원 이상이면 차액은 본인 부담입니다.",
+      "support_type": "both",
+      "support_reference": {
+        "policy_fields": [
+          "condition_profile_target_summary",
+          "benefit_description",
+          "application_method"
+        ],
+        "chunk_ids": [
+          29290000000,
+          29290000003,
+          29290000004,
+          29290000005
+        ]
+      },
+      "grounding_status": "grounded",
+      "issue_type": "none",
+      "display_issue_type": "none",
+      "review_note": "Live response claim is supported by the selected policy fields and retrieved chunks used by the summary generator."
+    },
+    {
+      "claim_id": "L292-06",
+      "policy_id": 292,
+      "policy_slug": "WLF00000076",
+      "policy_name": "스포츠강좌이용권",
+      "response_part": "evidence",
+      "claim_text": "거주지 읍·면·동 주민센터, 지방자치단체 방문, 국민체육진흥공단 인터넷에서 ‘서비스 신청’이 가능합니다.",
+      "support_type": "both",
+      "support_reference": {
+        "policy_fields": [
+          "condition_profile_target_summary",
+          "benefit_description",
+          "application_method"
+        ],
+        "chunk_ids": [
+          29290000000,
+          29290000003,
+          29290000004,
+          29290000005
+        ]
+      },
+      "grounding_status": "grounded",
+      "issue_type": "none",
+      "display_issue_type": "none",
+      "review_note": "Live response claim is supported by the selected policy fields and retrieved chunks used by the summary generator."
+    }
+  ]
+}
