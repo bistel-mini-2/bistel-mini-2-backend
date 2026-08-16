@@ -1,0 +1,248 @@
+{
+  "evaluation_name": "generated_grounding_live_api_capture",
+  "evaluation_status": "live_response_capture_requires_manual_review",
+  "started_at": "2026-08-16T11:46:48+0900",
+  "capture_method": "PolicySummaryService cached API response model",
+  "source_context": {
+    "db": true,
+    "retriever": true,
+    "llm_or_fallback_generator": false,
+    "openai_api_key_configured": true,
+    "http_endpoint_equivalent": "GET /api/v1/policies/{policy_slug}/summary"
+  },
+  "metrics": {
+    "requested_policy_count": 10,
+    "completed_response_count": 3,
+    "status_counts": {
+      "loading": 7,
+      "done": 3
+    },
+    "internal_marker_count": 0,
+    "all_completed": false,
+    "all_clean_display_text": true,
+    "average_elapsed_ms": 11.291
+  },
+  "grounding_boundary": {
+    "what_this_proves": "The local DB cache currently returns API response models for the selected policies without a new LLM generation run.",
+    "what_this_does_not_prove": "Manual claim-level grounding has not yet been completed for each captured live response.",
+    "next_step": "Split each live summary/evidence response into claims and score it with generated_grounding_manual_rubric.py."
+  },
+  "records": [
+    {
+      "policy_id": 237,
+      "policy_slug": "WLF00006317",
+      "policy_name": "발달장애인 자기주도 재직자 훈련",
+      "started_status": "loading",
+      "start_summary_id": null,
+      "force_refresh": false,
+      "elapsed_ms": 17.422,
+      "process_error": null,
+      "cache_status": "PROCESSING",
+      "cache_error_message": null,
+      "api_response_model": {
+        "status": "loading",
+        "summary": null,
+        "evidence": []
+      },
+      "summary_line_count": 0,
+      "evidence_count": 0,
+      "contains_internal_marker": false,
+      "requires_manual_grounding_review": true
+    },
+    {
+      "policy_id": 238,
+      "policy_slug": "WLF00006311",
+      "policy_name": "법문화교육(교육센터)",
+      "started_status": "loading",
+      "start_summary_id": null,
+      "force_refresh": false,
+      "elapsed_ms": 12.345,
+      "process_error": null,
+      "cache_status": "PROCESSING",
+      "cache_error_message": null,
+      "api_response_model": {
+        "status": "loading",
+        "summary": null,
+        "evidence": []
+      },
+      "summary_line_count": 0,
+      "evidence_count": 0,
+      "contains_internal_marker": false,
+      "requires_manual_grounding_review": true
+    },
+    {
+      "policy_id": 240,
+      "policy_slug": "WLF00006313",
+      "policy_name": "건강보험 임신출산 진료비(국민행복카드)",
+      "started_status": "loading",
+      "start_summary_id": null,
+      "force_refresh": false,
+      "elapsed_ms": 12.614,
+      "process_error": null,
+      "cache_status": "PROCESSING",
+      "cache_error_message": null,
+      "api_response_model": {
+        "status": "loading",
+        "summary": null,
+        "evidence": []
+      },
+      "summary_line_count": 0,
+      "evidence_count": 0,
+      "contains_internal_marker": false,
+      "requires_manual_grounding_review": true
+    },
+    {
+      "policy_id": 242,
+      "policy_slug": "WLF00006308",
+      "policy_name": "무료법률상담",
+      "started_status": "loading",
+      "start_summary_id": null,
+      "force_refresh": false,
+      "elapsed_ms": 11.918,
+      "process_error": null,
+      "cache_status": "PROCESSING",
+      "cache_error_message": null,
+      "api_response_model": {
+        "status": "loading",
+        "summary": null,
+        "evidence": []
+      },
+      "summary_line_count": 0,
+      "evidence_count": 0,
+      "contains_internal_marker": false,
+      "requires_manual_grounding_review": true
+    },
+    {
+      "policy_id": 246,
+      "policy_slug": "WLF00006292",
+      "policy_name": "난임치료휴가급여 지원",
+      "started_status": "loading",
+      "start_summary_id": null,
+      "force_refresh": false,
+      "elapsed_ms": 10.835,
+      "process_error": null,
+      "cache_status": "PROCESSING",
+      "cache_error_message": null,
+      "api_response_model": {
+        "status": "loading",
+        "summary": null,
+        "evidence": []
+      },
+      "summary_line_count": 0,
+      "evidence_count": 0,
+      "contains_internal_marker": false,
+      "requires_manual_grounding_review": true
+    },
+    {
+      "policy_id": 247,
+      "policy_slug": "WLF00006289",
+      "policy_name": "위기임신 및 보호출산 지원",
+      "started_status": "done",
+      "start_summary_id": null,
+      "force_refresh": false,
+      "elapsed_ms": 9.831,
+      "process_error": null,
+      "cache_status": "COMPLETED",
+      "cache_error_message": null,
+      "api_response_model": {
+        "status": "done",
+        "summary": "위기임신 및 보호출산 지원은 임신 중이거나 출산 후 6개월 미만인 위기임산부와 그 아동을 위한 상담 및 재정 지원 프로그램입니다. 365일 24시간 상담 서비스와 긴급 상황 지원, 의료비 및 주거 지원이 포함됩니다. 지원 대상은 연령, 혼인 여부, 소득에 관계없이 해당됩니다.\n대상: 위기임산부, 보호출산 산모, 보호출산 아동 및 아동의 생부를 대상으로 지원합니다.",
+        "evidence": [
+          "정책 상세 안내에 있는 대상, 혜택, 신청 정보를 읽기 쉬운 문장으로 정리했어요."
+        ]
+      },
+      "summary_line_count": 2,
+      "evidence_count": 1,
+      "contains_internal_marker": false,
+      "requires_manual_grounding_review": true
+    },
+    {
+      "policy_id": 251,
+      "policy_slug": "WLF00003213",
+      "policy_name": "인플루엔자 국가예방접종 지원사업",
+      "started_status": "loading",
+      "start_summary_id": null,
+      "force_refresh": false,
+      "elapsed_ms": 8.872,
+      "process_error": null,
+      "cache_status": "PROCESSING",
+      "cache_error_message": null,
+      "api_response_model": {
+        "status": "loading",
+        "summary": null,
+        "evidence": []
+      },
+      "summary_line_count": 0,
+      "evidence_count": 0,
+      "contains_internal_marker": false,
+      "requires_manual_grounding_review": true
+    },
+    {
+      "policy_id": 255,
+      "policy_slug": "WLF00004656",
+      "policy_name": "첫만남이용권",
+      "started_status": "done",
+      "start_summary_id": null,
+      "force_refresh": false,
+      "elapsed_ms": 9.365,
+      "process_error": null,
+      "cache_status": "COMPLETED",
+      "cache_error_message": null,
+      "api_response_model": {
+        "status": "done",
+        "summary": "첫만남이용권은 출생아에게 200만원 이상의 지원금을 제공하여 아동양육의 경제적 부담을 덜어주는 정책입니다. 2024년 이후 출생한 아동이 대상이며, 신청은 온라인으로 가능하고 1회성으로 지급됩니다.\n출생아로서 출생신고되어 정상적으로 주민등록번호를 부여받은 아동(2024년 이후 출생아로서 주민등록상 생년월일로부터 2년이 초과되지 않는 출생아)을 대상으로 합니이 주요 지원 대상이에요.",
+        "evidence": [
+          "정책 상세 안내에 있는 대상, 혜택, 신청 정보를 읽기 쉬운 문장으로 정리했어요."
+        ]
+      },
+      "summary_line_count": 2,
+      "evidence_count": 1,
+      "contains_internal_marker": false,
+      "requires_manual_grounding_review": true
+    },
+    {
+      "policy_id": 289,
+      "policy_slug": "WLF00000072",
+      "policy_name": "에너지바우처",
+      "started_status": "loading",
+      "start_summary_id": null,
+      "force_refresh": false,
+      "elapsed_ms": 9.547,
+      "process_error": null,
+      "cache_status": "PROCESSING",
+      "cache_error_message": null,
+      "api_response_model": {
+        "status": "loading",
+        "summary": null,
+        "evidence": []
+      },
+      "summary_line_count": 0,
+      "evidence_count": 0,
+      "contains_internal_marker": false,
+      "requires_manual_grounding_review": true
+    },
+    {
+      "policy_id": 292,
+      "policy_slug": "WLF00000076",
+      "policy_name": "스포츠강좌이용권",
+      "started_status": "done",
+      "start_summary_id": null,
+      "force_refresh": false,
+      "elapsed_ms": 10.162,
+      "process_error": null,
+      "cache_status": "COMPLETED",
+      "cache_error_message": null,
+      "api_response_model": {
+        "status": "done",
+        "summary": "스포츠강좌이용권은 만 5~18세 저소득층 유청소년에게 월 105,000원 한도 내에서 12개월 동안 스포츠 강좌비를 지원하는 정책입니다. 신청은 거주지 주민센터나 국민체육진흥공단을 통해 가능하며, 지원 대상은 기초생활수급자, 차상위계층, 법정 한부모가정 등입니다.\n만 5~18세 유·청소년 중 기초생활수급자, 차상위계층, 법정 한부모가정 등 저소득층 또는 범죄피해가정 대상자에게 스포츠강좌 수강료를 지원합니이 주요 지원 대상이에요.\n주요 지원 내용은 월 105,000원 범위 내에서 12개월 스포츠활동 강좌비를 지급합니이에요.",
+        "evidence": [
+          "정책 상세 안내에 있는 대상, 혜택, 신청 정보를 읽기 쉬운 문장으로 정리했어요."
+        ]
+      },
+      "summary_line_count": 3,
+      "evidence_count": 1,
+      "contains_internal_marker": false,
+      "requires_manual_grounding_review": true
+    }
+  ]
+}
