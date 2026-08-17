@@ -1,12 +1,14 @@
 # Generated Grounding Live API Capture
 
-Status: live_response_capture_requires_manual_review
+Status: live_response_capture_review_completed
 Started At: 2026-08-16T12:19:32+0900
 
 이 산출물은 실제 DB, retriever, policy summary generator를 사용해
 정책 요약 API 응답 모델을 캡처한 live artifact다.
-다만 claim 단위 manual grounding review는 아직 완료하지 않았으므로 faithfulness
-검증 완료로 해석하지 않는다.
+claim 단위 manual grounding review는
+`docs/eval/generated_grounding_live_review.md`에서 완료했다. 이 파일은
+live 응답 캡처 근거이며, claim별 grounding 판정의 대표 근거는 review
+산출물을 따른다.
 
 ## Metrics
 
@@ -37,5 +39,6 @@ Started At: 2026-08-16T12:19:32+0900
 ## Boundary
 
 - Proves: The live DB/retriever/generator path produced API response models for the selected policies.
-- Does not prove: Manual claim-level grounding has not yet been completed for each captured live response.
-- Next: Split each live summary/evidence response into claims and score it with generated_grounding_manual_rubric.py.
+- Grounding review: `docs/eval/generated_grounding_live_review.md` scored 65 captured claims.
+- Does not prove: Structured citation is available in the runtime API contract.
+- Next: Keep live capture and live review artifacts in sync when summary generation or sanitization changes.

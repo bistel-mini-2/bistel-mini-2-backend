@@ -1,8 +1,28 @@
 # Generated Grounding Evaluation Design
 
-Status: design only
+Status: design with completed follow-up evidence
 Date: 2026-08-16
 Scope: Dodam policy summary generation grounding evaluation
+
+## Current Status Update
+
+2026년 8월 16일 이후 권장안 A를 실제로 진행했다. 먼저 offline manual
+rubric으로 검색 평가와 생성 답변 grounding의 경계를 분리했고, 이후
+force-refresh live API 응답 10건을 캡처해 claim 단위 review를 완료했다.
+
+현재 완료된 근거:
+
+- `docs/eval/generated_grounding_manual_rubric.md`: offline seed rubric
+- `docs/eval/generated_grounding_live_api_capture.md`: 실제 DB/retriever/generator
+  경로 live 응답 10건 캡처
+- `docs/eval/generated_grounding_live_review.md`: 65개 claim manual review,
+  grounding 100.0%, unsupported 0, critical error 0, display quality issue 0
+
+아직 남은 경계:
+
+- API/cache/frontend에 문장별 structured citation 계약은 구현하지 않았다.
+- 이 문서의 아래 설계 내용은 U5 당시 의사결정 기록이며, 현재 포트폴리오
+  근거로는 live review 산출물을 우선 사용한다.
 
 ## Goal
 

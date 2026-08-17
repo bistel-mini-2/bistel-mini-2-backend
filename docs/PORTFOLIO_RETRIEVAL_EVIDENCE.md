@@ -6,8 +6,9 @@ Dodam 정책 챗봇 작업을 "RAG 챗봇을 만들었다"가 아니라, 검색 
 측정하고 현재 서비스 조건에 맞는 검색 기본값 후보를 선택한 case study로
 설명하기 위한 근거를 정리한다.
 
-이 문서는 리트리버 평가 근거만 다룬다. 생성 답변의 faithfulness는 아직
-별도 평가가 필요하며, 여기의 evidence correctness와 같은 의미가 아니다.
+이 문서는 리트리버 평가 근거를 중심으로 다룬다. 생성 답변 grounding은
+검색 evidence correctness와 같은 지표로 합치지 않고,
+`docs/eval/generated_grounding_live_review.md`에 별도 산출물로 분리했다.
 
 ## 변경 사항
 
@@ -162,6 +163,22 @@ Scoped fallback은 `R015` 1문항에서만 발동했고, 기대 정책과 기대
 없으면 대상, 혜택, 신청 방법, 유의사항 중 필요한 근거가 빠진 답변이 될 수
 있다. 상세 risk case는 `output/retrieval_evidence_quality.json`에 저장했다.
 
+## 생성 답변 Grounding 현황
+
+검색 근거 correctness와 생성 답변 grounding은 별도 산출물로 관리한다.
+2026년 8월 16일 force-refresh live 실행에서는 실제 DB, retriever, policy
+summary generator 경로로 10개 정책 요약 API 응답을 캡처했고, 사용자 표시
+summary/evidence를 claim 단위로 분해해 수동 rubric으로 검토했다.
+
+| 산출물 | 상태 | 핵심 결과 |
+|---|---|---|
+| `output/generated_grounding_live_api_capture.json` | actual live capture | 10/10 응답 `done`, 내부 marker 0건 |
+| `output/generated_grounding_live_review.json` | completed manual review | 65개 claim, grounding 100.0%, unsupported 0, critical error 0, display quality issue 0 |
+
+이 결과는 "캡처된 10개 live 응답 claim을 수동 rubric으로 검토했다"는
+근거로 사용할 수 있다. 다만 런타임 API가 문장별 structured citation을
+제공한다는 뜻은 아니다.
+
 ## Hybrid 기본값 미채택 근거
 
 현재 50문항 내부 평가 조건에서는 Hybrid가 pgvector보다 Policy Hit@5가
@@ -197,12 +214,13 @@ trigram index 기준선으로 바꿔 재비교하는 편이 좋다.
   순차 실행 방식의 영향을 받으므로 운영 SLA가 아니다.
 - 골드셋은 정책 원문 기준으로 검수한 50문항 내부 검색 검증셋이며 공개
   표준 데이터셋이 아니다.
-- 현재 평가는 검색된 근거의 correctness를 본다. 생성 답변 faithfulness는
-  별도 평가가 필요하다.
+- 검색 평가는 검색된 근거의 correctness를 본다. 생성 답변 grounding은
+  별도 live review artifact로 분리했으며, runtime structured citation
+  계약은 아직 없다.
 - 이 문서는 팀 프로젝트 결과와 개인 후속 평가를 구분한다. 팀 결과는
   정책 챗봇 및 검색 구조 구현이고, 이 문서의 taxonomy, fallback 사례 요약,
-  evidence correctness, 전략 판단 요약은 포트폴리오 근거 강화를 위한 개인
-  후속 평가 산출물이다.
+  evidence correctness, 전략 판단 요약, 생성 grounding live review는
+  포트폴리오 근거 강화를 위한 개인 후속 평가 산출물이다.
 
 ## 재현 명령
 
@@ -227,4 +245,11 @@ PYTHONPATH=. .venv/bin/python tests/eval/retrieval_eval.py \
 
 ```bash
 PYTHONPATH=. python3 tests/eval/retrieval_portfolio_evidence.py
+```
+
+생성 답변 grounding 산출물 재생성:
+
+```bash
+PYTHONPATH=. .venv/bin/python tests/eval/generated_grounding_live_capture.py
+PYTHONPATH=. .venv/bin/python tests/eval/generated_grounding_live_review.py
 ```

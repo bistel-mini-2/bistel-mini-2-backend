@@ -151,9 +151,10 @@ Hybrid는 Vector보다 Policy Hit@5가 2%p 높았지만 Section Hit@5는 같았�
 - **“Adaptive로 정확도를 개선했다”**
   - 현재 측정값에서는 Vector와 정확도가 같다. 검색 품질을 유지하면서
     조건부 fallback으로 불필요한 SQL 실행을 줄였다고 써야 한다.
-- **“Faithfulness를 개선하거나 검증했다”**
-  - 현재 평가는 리트리버가 올바른 정책과 섹션을 찾는지만 측정한다.
-    생성 답변이 근거에 충실한지는 아직 평가하지 않았다.
+- **“런타임 문장별 citation을 구현했다”**
+  - 생성 답변 grounding은 10개 force-refresh live 응답을 claim 단위로
+    수동 검토한 산출물까지 완료했다. 다만 API 응답이 문장별 chunk ID를
+    구조화해 반환하는 citation 계약은 아직 구현하지 않았다.
 - **“검증된 표준 데이터셋을 사용했다”**
   - 정확한 표현은 "정책 원문 기준으로 검수한 50문항 내부 검색 검증셋"이다.
     독립적인 사람 검수와 평가자 간 일치도 측정은 완료되지 않았다.
@@ -166,7 +167,7 @@ Hybrid는 Vector보다 Policy Hit@5가 2%p 높았지만 Section Hit@5는 같았�
 
 1. 평가 전용 query embedding cache를 만들어 같은 질문 임베딩을 전략 간 공유
 2. embedding/API latency와 DB vector search latency를 분리 측정
-3. 정답 답변 또는 원자적 사실 목록을 추가해 생성 답변의 faithfulness 평가
+3. live grounding review를 structured citation 계약 또는 원자적 사실 목록으로 확장
 4. 일부 문항을 제3자가 독립 검수하고 평가자 간 일치도 기록
 5. PostgreSQL FTS 또는 한국어 형태소 기반 keyword 기준선을 추가해 재비교
 
@@ -182,3 +183,5 @@ Hybrid는 Vector보다 Policy Hit@5가 2%p 높았지만 Section Hit@5는 같았�
 - 정책 범위 지정 결과: `output/retrieval_benchmark_scoped_50.json`
 - 반복 전체 정책 검색 결과: `output/retrieval_benchmark_repeated_broad_5.json`
 - 반복 정책 범위 지정 결과: `output/retrieval_benchmark_repeated_scoped_5.json`
+- 생성 답변 live capture: `output/generated_grounding_live_api_capture.json`
+- 생성 답변 claim review: `output/generated_grounding_live_review.json`

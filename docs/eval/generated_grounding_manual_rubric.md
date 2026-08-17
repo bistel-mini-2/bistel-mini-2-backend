@@ -6,6 +6,8 @@ Date: 2026-08-16
 이 산출물은 생성 답변 grounding을 retrieval benchmark와 분리해
 claim 단위로 검토하기 위한 수동 rubric 결과다. DB, retrieval API,
 LLM을 호출하지 않는 offline artifact이며 live API faithfulness 주장이 아니다.
+현재 end-to-end live grounding 근거는
+`docs/eval/generated_grounding_live_review.md`를 따른다.
 
 ## Metrics
 
@@ -36,9 +38,12 @@ LLM을 호출하지 않는 offline artifact이며 live API faithfulness 주장�
 ## Portfolio Safe Claims
 
 - 생성 답변 grounding은 retrieval benchmark와 별도 rubric으로 분리했다.
-- 현재 산출물은 offline manual sample review이며 live API faithfulness는 아니다.
+- 현재 산출물은 offline manual sample review이며 live API faithfulness는
+  `docs/eval/generated_grounding_live_review.md`에서 별도 완료했다.
 - 문장별 citation 계약은 아직 API/cache/frontend에 구현하지 않았다.
 
 ## Next Step
 
-Run the same rubric against 10 captured live API summary responses before claiming end-to-end generated-answer faithfulness.
+현재 live API summary response 10건에 대한 claim 단위 review는 완료했다.
+다음 단계는 이 수동 review를 structured citation 계약 또는 원자적 사실 목록
+기반 평가로 확장하는 것이다.
