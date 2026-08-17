@@ -1,0 +1,61 @@
+name: Backend Quality Gate
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-quality-gate-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deterministic:
+    name: Deterministic backend gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      PYTHONUNBUFFERED: "1"
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Compile import surface
+        run: python -m compileall -q app tests/eval
+
+      - name: Run lifecycle, API, and retrieval contract tests
+        env:
+          PYTHONPATH: "."
+        run: |
+          python -m pytest -q -p no:cacheprovider \
+            tests/test_ai_request_lifecycle_service.py \
+            tests/test_ai_request_repository.py \
+            tests/test_main_lifespan.py \
+            tests/test_ai_request_controller.py \
+            tests/test_chat_service.py \
+            tests/test_chat_controller.py \
+            tests/test_chat_request_repository.py \
+            tests/test_chat_e2e.py \
+            tests/test_chat_branch_recommend.py \
+            tests/eval/test_retrieval_eval.py \
+            tests/eval/test_retrieval_portfolio_evidence.py \
+            tests/eval/test_generated_grounding_live_capture.py \
+            tests/eval/test_generated_grounding_live_review.py \
+            tests/eval/test_generated_grounding_manual_rubric.py \
+            tests/eval/test_live_eval_metrics.py

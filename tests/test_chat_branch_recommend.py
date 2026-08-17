@@ -76,6 +76,7 @@ def _request_namespace() -> SimpleNamespace:
         request_status=RequestStatus.READY.value,
         error_message=None,
         policy_id=None,
+        idempotency_key=None,
     )
 
 
@@ -97,16 +98,32 @@ class _FakeRepository:
         selected_conditions: dict[str, Any] | None = None,
         follow_up_resolved: bool = False,
         policy_id: int | None = None,
+        idempotency_key: str | None = None,
     ) -> SimpleNamespace:
         self.request.user_id = user_id
         self.request.source_type = source_type
         self.request.raw_query = raw_query
+        self.request.idempotency_key = idempotency_key
         if follow_up_resolved:
             self.request.parsed_query_json = {
                 **(self.request.parsed_query_json or {}),
                 "follow_up_resolved": True,
             }
         return self.request
+
+    async def find_by_idempotency_key(
+        self,
+        db: Any,
+        request_type: str,
+        user_id: int,
+        idempotency_key: str,
+    ) -> SimpleNamespace | None:
+        if (
+            self.request.user_id == user_id
+            and self.request.idempotency_key == idempotency_key
+        ):
+            return self.request
+        return None
 
     async def find_by_id(
         self, db: Any, request_type: str, request_id: int
