@@ -22,6 +22,10 @@ def test_lifespan_marks_stale_chat_requests_failed(monkeypatch) -> None:
     session_context.__aexit__.return_value = None
     session_factory = MagicMock(return_value=session_context)
     cleanup = AsyncMock(return_value=2)
+    ai_cleanup = AsyncMock(return_value=1)
+
+    class FakeAiRequestRepository:
+        mark_stale_processing_failed = ai_cleanup
 
     monkeypatch.setattr(main_module, "psycopg_pool", pool)
     monkeypatch.setattr(
@@ -38,6 +42,11 @@ def test_lifespan_marks_stale_chat_requests_failed(monkeypatch) -> None:
     )
     monkeypatch.setattr(
         main_module,
+        "AiRequestRepository",
+        FakeAiRequestRepository,
+    )
+    monkeypatch.setattr(
+        main_module,
         "engine",
         SimpleNamespace(dispose=AsyncMock()),
     )
@@ -49,4 +58,6 @@ def test_lifespan_marks_stale_chat_requests_failed(monkeypatch) -> None:
     asyncio.run(run())
 
     cleanup.assert_awaited_once_with(db)
+    assert ai_cleanup.await_args_list[0].args == (db, "recommendation")
+    assert ai_cleanup.await_args_list[1].args == (db, "eligibility")
     db.commit.assert_awaited_once()

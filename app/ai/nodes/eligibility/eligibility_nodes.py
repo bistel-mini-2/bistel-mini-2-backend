@@ -39,14 +39,21 @@ class EligibilityGraphNodes:
             raw_query=state.get("raw_query"),
             selected_conditions=state.get("selected_conditions"),
             follow_up_resolved=bool(state.get("follow_up_resolved")),
+            idempotency_key=state.get("idempotency_key"),
         )
-        return {**state, "request_id": int(snapshot.request_id)}
+        return {
+            **state,
+            "request_id": int(snapshot.request_id),
+            "request_status": snapshot.status.value,
+        }
 
     @progress_node("eligibility", "mark_processing")
     async def mark_processing(
         self,
         state: EligibilityGraphState,
     ) -> EligibilityGraphState:
+        if state.get("request_status") != "READY":
+            return state
         await self._lifecycle().mark_processing(
             db=state["db"],
             request_type="eligibility",
@@ -59,6 +66,8 @@ class EligibilityGraphNodes:
         self,
         state: EligibilityGraphState,
     ) -> EligibilityGraphState:
+        if state.get("request_status") != "READY":
+            return state
         await self._lifecycle().process_condition_request(
             db=state["db"],
             request_type="eligibility",

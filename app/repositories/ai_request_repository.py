@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from sqlalchemy import select, text
@@ -10,6 +11,7 @@ from app.schemas.ai_contract import RequestStatus
 
 
 AiRequestModel = RecommendationRequest | EligibilityRequest
+STALE_AI_REQUEST_MINUTES = 5
 
 
 class AiRequestRepository:
@@ -29,6 +31,7 @@ class AiRequestRepository:
                     user_id bigint NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
                     source_type varchar(30) NOT NULL DEFAULT 'FORM',
                     source_ref_id varchar(100),
+                    idempotency_key varchar(120),
                     raw_query text,
                     parsed_query_json jsonb,
                     merged_condition_json jsonb,
@@ -51,6 +54,7 @@ class AiRequestRepository:
                     policy_id bigint NOT NULL REFERENCES policy(policy_id) ON DELETE CASCADE,
                     source_type varchar(30) NOT NULL DEFAULT 'POLICY_DETAIL',
                     source_ref_id varchar(100),
+                    idempotency_key varchar(120),
                     raw_query text,
                     parsed_query_json jsonb,
                     merged_condition_json jsonb,
@@ -74,6 +78,12 @@ class AiRequestRepository:
             "ALTER TABLE eligibility_request ADD COLUMN IF NOT EXISTS error_message text",
             "ALTER TABLE recommendation_request ADD COLUMN IF NOT EXISTS source_ref_id varchar(100)",
             "ALTER TABLE eligibility_request ADD COLUMN IF NOT EXISTS source_ref_id varchar(100)",
+            "ALTER TABLE recommendation_request ADD COLUMN IF NOT EXISTS idempotency_key varchar(120)",
+            "ALTER TABLE eligibility_request ADD COLUMN IF NOT EXISTS idempotency_key varchar(120)",
+            "CREATE UNIQUE INDEX IF NOT EXISTS recommendation_request_user_idempotency_key_uidx ON recommendation_request (user_id, idempotency_key) WHERE idempotency_key IS NOT NULL",
+            "CREATE UNIQUE INDEX IF NOT EXISTS eligibility_request_user_idempotency_key_uidx ON eligibility_request (user_id, idempotency_key) WHERE idempotency_key IS NOT NULL",
+            "CREATE INDEX IF NOT EXISTS recommendation_request_status_updated_at_idx ON recommendation_request (request_status, updated_at)",
+            "CREATE INDEX IF NOT EXISTS eligibility_request_status_updated_at_idx ON eligibility_request (request_status, updated_at)",
             "ALTER TABLE recommendation_request ALTER COLUMN raw_query DROP NOT NULL",
             "ALTER TABLE eligibility_request ALTER COLUMN raw_query DROP NOT NULL",
         ]:
@@ -90,6 +100,7 @@ class AiRequestRepository:
         selected_conditions: dict[str, Any] | None = None,
         follow_up_resolved: bool = False,
         policy_id: int | None = None,
+        idempotency_key: str | None = None,
     ) -> AiRequestModel:
         model = self._model_for(request_type)
         parsed_query_json: dict[str, Any] = {}
@@ -103,6 +114,7 @@ class AiRequestRepository:
             "user_id": user_id,
             "source_type": source_type,
             "source_ref_id": source_ref_id,
+            "idempotency_key": idempotency_key,
             "raw_query": raw_query,
             "parsed_query_json": parsed_query_json,
             "request_status": RequestStatus.READY.value,
@@ -117,6 +129,21 @@ class AiRequestRepository:
         await db.flush()
         await db.refresh(request)
         return request
+
+    async def find_by_idempotency_key(
+        self,
+        db: AsyncSession,
+        request_type: str,
+        user_id: int,
+        idempotency_key: str,
+    ) -> AiRequestModel | None:
+        model = self._model_for(request_type)
+        result = await db.execute(
+            select(model)
+            .where(model.user_id == user_id)
+            .where(model.idempotency_key == idempotency_key)
+        )
+        return result.scalar_one_or_none()
 
     async def find_by_id(
         self,
@@ -145,6 +172,33 @@ class AiRequestRepository:
             .limit(max(1, min(limit, 100)))
         )
         return list(result.scalars().all())
+
+    async def mark_stale_processing_failed(
+        self,
+        db: AsyncSession,
+        request_type: str,
+    ) -> int:
+        model = self._model_for(request_type)
+        cutoff = _utc_now_naive() - timedelta(minutes=STALE_AI_REQUEST_MINUTES)
+        result = await db.execute(
+            text(
+                f"""
+                UPDATE {model.__tablename__}
+                SET request_status = :failed_status,
+                    error_message = :error_message,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE request_status = :processing_status
+                  AND updated_at < :cutoff
+                """
+            ),
+            {
+                "failed_status": RequestStatus.FAILED.value,
+                "processing_status": RequestStatus.PROCESSING.value,
+                "error_message": "서버 재시작 또는 작업 중단으로 처리 상태가 만료되었습니다.",
+                "cutoff": cutoff,
+            },
+        )
+        return int(result.rowcount or 0)
 
     async def update_status(
         self,
@@ -197,3 +251,7 @@ class AiRequestRepository:
             return self.REQUEST_MODELS[request_type]
         except KeyError as exc:
             raise ValueError(f"Unsupported AI request type: {request_type}") from exc
+
+
+def _utc_now_naive() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)

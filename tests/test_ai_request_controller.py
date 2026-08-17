@@ -56,6 +56,7 @@ def test_create_eligibility_request_uses_common_lifecycle(monkeypatch) -> None:
         source_ref_id,
         raw_query,
         selected_conditions,
+        idempotency_key,
     ):
         captured["create"] = {
             "user_id": user_id,
@@ -64,10 +65,11 @@ def test_create_eligibility_request_uses_common_lifecycle(monkeypatch) -> None:
             "source_ref_id": source_ref_id,
             "raw_query": raw_query,
             "selected_conditions": selected_conditions,
+            "idempotency_key": idempotency_key,
         }
         return SimpleNamespace(
             request_id="123",
-            status=SimpleNamespace(value="READY"),
+            status=RequestStatus.READY,
         )
 
     async def fake_mark_processing(self, db, request_type, request_id):
@@ -77,7 +79,7 @@ def test_create_eligibility_request_uses_common_lifecycle(monkeypatch) -> None:
         }
         return SimpleNamespace(
             request_id=str(request_id),
-            status=SimpleNamespace(value="PROCESSING"),
+            status=RequestStatus.PROCESSING,
         )
 
     async def fake_process_ai_condition_request(
@@ -132,7 +134,7 @@ def test_create_eligibility_request_uses_common_lifecycle(monkeypatch) -> None:
     body = response.json()
     assert body["success"] is True
     assert body["data"]["request_id"] == "123"
-    assert body["data"]["status"]["value"] == "PROCESSING"
+    assert body["data"]["status"] == "PROCESSING"
     assert body["meta"] == {
         "request_id": "123",
         "follow_up_required": False,
@@ -144,6 +146,7 @@ def test_create_eligibility_request_uses_common_lifecycle(monkeypatch) -> None:
         "source_ref_id": "WLF00000024",
         "raw_query": None,
         "selected_conditions": user_conditions,
+        "idempotency_key": None,
     }
     assert captured["mark_processing"] == {
         "request_type": "eligibility",
@@ -154,6 +157,95 @@ def test_create_eligibility_request_uses_common_lifecycle(monkeypatch) -> None:
         "request_type": "eligibility",
         "request_id": 123,
     }
+
+
+def test_create_eligibility_request_reuses_idempotency_without_reprocessing(
+    monkeypatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    async def fake_db() -> AsyncGenerator[object, None]:
+        db = SimpleNamespace()
+
+        async def commit():
+            captured["committed"] = True
+
+        db.commit = commit
+        yield db
+
+    async def fake_current_user() -> object:
+        return SimpleNamespace(user_id=7)
+
+    async def fake_create_eligibility_request(
+        self,
+        db,
+        *,
+        user_id,
+        policy_identifier,
+        source_type,
+        source_ref_id,
+        raw_query,
+        selected_conditions,
+        idempotency_key,
+    ):
+        captured["idempotency_key"] = idempotency_key
+        return SimpleNamespace(
+            request_id="123",
+            status=RequestStatus.COMPLETED,
+            idempotency_key=idempotency_key,
+        )
+
+    async def fake_mark_processing(self, db, request_type, request_id):
+        captured["mark_processing"] = True
+        return SimpleNamespace(request_id=str(request_id), status=RequestStatus.PROCESSING)
+
+    async def fake_process_ai_condition_request(
+        request_type: str,
+        request_id: int,
+    ) -> None:
+        captured["background"] = True
+
+    monkeypatch.setattr(
+        AiRequestLifecycleService,
+        "create_eligibility_request",
+        fake_create_eligibility_request,
+    )
+    monkeypatch.setattr(
+        AiRequestLifecycleService,
+        "mark_processing",
+        fake_mark_processing,
+    )
+    monkeypatch.setattr(
+        ai_request_controller,
+        "process_ai_condition_request",
+        fake_process_ai_condition_request,
+    )
+
+    app = FastAPI()
+    app.include_router(eligibility_router)
+    app.dependency_overrides[get_db_session] = fake_db
+    app.dependency_overrides[get_current_user] = fake_current_user
+    register_exception_handlers(app)
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/eligibility/requests",
+            json={
+                "policy_id": "WLF00000024",
+                "user_conditions": {"income": "low"},
+                "idempotency_key": "eligibility-key-1",
+            },
+        )
+
+    assert response.status_code == 202
+    body = response.json()
+    assert body["data"]["request_id"] == "123"
+    assert body["data"]["status"] == "COMPLETED"
+    assert body["data"]["idempotency_key"] == "eligibility-key-1"
+    assert captured["idempotency_key"] == "eligibility-key-1"
+    assert "committed" not in captured
+    assert "mark_processing" not in captured
+    assert "background" not in captured
 
 
 def test_create_eligibility_request_accepts_manual_confirmations(monkeypatch) -> None:
@@ -181,17 +273,19 @@ def test_create_eligibility_request_accepts_manual_confirmations(monkeypatch) ->
         source_ref_id,
         raw_query,
         selected_conditions,
+        idempotency_key,
     ):
         captured["selected_conditions"] = selected_conditions
+        captured["idempotency_key"] = idempotency_key
         return SimpleNamespace(
             request_id="123",
-            status=SimpleNamespace(value="READY"),
+            status=RequestStatus.READY,
         )
 
     async def fake_mark_processing(self, db, request_type, request_id):
         return SimpleNamespace(
             request_id=str(request_id),
-            status=SimpleNamespace(value="PROCESSING"),
+            status=RequestStatus.PROCESSING,
         )
 
     async def fake_process_ai_condition_request(
@@ -250,6 +344,7 @@ def test_create_eligibility_request_accepts_manual_confirmations(monkeypatch) ->
             }
         ],
     }
+    assert captured["idempotency_key"] is None
 
 
 def test_create_eligibility_request_preserves_chat_session_source(monkeypatch) -> None:
@@ -283,17 +378,19 @@ def test_create_eligibility_request_preserves_chat_session_source(monkeypatch) -
         source_ref_id,
         raw_query,
         selected_conditions,
+        idempotency_key,
     ):
         captured["source_ref_id"] = source_ref_id
+        captured["idempotency_key"] = idempotency_key
         return SimpleNamespace(
             request_id="123",
-            status=SimpleNamespace(value="READY"),
+            status=RequestStatus.READY,
         )
 
     async def fake_mark_processing(self, db, request_type, request_id):
         return SimpleNamespace(
             request_id=str(request_id),
-            status=SimpleNamespace(value="PROCESSING"),
+            status=RequestStatus.PROCESSING,
         )
 
     async def fake_process_ai_condition_request(
@@ -346,6 +443,7 @@ def test_create_eligibility_request_preserves_chat_session_source(monkeypatch) -
         "chat_session_id": 82,
     }
     assert captured["source_ref_id"] == "chat_session:82;source:recommendation:123"
+    assert captured["idempotency_key"] is None
 
 
 def test_create_eligibility_request_rejects_non_numeric_chat_session_id() -> None:
@@ -469,6 +567,7 @@ def test_stream_eligibility_request_emits_progress_and_done(monkeypatch) -> None
         source_type="CHAT",
         source_ref_id=None,
         follow_up_resolved=False,
+        idempotency_key=None,
     ):
         await emit_progress("eligibility", "create_request", "started", 1, 4)
         await emit_progress("eligibility", "create_request", "completed", 1, 4)

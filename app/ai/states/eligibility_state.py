@@ -12,5 +12,7 @@ class EligibilityGraphState(TypedDict):
     source_type: str
     source_ref_id: NotRequired[str | None]
     follow_up_resolved: NotRequired[bool]
+    idempotency_key: NotRequired[str | None]
     request_id: NotRequired[int]
+    request_status: NotRequired[str]
     result_json: NotRequired[dict[str, Any]]

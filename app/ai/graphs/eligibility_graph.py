@@ -43,6 +43,7 @@ class EligibilityGraphRunner:
         source_type: str = "CHAT",
         source_ref_id: str | None = None,
         follow_up_resolved: bool = False,
+        idempotency_key: str | None = None,
     ) -> dict[str, Any]:
         final_state = await self.graph.ainvoke(
             {
@@ -54,6 +55,7 @@ class EligibilityGraphRunner:
                 "source_type": source_type,
                 "source_ref_id": source_ref_id,
                 "follow_up_resolved": follow_up_resolved,
+                "idempotency_key": idempotency_key,
             }
         )
         return final_state.get("result_json", {})

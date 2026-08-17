@@ -36,6 +36,11 @@ class EligibilityRequest(Base):
         server_default="POLICY_DETAIL",
     )
     source_ref_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    idempotency_key: Mapped[str | None] = mapped_column(
+        String(120),
+        nullable=True,
+        index=True,
+    )
     raw_query: Mapped[str | None] = mapped_column(Text, nullable=True)
     parsed_query_json: Mapped[dict[str, Any] | None] = mapped_column(
         JSONB,

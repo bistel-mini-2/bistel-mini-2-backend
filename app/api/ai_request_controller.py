@@ -175,7 +175,14 @@ async def create_recommendation_request(
         source_ref_id=payload.source_ref_id,
         raw_query=payload.raw_query,
         selected_conditions=payload.selected_conditions,
+        idempotency_key=payload.idempotency_key,
     )
+    if snapshot.status != RequestStatus.READY:
+        return success_response(
+            data=snapshot,
+            status_code=status.HTTP_202_ACCEPTED,
+            meta=_request_meta(snapshot),
+        )
     snapshot = await service.mark_processing(
         db=db,
         request_type="recommendation",
@@ -282,7 +289,14 @@ async def create_eligibility_request(
         ),
         raw_query=payload.raw_query,
         selected_conditions=payload.selected_conditions,
+        idempotency_key=payload.idempotency_key,
     )
+    if snapshot.status != RequestStatus.READY:
+        return success_response(
+            data=snapshot,
+            status_code=status.HTTP_202_ACCEPTED,
+            meta=_request_meta(snapshot),
+        )
     snapshot = await service.mark_processing(
         db=db,
         request_type="eligibility",
@@ -402,7 +416,17 @@ async def _recommendation_sse_stream(
                         source_ref_id=payload.source_ref_id,
                         raw_query=payload.raw_query,
                         selected_conditions=payload.selected_conditions,
+                        idempotency_key=payload.idempotency_key,
                     )
+                    if snapshot.status != RequestStatus.READY:
+                        await inner_db.commit()
+                        result = await service.get_recommendation_polling_result(
+                            db=inner_db,
+                            request_id=int(snapshot.request_id),
+                            user_id=user_id,
+                        )
+                        await queue.put({"type": "done", "payload": result.model_dump(mode="json")})
+                        return
                     snapshot = await service.mark_processing(
                         db=inner_db,
                         request_type="recommendation",
@@ -503,6 +527,7 @@ async def _eligibility_sse_stream(
                                 payload.chat_session_id,
                                 payload.source_ref_id,
                             ),
+                            idempotency_key=payload.idempotency_key,
                         ),
                         timeout=AI_BACKGROUND_TIMEOUT_SECONDS,
                     )

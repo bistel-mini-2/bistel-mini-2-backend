@@ -116,8 +116,18 @@ class AiRequestLifecycleService:
         selected_conditions: dict[str, Any] | None = None,
         follow_up_resolved: bool = False,
         policy_id: int | None = None,
+        idempotency_key: str | None = None,
     ) -> AiRequestSnapshot:
         await self._ensure_user_exists(db, user_id)
+        if idempotency_key:
+            existing = await self.repository.find_by_idempotency_key(
+                db=db,
+                request_type=request_type,
+                user_id=user_id,
+                idempotency_key=idempotency_key,
+            )
+            if existing is not None:
+                return self.to_snapshot(request_type, existing)
         request = await self.repository.create(
             db=db,
             request_type=request_type,
@@ -128,6 +138,7 @@ class AiRequestLifecycleService:
             selected_conditions=selected_conditions,
             follow_up_resolved=follow_up_resolved,
             policy_id=policy_id,
+            idempotency_key=idempotency_key,
         )
         return self.to_snapshot(request_type, request)
 
@@ -141,6 +152,7 @@ class AiRequestLifecycleService:
         raw_query: str | None = None,
         selected_conditions: dict[str, Any] | None = None,
         follow_up_resolved: bool = False,
+        idempotency_key: str | None = None,
     ) -> AiRequestSnapshot:
         return await self.create_request(
             db=db,
@@ -152,6 +164,7 @@ class AiRequestLifecycleService:
             selected_conditions=selected_conditions,
             follow_up_resolved=follow_up_resolved,
             policy_id=await self.resolve_policy_id(db, policy_identifier),
+            idempotency_key=idempotency_key,
         )
 
     async def mark_processing(
@@ -1162,6 +1175,7 @@ class AiRequestLifecycleService:
             ),
             source_type=request.source_type,
             source_ref_id=request.source_ref_id,
+            idempotency_key=getattr(request, "idempotency_key", None),
             parsed_query_json=parsed_query_json,
             merged_condition_json=request.merged_condition_json or {},
             profile_conflict_json=request.profile_conflict_json or [],

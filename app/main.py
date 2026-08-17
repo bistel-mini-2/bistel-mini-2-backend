@@ -43,6 +43,7 @@ from app.common.psycopg_pool_conf import psycopg_pool
 from app.core.config import settings
 from app.db.session import AsyncSessionLocal, engine
 from app.repositories.chat_request_repository import ChatRequestRepository
+from app.repositories.ai_request_repository import AiRequestRepository
 from app.repositories.policy_repository import PolicyRepository
 from app.utils.logger import setup_logging
 
@@ -57,6 +58,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         await PolicyRepository.ensure_search_indexes(conn)
     async with AsyncSessionLocal() as db:
         await ChatRequestRepository.mark_stale_processing_failed(db)
+        ai_request_repository = AiRequestRepository()
+        await ai_request_repository.mark_stale_processing_failed(db, "recommendation")
+        await ai_request_repository.mark_stale_processing_failed(db, "eligibility")
         await db.commit()
     try:
         yield

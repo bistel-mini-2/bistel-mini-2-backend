@@ -1,6 +1,6 @@
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.schemas.ai_contract import RequestStatus
 
@@ -10,12 +10,21 @@ class RecommendationRequestCreate(BaseModel):
     source_ref_id: str | None = None
     raw_query: str | None = None
     selected_conditions: dict[str, Any] | None = None
+    idempotency_key: str | None = Field(default=None, max_length=120)
 
     @model_validator(mode="after")
     def validate_condition_input(self) -> "RecommendationRequestCreate":
         if not self.raw_query and not self.selected_conditions:
             raise ValueError("raw_query or selected_conditions is required")
         return self
+
+    @field_validator("idempotency_key")
+    @classmethod
+    def _strip_idempotency_key(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        stripped = value.strip()
+        return stripped or None
 
 
 class ManualConfirmation(BaseModel):
@@ -36,6 +45,7 @@ class EligibilityRequestCreate(BaseModel):
     selected_conditions: dict[str, Any] | None = None
     user_conditions: dict[str, Any] | None = None
     manual_confirmations: list[ManualConfirmation] = Field(default_factory=list)
+    idempotency_key: str | None = Field(default=None, max_length=120)
 
     @model_validator(mode="after")
     def normalize_condition_input(self) -> "EligibilityRequestCreate":
@@ -56,6 +66,14 @@ class EligibilityRequestCreate(BaseModel):
             self.selected_conditions = selected_conditions
         return self
 
+    @field_validator("idempotency_key")
+    @classmethod
+    def _strip_idempotency_key(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        stripped = value.strip()
+        return stripped or None
+
 
 class RecommendationAnswer(BaseModel):
     # 게이트 질문에 대한 사용자 답변. question_text는 raw_query 머지용 맥락.
@@ -75,6 +93,7 @@ class AiRequestSnapshot(BaseModel):
     policy_id: str | None = None
     source_type: str | None = None
     source_ref_id: str | None = None
+    idempotency_key: str | None = None
     parsed_query_json: dict[str, Any] = Field(default_factory=dict)
     merged_condition_json: dict[str, Any] = Field(default_factory=dict)
     profile_conflict_json: list[dict[str, Any]] = Field(default_factory=list)
