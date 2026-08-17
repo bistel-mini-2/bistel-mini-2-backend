@@ -1,5 +1,6 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+import logging
 
 import uvicorn
 from dotenv import load_dotenv
@@ -26,6 +27,7 @@ from app.api.favorite_controller import (
     favorites_router,
     user_favorites_router,
 )
+from app.api.health_controller import router as health_router
 from app.api.policy_controller import router as policy_router
 from app.api.policy_condition_profile_controller import (
     router as policy_condition_profile_router,
@@ -49,24 +51,37 @@ from app.utils.logger import setup_logging
 
 
 setup_logging()
+logger = logging.getLogger(__name__)
+STARTUP_DB_MAINTENANCE_TIMEOUT_SECONDS = 5
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    await psycopg_pool.open()
-    async with psycopg_pool.connection() as conn:
-        await PolicyRepository.ensure_search_indexes(conn)
-    async with AsyncSessionLocal() as db:
-        await ChatRequestRepository.mark_stale_processing_failed(db)
-        ai_request_repository = AiRequestRepository()
-        await ai_request_repository.mark_stale_processing_failed(db, "recommendation")
-        await ai_request_repository.mark_stale_processing_failed(db, "eligibility")
-        await db.commit()
+    await _run_startup_db_maintenance()
     try:
         yield
     finally:
         await psycopg_pool.close()
         await engine.dispose()
+
+
+async def _run_startup_db_maintenance() -> None:
+    try:
+        await psycopg_pool.open()
+        async with psycopg_pool.connection(
+            timeout=STARTUP_DB_MAINTENANCE_TIMEOUT_SECONDS
+        ) as conn:
+            await PolicyRepository.ensure_search_indexes(conn)
+        async with AsyncSessionLocal() as db:
+            await ChatRequestRepository.mark_stale_processing_failed(db)
+            ai_request_repository = AiRequestRepository()
+            await ai_request_repository.mark_stale_processing_failed(db, "recommendation")
+            await ai_request_repository.mark_stale_processing_failed(db, "eligibility")
+            await db.commit()
+    except Exception:
+        logger.exception(
+            "Startup DB maintenance failed; readiness endpoint will report dependency status"
+        )
 
 
 app = FastAPI(
@@ -83,6 +98,7 @@ app.add_middleware(
 )
 
 app.include_router(auth_router)
+app.include_router(health_router)
 app.include_router(users_router)
 app.include_router(family_profile_router)
 app.include_router(favorites_router)

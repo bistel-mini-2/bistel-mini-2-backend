@@ -46,6 +46,7 @@ jobs:
           python -m pytest -q -p no:cacheprovider \
             tests/test_ai_request_lifecycle_service.py \
             tests/test_ai_request_repository.py \
+            tests/test_health_controller.py \
             tests/test_main_lifespan.py \
             tests/test_ai_request_controller.py \
             tests/test_chat_service.py \

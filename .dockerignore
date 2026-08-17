@@ -1,0 +1,16 @@
+.DS_Store
+.env
+.env.*
+!.env.example
+.git
+.github
+.mypy_cache
+.pytest_cache
+.venv
+__pycache__
+*.py[cod]
+db.sqlite3
+docs
+output
+resume
+tests
