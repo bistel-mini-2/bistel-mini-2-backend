@@ -1,31 +1,39 @@
 # Dodam Backend Deployment Runbook
 
-Status: U9 baseline
+Status: U10 deployed baseline
 Verified at: 2026-08-18
 
 ## Target Topology
 
-- Backend: Railway web service from `Dockerfile`
-- Database: Railway PostgreSQL
+- Backend: Render web service from `Dockerfile`
+- Database: Supabase PostgreSQL
 - Frontend: separate Vercel project
 - External AI: existing OpenAI API key
 
-Railway `railway.json` uses the Dockerfile builder and `/health/ready` as the deployment healthcheck path. Railway healthchecks gate a new deployment before switching traffic; they do not replace continuous monitoring after activation.
+Current deployed backend URL:
+
+- `https://dodam-backend.onrender.com`
+
+Render uses the Dockerfile build path. The Render service health check is kept
+at `/health/live` so a fresh database can be bootstrapped without blocking the
+process. Operational readiness must still be checked with `/health/ready`.
 
 ## Required Runtime Variables
 
-Set these as Railway service variables. Do not bake them into the image.
+Set these as Render service variables. Do not bake them into the image.
 
 - `APP_ENV`
 - `APP_NAME`
-- `DATABASE_URL`
-- `PSYCOPG_DATABASE_URL`
+- `DATABASE_URL`: Supabase PostgreSQL URL using the SQLAlchemy asyncpg driver,
+  for example `postgresql+asyncpg://...`
+- `PSYCOPG_DATABASE_URL`: Supabase PostgreSQL URL using the psycopg-compatible
+  driver, for example `postgresql://...`
 - `DATA_GO_KR_SERVICE_KEY`
 - `OPENAI_API_KEY`
 - `JWT_SECRET_KEY`
 - `JWT_ALGORITHM`
 - `ACCESS_TOKEN_EXPIRE_MINUTES`
-- `PORT` supplied by Railway
+- `PORT` supplied by Render
 
 ## Build
 
@@ -72,22 +80,58 @@ Startup DB maintenance uses a bounded timeout so the process can still expose
 
 ## Migration Contract
 
-- Apply migrations before deploying or before readiness is expected to pass.
+- Apply Supabase migrations before readiness is expected to pass.
 - Startup does not run destructive migrations or seed/demo data.
 - Seed/demo data is operationally separate from schema migration.
 - Platform rollback does not roll back database migrations; migration rollback requires an explicit database plan.
 
-## Railway Deployment Order
+## Supabase Migration Contract
 
-1. Provision Railway PostgreSQL.
-2. Apply backend migrations to the target database.
-3. Configure Railway service variables.
-4. Deploy the backend service.
-5. Confirm `/health/ready` returns HTTP 200.
-6. Point the Vercel frontend to the backend public URL.
+Supabase CLI migrations are stored under:
+
+```text
+supabase/migrations/
+```
+
+Apply with:
+
+```bash
+npx supabase db push \
+  --db-url "$SUPABASE_DB_URL" \
+  --password "$SUPABASE_DB_PASSWORD" \
+  --include-all
+```
+
+The Supabase migration set includes a SQLAlchemy-generated bootstrap schema and
+non-purge schema migrations. It intentionally excludes destructive purge files:
+
+- `db/migrations/83b_chat_message_legacy_purge.sql`
+- `db/migrations/171_policy_assessment_refresh_purge.sql`
+
+## Render Deployment Order
+
+1. Create or verify the Supabase PostgreSQL project.
+2. Configure Render service variables from Supabase connection strings.
+3. Apply Supabase migrations with `npx supabase db push`.
+4. Deploy or redeploy the Render backend service.
+5. Confirm `GET /health/live` returns HTTP 200.
+6. Confirm `GET /health/ready` returns HTTP 200 with DB and schema checks ok.
+7. Point the Vercel frontend to the backend public URL.
+
+## Verified Deployment Smoke
+
+Checked on 2026-08-18 KST:
+
+- `GET https://dodam-backend.onrender.com/health/live`: HTTP 200, `{"status":"ok"}`
+- `GET https://dodam-backend.onrender.com/health/ready`: HTTP 200,
+  `database.status = "ok"` and `schema.status = "ok"`
 
 ## Boundaries
 
-- This runbook is a deployment package baseline, not proof of public production operation.
-- Railway healthcheck is a deployment gate, not uptime monitoring.
-- U10 must still verify live deployment, smoke scenarios, rollback behavior, cold start, and cost.
+- This runbook proves backend process, DB connectivity, and required schema
+  readiness at the checked timestamp only.
+- It does not prove OpenAI generation success, policy data freshness, browser
+  E2E behavior, user signup/login success, latency SLA, or continuous uptime.
+- Render/Vercel rollback does not roll back Supabase migrations or data.
+- Render health checks and `/health/ready` are deployment/readiness checks, not
+  continuous monitoring or alerting.

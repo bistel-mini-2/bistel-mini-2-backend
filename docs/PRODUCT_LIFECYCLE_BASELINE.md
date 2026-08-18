@@ -5,9 +5,11 @@
 - Audit unit: U6 Product lifecycle baseline and deployment decision only.
 - Audit timestamp: 2026-08-18 KST.
 - Method: static code and document audit, focused deterministic tests, and official platform documentation check.
-- Code changes: none.
-- Allowed artifact written: `docs/PRODUCT_LIFECYCLE_BASELINE.md`.
-- Out of scope not started: U7 lifecycle fixes, U8 CI gate, U9 Docker/health package, U10 external deployment.
+- Original U6 code changes: none.
+- Original allowed artifact written: `docs/PRODUCT_LIFECYCLE_BASELINE.md`.
+- Post-U6 update: U7 lifecycle hardening, U8 CI gates, U9 deployment package,
+  and U10 external deployment were later completed and are summarized in this
+  document for current portfolio/deployment accuracy.
 
 Evidence boundaries:
 
@@ -15,6 +17,20 @@ Evidence boundaries:
 - Generated grounding and display cleanliness remain U5 evidence.
 - This document covers current product lifecycle implementation, recovery gaps, and deploy topology choice.
 - Existing deployment files, local tests, or pricing pages are not proof of deployed production operation.
+- U10 smoke proves only the deployed endpoints checked at the timestamp listed
+  below; it does not prove user traffic, SLA, continuous monitoring, or full
+  browser E2E.
+
+Current U10 deployment smoke, checked on 2026-08-18 KST:
+
+- Backend: `https://dodam-backend.onrender.com`
+- Backend readiness: `GET /health/ready` returned HTTP 200 with database and
+  schema checks ok.
+- Frontend: `https://dodam-frontend.vercel.app`
+- Frontend HTTP smoke: `GET /` returned HTTP 200.
+- Database: Supabase PostgreSQL.
+- Backend host: Render.
+- Frontend host: Vercel.
 
 ## 2. Repository revisions and dirty-worktree boundary
 
@@ -22,14 +38,17 @@ Backend repository:
 
 - Path: `/Users/hb/Documents/kosa-course/projects/mini-2/back`
 - Branch: `refactor/chat-handler-result-lifecycle`
-- HEAD: `89960ee`
-- Initial status: clean.
+- U6 HEAD: `89960ee`
+- Current deployed/documented HEAD: `b2318d4`
+- Current status after U10 documentation update: this document and deployment
+  runbooks may be modified until committed.
 
 Frontend repository:
 
 - Path: `/Users/hb/Documents/kosa-course/projects/mini-2/front`
 - Branch: `develop`
-- HEAD: `4d3eb30`
+- U6 HEAD: `4d3eb30`
+- Current deployed frontend HEAD: `a2901fc`
 - Initial status: existing user-owned dirty files:
   - `app/chat/page.js`
   - `app/components/ChatPromptDock.js`
@@ -39,6 +58,9 @@ Boundary:
 
 - Frontend dirty files were read as current implementation evidence and were not overwritten, staged, stashed, reverted, formatted, or cleaned.
 - Backend was clean before this U6 artifact. This document is the only intended backend change.
+- U10 frontend deployment was performed from a clean temporary worktree at
+  `a2901fc`, so the user-owned dirty frontend files were not included in the
+  deployed artifact.
 
 ## 3. End-to-end user lifecycle trace
 
@@ -94,6 +116,10 @@ Current implemented path:
 Status: partial. These endpoints are useful for progress display, but the request is processed inside the stream task. If the stream is interrupted, there is no explicit accepted request replay contract equivalent to chat SSE. General POST plus GET polling is currently the safer recovery path for recommendation and eligibility.
 
 ## 4. Lifecycle status matrix
+
+The matrix below is the original U6 lifecycle audit snapshot. Later U7-U10 work
+changed deployment and recovery evidence; current deployed state is summarized
+in sections 1, 8, 9, and "Verification after U10 deployment" below.
 
 | Stage | Backend evidence | Frontend evidence | Persisted state | Failure/recovery behavior | Test evidence | Status | Gap and impact |
 |---|---|---|---|---|---|---|---|
@@ -183,16 +209,23 @@ Official documentation checked on 2026-08-18 KST:
 | Operations/teardown | Easy stop/remove services; separate frontend/backend blast radius. | Easy dashboard teardown, but Free DB expiration risk. | Manual teardown, backups, firewall, TLS, updates. |
 | Decision | Recommended working decision. | Not selected for this U6 baseline. | Not selected for public product demo baseline. |
 
-## 8. Working decision: Vercel + Railway
+## 8. Working decision and actual U10 deployment
 
-Working decision:
+Original U6 working decision:
 
 - Frontend: Vercel Hobby.
 - Backend: Railway Hobby.
 - Database: Railway PostgreSQL.
 - External AI: existing OpenAI API.
 
-Why this is preferred:
+Actual U10 deployment:
+
+- Frontend: Vercel.
+- Backend: Render.
+- Database: Supabase PostgreSQL.
+- External AI: existing OpenAI API key configured in the backend host.
+
+Why Vercel + Railway was originally preferred:
 
 - The frontend is Next.js 16 and has a small environment surface (`NEXT_PUBLIC_API_BASE_URL`), so Vercel is the lowest-friction fit for preview and production frontend deploys.
 - The backend is FastAPI with SSE and AI requests up to 360 seconds. Railway is a better fit than trying to force this into Vercel serverless function limits.
@@ -207,6 +240,17 @@ Why Render is not selected:
 - Render preview environments require Pro or higher per official docs.
 - Render remains a viable paid alternative, but it does not beat Vercel+Railway for this two-repo Next.js + FastAPI + PostgreSQL baseline.
 
+Why Render + Supabase was used for U10:
+
+- Railway CLI authentication did not complete in the local environment, blocking
+  backend deployment.
+- Render backend deployment succeeded without requiring a paid Railway plan.
+- Render PostgreSQL required a payment method, so Supabase PostgreSQL was used
+  as the external database.
+- The resulting topology is acceptable for a short public portfolio demo, but it
+  changes the original cost/persistence boundary and should not be represented
+  as the original Railway deployment decision.
+
 Why single-host Compose is not selected:
 
 - It would require Dockerfiles, Compose, reverse proxy/TLS, migration procedure, backups, monitoring, server patching, and rollback discipline that are not currently implemented.
@@ -220,6 +264,9 @@ Cost boundary:
 - Vercel Hobby: official docs show $0/month for Hobby and personal/non-commercial constraints. Hobby has included usage caps and function duration constraints.
 - Railway Hobby: official docs show $5/month base subscription with $5 included resource usage, with CPU/RAM/storage/egress charged by usage beyond included amount.
 - Render Free: official docs show web service and Postgres free options, but with spin-down and Free Postgres 30-day expiration.
+- Supabase free database was used for U10. Current account limits, pause policy,
+  backups, and spend controls must be verified in the Supabase dashboard before
+  making an operating-cost or availability claim.
 - OpenAI API: not checked or changed in U6. It remains an external metered cost and must have a separate budget cap before public operation.
 
 Privacy boundary:
@@ -232,6 +279,10 @@ Secret boundary:
 - Backend env names required by `.env.example`: `DATABASE_URL`, `PSYCOPG_DATABASE_URL`, `DATA_GO_KR_SERVICE_KEY`, `OPENAI_API_KEY`, `JWT_SECRET_KEY`, `JWT_ALGORITHM`, `ACCESS_TOKEN_EXPIRE_MINUTES`.
 - Frontend env name required by `.env.example`: `NEXT_PUBLIC_API_BASE_URL`.
 - U6 checked names only, not secret values.
+- U10 configured `NEXT_PUBLIC_API_BASE_URL` in Vercel production as
+  `https://dodam-backend.onrender.com`.
+- U10 used Supabase connection strings in Render backend variables. Secret
+  values are intentionally not recorded.
 
 Migration boundary:
 
@@ -313,17 +364,23 @@ Can say now:
 - Recommendation and eligibility use request-id-based asynchronous POST+GET polling with stored status and result JSON.
 - Recommendation flow stores candidates, assessments, normalized result JSON, and uses deterministic fallback when LLM rerank is unavailable.
 - Focused U6 verification passed 72 backend tests and 8 frontend progress tests without external AI calls or DB mutation.
-- Vercel frontend + Railway backend/PostgreSQL is the current working deployment decision based on official platform docs checked on 2026-08-18.
+- Vercel frontend + Railway backend/PostgreSQL was the U6 working deployment decision based on official platform docs checked on 2026-08-18.
+- U10 deployed the current demo as Vercel frontend + Render backend + Supabase
+  PostgreSQL and verified frontend HTTP 200 plus backend readiness HTTP 200 on
+  2026-08-18 KST.
 
 Cannot say yet:
 
-- Cannot say Dodam is deployed, production-ready, or externally operated.
-- Cannot say Vercel/Railway smoke, rollback, healthcheck, or migration procedures have been verified.
+- Cannot say Dodam is production-ready or externally operated by real users.
+- Cannot say Railway smoke, rollback, healthcheck, or migration procedures have been verified.
 - Cannot say recommendation/eligibility lifecycle is fully restart-safe or duplicate-safe.
 - Cannot say current latency is an SLA.
-- Cannot say Railway healthcheck equals continuous monitoring.
+- Cannot say Render or Railway healthcheck equals continuous monitoring.
 - Cannot say platform rollback handles DB migration rollback.
 - Cannot say public users have validated the deployed workflow.
+- Cannot say deployed auth, policy import/search, OpenAI generation,
+  recommendation/chat SSE lifecycle, fallback display, or browser E2E have been
+  verified until explicit deployed smoke scenarios are run.
 
 ## Verification run in U6
 
@@ -355,3 +412,36 @@ Not run:
 - No DB write/integration smoke.
 - No external deployment.
 - No browser E2E.
+
+## Verification after U10 deployment
+
+Checked on 2026-08-18 KST after Render, Supabase, and Vercel setup:
+
+```bash
+curl -sS -i https://dodam-backend.onrender.com/health/ready
+```
+
+Result: HTTP 200 with `database.status = "ok"` and `schema.status = "ok"`.
+
+```bash
+curl -sS -I https://dodam-frontend.vercel.app
+```
+
+Result: HTTP 200 from Vercel.
+
+U10 deployment artifacts:
+
+- Backend deployed URL: `https://dodam-backend.onrender.com`
+- Frontend deployed URL: `https://dodam-frontend.vercel.app`
+- Backend deployed/documented commit: `b2318d4`
+- Frontend deployed commit: `a2901fc`
+- Supabase migration set: `supabase/migrations/`
+
+Still not verified after U10:
+
+- Browser E2E with user signup/login.
+- Policy import/search data freshness.
+- OpenAI-backed recommendation/chat generation success.
+- SSE disconnect recovery on deployed infrastructure.
+- Fallback provenance display in deployed UI.
+- Continuous monitoring, alerting, SLA, or real-user operation.
