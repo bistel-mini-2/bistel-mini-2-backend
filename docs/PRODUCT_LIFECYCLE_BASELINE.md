@@ -32,6 +32,22 @@ Current U10 deployment smoke, checked on 2026-08-18 KST:
 - Backend host: Render.
 - Frontend host: Vercel.
 
+Current chat/product lifecycle hardening record, updated on 2026-08-18 KST:
+
+- Backend `f67663a`: added recommendation/eligibility idempotency keys, stale
+  processing cleanup, request lifecycle schema/test coverage, and startup stale
+  request maintenance.
+- Frontend `2fe3984`: sends AI request idempotency keys for recommendation and
+  eligibility requests initiated from chat.
+- Frontend `50690f2`: guards duplicate chat submit/recommendation/eligibility
+  actions in the UI and keeps active eligibility actions disabled while a
+  request is in flight.
+- Frontend `f1db355` and `305562d`: add and document Playwright browser smoke
+  dependency for chat page deployment checks.
+- Frontend `3315f52`: updates frontend dependencies that were covered by npm
+  advisory checks; local `npm audit --json` returned 0 vulnerabilities after
+  the update.
+
 ## 2. Repository revisions and dirty-worktree boundary
 
 Backend repository:
@@ -39,20 +55,21 @@ Backend repository:
 - Path: `/Users/hb/Documents/kosa-course/projects/mini-2/back`
 - Branch: `refactor/chat-handler-result-lifecycle`
 - U6 HEAD: `89960ee`
-- Current deployed/documented HEAD: `b2318d4`
+- Current deployed backend code HEAD: `b2318d4`
+- Latest backend documentation HEAD before this update: `32cb97a`
 - Current status after U10 documentation update: this document and deployment
   runbooks may be modified until committed.
 
 Frontend repository:
 
 - Path: `/Users/hb/Documents/kosa-course/projects/mini-2/front`
-- Branch: `develop`
+- Branch: `chore/add-playwright-test` for the latest pushed chat hardening and
+  advisory follow-up; `develop` remains the earlier deployed baseline branch.
 - U6 HEAD: `4d3eb30`
 - Current deployed frontend HEAD: `a2901fc`
-- Initial status: existing user-owned dirty files:
-  - `app/chat/page.js`
-  - `app/components/ChatPromptDock.js`
-  - `app/components/EligibilityCardChat.js`
+- Latest pushed chat hardening/advisory HEAD: `3315f52`
+- Current status after advisory update push: clean on
+  `chore/add-playwright-test`.
 
 Boundary:
 
@@ -61,6 +78,9 @@ Boundary:
 - U10 frontend deployment was performed from a clean temporary worktree at
   `a2901fc`, so the user-owned dirty frontend files were not included in the
   deployed artifact.
+- The later frontend chat hardening and advisory commits have been pushed to
+  `chore/add-playwright-test`, but this document does not claim that Vercel
+  production has been redeployed from `3315f52`.
 
 ## 3. End-to-end user lifecycle trace
 
@@ -92,7 +112,12 @@ Current implemented path:
 6. `GET /api/v1/recommendations/requests/{request_id}` reads stored status/result only; it does not rerun graph, LLM, assessment, or RAG.
 7. Frontend renders recommendation cards and condition-filling questions.
 
-Status: partial. Request ID, ownership check on read, DB status/result, timeout-to-failed, and polling exist. Idempotency key, duplicate-submit protection, stale processing recovery, and refresh recovery storage for this dedicated recommendation flow are missing.
+Status: partial. Request ID, ownership check on read, DB status/result,
+timeout-to-failed, idempotency key handling, stale processing cleanup, and
+polling exist after U7 hardening. Frontend `50690f2` also blocks duplicate
+chat-triggered recommendation submits. Refresh recovery for the dedicated
+recommendation page still depends on carrying the `request_id` in the URL and
+polling stored state; deployed browser E2E is not yet verified.
 
 ### 3.3 Eligibility request path
 
@@ -104,7 +129,11 @@ Current implemented path:
 4. `GET /api/v1/eligibility/requests/{request_id}` verifies user ownership and returns stored result. If linked to a chat session, it persists a terminal eligibility result message once.
 5. Frontend polls up to 15 attempts and renders `EligibilityCardChat`.
 
-Status: partial. Request ID, chat-source correlation, owner check, DB result/status, and polling exist. Dedicated eligibility idempotency, duplicate prevention, and process restart stale cleanup are missing.
+Status: partial. Request ID, chat-source correlation, owner check, DB
+result/status, idempotency key handling, stale processing cleanup, and polling
+exist after U7 hardening. Frontend `50690f2` disables duplicate eligibility
+actions in chat/result cards while a request is in flight. Deployed browser E2E
+for this path is still not verified.
 
 ### 3.4 Recommendation and eligibility SSE path
 
@@ -129,11 +158,11 @@ in sections 1, 8, 9, and "Verification after U10 deployment" below.
 | Chat graph/service execution | `_run_chat()` branch routing, policy/evidence persistence helpers | Progress, intent, token, card rendering in chat page | `chat_message`, `chat_message_policy`, `chat_message_evidence`, session slot | Graph error marks request failed with user-safe message | chat service/controller tests | partial | Full browser E2E with real backend/DB was not run in U6. |
 | Chat DB result save | `mark_completed()` saves assistant_message_id and `response_payload_json` | `applyCompletedChatPayload()` replaces provisional message and clears pending | `chat_request`, message/evidence/policy rows | Persist failure marks failed and does not emit done | `test_send_message_stream_final_persist_failure_does_not_emit_done` | implemented | No deployed DB migration proof. |
 | Chat SSE disconnect recovery | `CancelledError` path continues or schedules disconnect recovery; stale startup cleanup | Polls request status after incomplete stream and on refresh | Existing request remains `processing` until completed/failed/stale | Refresh can recover completed payload or show failed/cancelled | frontend recovery code inspected; backend unit coverage for status endpoints | partial | In-process recovery depends on process survival; restart only fails stale request after cutoff, not resume. |
-| Recommendation create/poll | `POST /recommendations/requests`, background task, `GET /requests/{id}` reads only stored result | `createRecommendationRequest()`, `getRecommendationResult()`, 15x polling | `recommendation_request` with parsed/merged/result JSON and status | Timeout/background exception marks failed; UI maps failed to error | focused backend tests and chat recommendation branch tests | partial | No idempotency, no stale cleanup, no refresh recovery for dedicated recommendation flow. |
+| Recommendation create/poll | `POST /recommendations/requests`, background task, `GET /requests/{id}` reads only stored result; U7 adds idempotency and stale cleanup | `createRecommendationRequest()`, `getRecommendationResult()`, 15x polling; chat-triggered duplicate submit guarded | `recommendation_request` with parsed/merged/result JSON, idempotency key, and status | Timeout/background exception marks failed; stale processing rows are failed on startup; UI maps failed to error | focused backend tests and chat recommendation branch tests | partial | Deployed browser E2E and dedicated page refresh behavior are not yet verified. |
 | Recommendation graph and fallback | `RecommendationGraphRunner`, normalizer, rerank fallback service | Recommendation cards consume normalized result | `recommendation_candidate`, `policy_assessment`, `recommendation_request.result_json` | LLM rerank failure falls back to rule/assessment result | retrieval and recommendation tests exist; not all run in U6 | partial | Fallback is not exposed as a first-class user-visible AI-vs-deterministic provenance flag. |
-| Eligibility create/poll | `POST /eligibility/requests`, `GET /eligibility/requests/{id}`, chat source ref ownership | `eligibilityApi.createRequest()`, `fetchEligibilityResult()` | `eligibility_request`, `policy_assessment`, optional chat assistant message | Failed status masks internal error; polling stops on terminal | `test_ai_request_controller.py` eligibility cases | partial | No eligibility idempotency/stale cleanup; polling state is component-local. |
+| Eligibility create/poll | `POST /eligibility/requests`, `GET /eligibility/requests/{id}`, chat source ref ownership; U7 adds idempotency and stale cleanup | `eligibilityApi.createRequest()`, `fetchEligibilityResult()`; chat/result-card duplicate actions guarded | `eligibility_request`, idempotency key, `policy_assessment`, optional chat assistant message | Failed status masks internal error; stale processing rows are failed on startup; polling stops on terminal | `test_ai_request_controller.py` eligibility cases | partial | Deployed browser E2E is not yet verified; polling state remains component-local. |
 | Failure masking | `AI_REQUEST_USER_ERROR_MESSAGE`, `_safe_error_message()`, chat retryable status | User-facing Korean error messages and retry UI | error message stored on request rows | Internal error details not returned for failed eligibility | `test_eligibility_result_response_masks_error_message` | implemented | Logs may still contain exceptions; U11 should define privacy-safe logging. |
-| Process restart stale recovery | Startup marks stale `chat_request` processing rows failed | Refresh polling then sees failed/retryable chat request | `chat_request` only | Old chat processing rows become failed after 5 minutes | `test_main_lifespan.py`, `test_chat_request_repository.py` | partial | Recommendation/eligibility request tables have no equivalent stale processing cleanup. |
+| Process restart stale recovery | Startup marks stale `chat_request`, `recommendation_request`, and `eligibility_request` processing rows failed | Refresh/polling sees failed or retryable request state depending on flow | request tables | Old processing rows become failed after cutoff | `test_main_lifespan.py`, request repository tests | partial | Startup cleanup fails stale work rather than resuming it. |
 | Timeout/retry | AI background timeout 360s; DB statement timeout 60s; chat failed requests retryable unless invalid input | Frontend recovery max wait 45s, retry creates new idempotency key if recovery fails | Failed request rows | Retry is mostly UI-level new request; not provider-level retry policy | focused tests | partial | Retry taxonomy for LLM/embedding/DB failures is not explicit. |
 | Frontend result display | Backend response schemas include policies/evidences/cards | `AssistantMessage`, `EligibilityCardChat`, recommendation card components | Chat messages and request result JSON | Failed/provisional states shown with retry | frontend progress tests only | partial | Visual/browser E2E was not run; current dirty UI files are user-owned. |
 | Backend/frontend CI | GitHub workflows exist only for PR title/branch/linked issue/Discord/issue close | Same | None | No deterministic build/test gate in workflow | Local tests only | missing | U8 must add release-quality CI; current workflows do not prove app correctness. |
@@ -142,41 +171,47 @@ in sections 1, 8, 9, and "Verification after U10 deployment" below.
 ## 5. Existing strengths
 
 - Chat SSE has the best current product lifecycle baseline: accepted request id, DB-backed status, idempotency key, completed-payload replay, retryable failure state, frontend pending request storage, and refresh recovery.
-- Recommendation and eligibility use `request_id` and DB status/result tables, so polling after normal POST is already safer than purely synchronous generation.
+- Recommendation and eligibility use `request_id`, idempotency keys, stale
+  cleanup, and DB status/result tables, so polling after normal POST is safer
+  than purely synchronous generation and duplicate submit can converge on an
+  existing request.
 - Backend separates `RequestStatus`, user-facing statuses, assessment state, and frontend loading variants in docs and schemas.
 - Chat evidence and policy links are normalized into dedicated rows, reducing reliance on opaque `structured_json`.
-- Focused deterministic tests cover many lifecycle edges without external AI calls.
+- Focused deterministic tests cover many lifecycle edges without external AI
+  calls, and frontend chat progress tests plus local build/lint/audit checks
+  have been run after the latest chat/advisory updates.
 - Secrets are represented through env names only; U6 did not print or store secret values.
 
 ## 6. Productization gaps ordered by severity
 
-1. Recommendation and eligibility do not have stale processing cleanup.
-   - Impact: process crash after marking `PROCESSING` can leave user-visible requests loading forever.
-   - U7 blocker because product lifecycle requires finite terminal states.
+1. Deployed full browser E2E is still not verified.
+   - Impact: local tests and HTTP smoke do not prove signup/login, chat submit,
+     recommendation, eligibility, SSE recovery, and fallback display all work
+     together on Vercel + Render + Supabase.
+   - Next blocker: run an explicit deployed browser/API scenario without
+     exposing secrets or user data.
 
-2. Recommendation and eligibility lack idempotency/duplicate-submit protection.
-   - Impact: double click, refresh/retry, or flaky network can create duplicate AI requests and duplicate cost.
-   - U7 should add a request-level idempotency contract or an equivalent duplicate guard.
-
-3. No deployment health/readiness endpoint or backend deploy package exists.
-   - Impact: Railway healthcheck and rollback cannot be verified; U10 external deploy would be premature.
-   - U9 blocker.
-
-4. CI workflows do not run app tests/builds.
-   - Impact: PRs can pass governance checks while breaking lifecycle behavior.
-   - U8 blocker.
-
-5. Recommendation/eligibility SSE endpoints are not as recoverable as chat SSE.
+2. Recommendation/eligibility SSE endpoints are not as recoverable as chat SSE.
    - Impact: progress stream disconnect can produce ambiguous user state unless the app uses POST+GET polling.
-   - U7 should either align SSE accepted/replay semantics or prefer polling for these flows.
+   - Current safer path: POST request creation plus GET polling.
 
-6. Fallback provenance is not a first-class display contract across all flows.
+3. Fallback provenance is not a first-class display contract across all flows.
    - Impact: deterministic fallback, LLM rerank success, and degraded output can be blurred in portfolio/product claims.
-   - U7/U11 should expose safe provenance without leaking prompts or raw user data.
+   - Future scope should expose safe provenance without leaking prompts or raw user data.
 
-7. Public deployment privacy and observability are not defined.
+4. Public deployment privacy and observability are not defined.
    - Impact: request correlation exists, but metric labels/log boundaries are not yet enforced.
    - U11 blocker.
+
+5. Platform rollback still does not cover DB migration rollback.
+   - Impact: frontend/backend rollback can restore code, but cannot
+     automatically restore Supabase schema/data compatibility.
+   - Migration rollback or forward-fix procedure remains separate.
+
+6. GitHub default branch advisory count may remain stale until the security
+   update branch is merged or default branch is updated.
+   - Impact: Dependabot UI can still report vulnerabilities for the default
+     branch even though `chore/add-playwright-test` locally audits clean.
 
 ## 7. Deployment option decision matrix
 
@@ -361,9 +396,16 @@ Stop conditions:
 Can say now:
 
 - Dodam has a DB-backed chat SSE lifecycle with request IDs, idempotency keys, completed-payload replay, refresh recovery polling, and startup stale cleanup for chat requests.
-- Recommendation and eligibility use request-id-based asynchronous POST+GET polling with stored status and result JSON.
+- Recommendation and eligibility use request-id-based asynchronous POST+GET
+  polling with stored status/result JSON, idempotency keys, and startup stale
+  processing cleanup.
+- The frontend chat flow now sends idempotency keys and guards duplicate
+  chat/recommendation/eligibility submits in the UI.
 - Recommendation flow stores candidates, assessments, normalized result JSON, and uses deterministic fallback when LLM rerank is unavailable.
 - Focused U6 verification passed 72 backend tests and 8 frontend progress tests without external AI calls or DB mutation.
+- After the latest frontend hardening/advisory update, local `npm audit`,
+  `npm run lint`, `node app/chat/chatProgress.test.mjs`, and `npm run build`
+  passed on `chore/add-playwright-test` at `3315f52`.
 - Vercel frontend + Railway backend/PostgreSQL was the U6 working deployment decision based on official platform docs checked on 2026-08-18.
 - U10 deployed the current demo as Vercel frontend + Render backend + Supabase
   PostgreSQL and verified frontend HTTP 200 plus backend readiness HTTP 200 on
@@ -373,7 +415,9 @@ Cannot say yet:
 
 - Cannot say Dodam is production-ready or externally operated by real users.
 - Cannot say Railway smoke, rollback, healthcheck, or migration procedures have been verified.
-- Cannot say recommendation/eligibility lifecycle is fully restart-safe or duplicate-safe.
+- Cannot say deployed recommendation/eligibility lifecycle has been browser-E2E
+  verified, even though local code/test evidence now covers idempotency and
+  stale cleanup.
 - Cannot say current latency is an SLA.
 - Cannot say Render or Railway healthcheck equals continuous monitoring.
 - Cannot say platform rollback handles DB migration rollback.
@@ -435,7 +479,23 @@ U10 deployment artifacts:
 - Frontend deployed URL: `https://dodam-frontend.vercel.app`
 - Backend deployed/documented commit: `b2318d4`
 - Frontend deployed commit: `a2901fc`
+- Latest pushed frontend chat hardening/advisory commit:
+  `3315f52` on `chore/add-playwright-test`; not yet claimed as the deployed
+  Vercel production revision in this document.
 - Supabase migration set: `supabase/migrations/`
+
+Latest frontend local verification after chat hardening/advisory update:
+
+```bash
+npm audit --json
+npm run lint
+node app/chat/chatProgress.test.mjs
+npm run build
+```
+
+Result: audit returned 0 vulnerabilities; lint passed with one existing
+`app/layout.js` font warning; chat progress tests passed 8/8; Next.js
+production build passed.
 
 Still not verified after U10:
 
