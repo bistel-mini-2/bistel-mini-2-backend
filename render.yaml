@@ -12,9 +12,7 @@ services:
       - key: APP_NAME
         value: policy-rag-backend
       - key: PSYCOPG_DATABASE_URL
-        fromDatabase:
-          name: dodam-postgres
-          property: connectionString
+        sync: false
       - key: DATABASE_URL
         sync: false
       - key: DATA_GO_KR_SERVICE_KEY
@@ -27,9 +25,3 @@ services:
         value: HS256
       - key: ACCESS_TOKEN_EXPIRE_MINUTES
         value: "20160"
-
-databases:
-  - name: dodam-postgres
-    plan: free
-    databaseName: dodam
-    user: dodam
