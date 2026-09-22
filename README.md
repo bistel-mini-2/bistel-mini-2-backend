@@ -1,7 +1,20 @@
-# Bistelligence Mini 2 Backend
+# 도담 복지정책 상담 백엔드 (Dodam Backend)
 
 복지 정책 추천, 지원 가능성 분석, 비교, 신청 안내, 챗봇 질의응답을 제공하는 FastAPI 백엔드 서버입니다.  
 2차 미니프로젝트의 백엔드 레포로, 정책 데이터 조회부터 AI 기반 추천/분석/대화 흐름까지 한 서버에서 제공합니다.
+
+## 프로젝트 한눈에 보기
+
+| 구분 | 내용 |
+| --- | --- |
+| 해결할 문제 | 복지정책 이름을 모르는 사용자도 자신의 상황을 설명하면 관련 정책과 판단 근거, 다음 확인 항목을 찾을 수 있게 합니다. |
+| 핵심 흐름 | 사용자 질문 → 의도·조건 정리 → 정책 검색 → 규칙/LLM 응답 → 출처·추가 질문 → SSE 전달 |
+| 저장소 책임 | 정책 검색·추천·지원 가능성 분석과 대화 요청 lifecycle을 제공하는 FastAPI/RAG 백엔드 |
+| 공개 서비스 | [도담 웹 서비스](https://dodam-frontend.vercel.app) |
+| 배포 API | [Backend API](https://dodam-backend.onrender.com) · [Swagger 문서](https://dodam-backend.onrender.com/docs) |
+| 상태 확인 | [Liveness](https://dodam-backend.onrender.com/health/live) · [Readiness](https://dodam-backend.onrender.com/health/ready) |
+
+> **배포 확인 (2026-08-25 KST):** 웹 서비스, API 문서, liveness, readiness의 HTTP 응답을 확인했습니다. 이 확인은 공개 엔드포인트의 접근 가능성을 뜻하며, 인증·검색·추천·채팅 전체 흐름의 운영 E2E 검증을 대신하지 않습니다.
 
 ## 주요 기능
 
