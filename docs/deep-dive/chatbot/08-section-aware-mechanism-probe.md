@@ -234,3 +234,139 @@ target present but ambiguous within target section
 ```
 
 Until that gate is satisfied, production retrieval behavior remains unchanged.
+
+## 9. Revalidation — 2026-10-01
+
+The mechanism was revalidated from a **freshly recreated** disposable pgvector
+container rather than reusing the previous local DB state.
+
+### Environment recreation
+
+- removed and recreated `dodam-deepdive-pg`
+- bootstrapped synthetic policy 242 fixture again
+- started the current deep-dive backend
+- ingested all seven chunks again through the actual RAG ingest endpoint
+
+Result:
+
+- requested chunks: 7
+- embedded chunks: 7
+- ingest success: true
+
+### Method query
+
+> 법률 문제를 무료로 물어보려면 어떤 기관을 찾아가야 하나요?
+
+Fresh local ranking reproduced the previous result.
+
+K=5:
+
+1. 조건 구조
+2. 정리된 지원 조건
+3. 공식 지원대상 원문
+4. 지원 내용
+5. 신청 방법
+
+K=7/K=10:
+
+- 신청 방법 remains rank 5
+- 신청 기간 appears at rank 7
+
+### Period query
+
+> 무료법률상담은 언제 신청할 수 있나요?
+
+Fresh local ranking also reproduced the previous result.
+
+K=5:
+
+1. 조건 구조
+2. 공식 지원대상 원문
+3. 정리된 지원 조건
+4. 신청 방법
+5. 유의 사항
+
+The desired `신청 기간` section is absent.
+
+K=7/K=10:
+
+- `신청 기간` enters at rank 7
+
+Therefore the earlier mechanism finding is reproducible from a clean local DB:
+
+> a modestly larger single-query candidate pool can expose a relevant application
+> subtype section that K=5 misses.
+
+### Section-aware fallback re-run
+
+The local section-filter probe was rerun after recreation.
+
+Observed:
+
+- method K=5: target already present, fallback not used
+- forced method K=4 miss: section-filtered fallback recovers `신청 방법`
+- period K=5: fallback recovers `신청 기간`
+- period K=7: target present, fallback not used
+
+### Timing re-run
+
+10 warm local synthetic runs:
+
+| Path | Median | p95 |
+| --- | ---: | ---: |
+| K=5 baseline | 52.366 ms | 85.504 ms |
+| K=7 single-query candidate pool | 49.689 ms | 64.744 ms |
+| K=4 baseline before forced fallback | 50.868 ms | 62.052 ms |
+| section-filtered second query | 51.495 ms | 59.037 ms |
+| two-query total | 103.444 ms | 121.089 ms |
+
+The absolute timings differ from the previous run because this is a local
+non-production environment, but the structural relationship reproduced:
+
+- K=7 single-query cost is in the same range as K=5;
+- the two-query fallback path costs roughly two retrieval round trips.
+
+### Historical repeated evidence cross-check
+
+The historical repeated scoped benchmark was checked again.
+
+For R019, across all five stored runs:
+
+- vector: section miss every run
+- adaptive: section miss every run
+- adaptive fallback: never fired
+- returned section order was stable:
+  `신청 기간 → 공식 지원대상 원문 → 유의 사항 → 정리된 지원 조건 → 조건 구조`
+
+Historical scoped vector Section Hit@5 was also stable at:
+
+- 98%
+- 98%
+- 98%
+- 98%
+- 98%
+
+This reinforces the earlier diagnosis that R019 is not random benchmark noise.
+It is a stable section-selection failure under the historical retrieval setup.
+
+### Deployment status
+
+The deployed backend is still not ready:
+
+- process liveness: previously healthy
+- current readiness: `not_ready`
+- database check: `InternalServerError`
+
+Therefore the clean local rerun strengthens **mechanism reproducibility**, but it
+still does not replace a production/original-corpus rerun.
+
+### Revalidated decision
+
+The current decision remains unchanged, now with stronger evidence:
+
+1. do not add a general reranker;
+2. test a slightly larger candidate pool first;
+3. use application subtype metadata for post-selection;
+4. reserve a second section-filtered query for cases where the target section is
+   still absent from that larger pool;
+5. keep all local synthetic latency numbers out of portfolio performance claims.
