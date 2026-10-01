@@ -216,3 +216,51 @@ Target decision table:
 
 A second filtered vector query remains fallback-only and is not part of the
 default challenger.
+
+## 7. Fresh original-corpus evaluator prepared
+
+A dedicated evaluator was added at:
+
+- `experiments/chatbot/live_section_aware_eval.py`
+
+It performs one K=10 query per historical application case against the expected
+policy and derives, from that exact same retrieval result:
+
+- baseline Section Hit@5 from ranks 1..5;
+- challenger Section Hit@5 from candidate ranks 1..7 with section-aware output K=5;
+- target Recall@7;
+- target Recall@10;
+- first target-section rank;
+- recovered and still-missed cases;
+- K=10 retrieval p50/p95.
+
+This avoids comparing separately embedded baseline/challenger calls and makes the
+R019 decision explicit:
+
+- target rank 6..7 -> K=7 challenger can recover it;
+- target rank 8..10 -> K=7 is insufficient and K=10/fallback must be compared;
+- target absent by K=10 -> larger-K is not the primary fix.
+
+The evaluator logic has unit coverage, and the full backend regression suite
+currently passes with **431 passed, 1 skipped, 0 failed**.
+
+## 8. Current original-environment blocker
+
+The repository execution connection was restored and the deployed service was
+rechecked.
+
+Current deployed state:
+
+- `/health/live`: `ok`
+- `/health/ready`: `not_ready`
+- database readiness error: `InternalServerError`
+
+The local deep-dive checkout does not contain `DATABASE_URL`,
+`PSYCOPG_DATABASE_URL`, or `OPENAI_API_KEY` credentials for the original corpus.
+The GitHub repository currently exposes no DB/OpenAI Actions secrets; only the
+Discord webhook secret is present. Historical deployment metadata identifies the
+Render database deployment, but does not expose credentials.
+
+Therefore the fresh evaluator is ready but has **not** been run against the
+original database. No synthetic or historical proxy result is promoted to a
+fresh production metric.
